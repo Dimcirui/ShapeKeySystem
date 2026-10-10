@@ -1,0 +1,21 @@
+# player data that SKS writes next to its builtin files (never part of the repo)
+reframework/data/ShapeKeySystem/settings.json
+reframework/data/ShapeKeySystem/user/
+reframework/data/ShapeKeySystem/mods/
+reframework/data/ShapeKeySystem/trail.log
+reframework/data/ShapeKeySystem/hash_probe.txt
+
+# third-party runtime (install separately)
+reframework/autorun/reframework-d2d.lua
+reframework/plugins/
+
+# mocap toy runtime output
+toys/SKS_Mocap/live.json
+
+# harness / tool output
+tests/out.txt
+tests/shots/
+tests/preview_shot.png
+tools/face_gen/out/
+__pycache__/
+*.pyc

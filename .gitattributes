@@ -1,0 +1,2 @@
+# keep files byte-identical to the game copy (tools/deploy.ps1 compares hashes)
+* -text

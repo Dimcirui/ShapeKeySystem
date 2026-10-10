@@ -1,0 +1,479 @@
+{
+  "schema": "sks.conditions/1",
+  "name": "ShinanoOC",
+  "auto": true,
+  "clips": {
+    "力尽": {
+      "values": {
+        "eye_guruguru": 1,
+        "Eye_Left_Blink": 0,
+        "Eye_Right_Blink": 0,
+        "mouth_~": 0.7,
+        "browOuterUpLeft": 0.5,
+        "browOuterUpRight": 0.5
+      },
+      "fade_in": 0.1,
+      "fade_out": 0.6
+    },
+    "吃痛": {
+      "values": {
+        "eye_><": 1,
+        "Eye_Left_Blink": 0,
+        "Eye_Right_Blink": 0,
+        "mouth_△": 0.7,
+        "Brow_Down_Left": 0.6,
+        "Brow_Down_Right": 0.6
+      },
+      "fade_in": 0.05,
+      "fade_out": 0.3
+    },
+    "松口气": {
+      "values": {
+        "eye_joy": 0.6,
+        "mouth_smile": 0.4,
+        "other_cheek_2": 0.3
+      },
+      "fade_in": 0.15,
+      "fade_out": 0.6
+    },
+    "濒危": {
+      "values": {
+        "eye_halfclose": 0.35,
+        "mouth_sad": 0.4,
+        "other_shadow": 0.5
+      },
+      "fade_in": 0.3,
+      "fade_out": 0.8
+    },
+    "气势": {
+      "values": {
+        "eye_kirakira_big": 0.7,
+        "mouth_grin2_L": 0.4,
+        "mouth_grin2_R": 0.4,
+        "Brow_Down_Left": 0.5,
+        "Brow_Down_Right": 0.5
+      },
+      "fade_in": 0.1,
+      "fade_out": 0.4
+    },
+    "紧张": {
+      "values": {
+        "eyelid_under_turi": 0.6,
+        "mouth_straight": 0.5,
+        "other_shadow": 0.3,
+        "Brow_Down_Left": 0.7,
+        "Brow_Down_Right": 0.7
+      },
+      "fade_in": 0.25,
+      "fade_out": 0.6
+    },
+    "慌": {
+      "values": {
+        "eye_surprise": 0.6,
+        "eye_OO": 0.4,
+        "mouth_wa": 0.4,
+        "browOuterUpLeft": 0.6,
+        "browOuterUpRight": 0.6
+      },
+      "fade_in": 0.2,
+      "fade_out": 0.6
+    },
+    "喘": {
+      "values": {
+        "eye_halfclose": 0.4,
+        "mouth_hawa": 0.4
+      },
+      "fade_in": 0.3,
+      "fade_out": 0.8
+    },
+    "认真": {
+      "values": {
+        "eyelid_under_turi": 0.45,
+        "mouth_straight": 0.4
+      },
+      "fade_in": 0.4,
+      "fade_out": 0.8
+    },
+    "专注": {
+      "values": {
+        "eyelid_under_turi": 0.25
+      },
+      "fade_in": 0.5,
+      "fade_out": 1.0
+    },
+    "警觉": {
+      "values": {
+        "eye_surprise": 0.15,
+        "eyelid_under_turi": 0.15
+      },
+      "fade_in": 0.5,
+      "fade_out": 1.0
+    },
+    "吃力": {
+      "values": {
+        "mouth_straight": 0.5,
+        "eye_halfclose": 0.15
+      },
+      "fade_in": 0.3,
+      "fade_out": 0.6
+    },
+    "冷": {
+      "values": {
+        "mouth_~": 0.35,
+        "other_cheek_2": 0.4
+      },
+      "fade_in": 1.0,
+      "fade_out": 1.0
+    },
+    "热": {
+      "values": {
+        "eye_halfclose": 0.25,
+        "mouth_hawa": 0.3,
+        "other_cheek_2": 0.25
+      },
+      "fade_in": 1.0,
+      "fade_out": 1.0
+    },
+    "惬意": {
+      "values": {
+        "eye_happy": 0.3,
+        "mouth_ω": 0.35
+      },
+      "fade_in": 0.8,
+      "fade_out": 0.8
+    },
+    "放松": {
+      "values": {
+        "eye_happy": 0.45,
+        "mouth_ω": 0.4,
+        "other_cheek_2": 0.3
+      },
+      "fade_in": 0.8,
+      "fade_out": 0.8
+    },
+    "日常": {
+      "values": {
+        "eye_happy": 0.2,
+        "mouth_smile": 0.2
+      },
+      "fade_in": 1.0,
+      "fade_out": 1.0
+    }
+  },
+  "states": [
+    {
+      "clip": "力尽",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "dead",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "吃痛",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0.7,
+          "conditions": [
+            {
+              "type": "hp_decreased",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "松口气",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 1.2,
+          "conditions": [
+            {
+              "type": "hp_increased",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "濒危",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "hp_pct",
+              "op": "<=",
+              "value": 30,
+              "band": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "气势",
+      "rules": [
+        {
+          "logic": "OR",
+          "hold": 0.5,
+          "conditions": [
+            {
+              "type": "spirit_level",
+              "op": ">=",
+              "value": 3
+            },
+            {
+              "type": "charge_level",
+              "op": ">=",
+              "value": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "紧张",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "combat_angry",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "慌",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "enemy_wave",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "喘",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 1,
+          "conditions": [
+            {
+              "type": "stamina_pct",
+              "op": "<=",
+              "value": 20,
+              "band": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "认真",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 2,
+          "conditions": [
+            {
+              "type": "combat_boss",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "专注",
+      "rules": [
+        {
+          "logic": "OR",
+          "hold": 2,
+          "conditions": [
+            {
+              "type": "combat",
+              "value": true
+            },
+            {
+              "type": "weapon_on",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "警觉",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 1,
+          "conditions": [
+            {
+              "type": "half_combat",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "吃力",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0.5,
+          "conditions": [
+            {
+              "type": "climbing",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "冷",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "cold_area",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "热",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "hot_area",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "惬意",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "riding",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "放松",
+      "rules": [
+        {
+          "logic": "AND",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "in_tent",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "clip": "日常",
+      "rules": [
+        {
+          "logic": "OR",
+          "hold": 0,
+          "conditions": [
+            {
+              "type": "base_camp",
+              "value": true
+            },
+            {
+              "type": "life_area",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "interactions": {
+    "forehead": {
+      "values": {
+        "eye_><": 1,
+        "Eye_Left_Blink": 0,
+        "Eye_Right_Blink": 0,
+        "mouth_△": 0.7
+      },
+      "hold": 1.0
+    },
+    "cheek": {
+      "values": {
+        "other_cheek_2": 1,
+        "eye_happy": 0.3
+      },
+      "hold": 1.0
+    },
+    "eye": {
+      "values": {
+        "Eye_Left_Blink": 1,
+        "Eye_Right_Blink": 1
+      },
+      "hold": 1.0
+    },
+    "mouth": {
+      "left": {
+        "Mouth_Left": 1
+      },
+      "right": {
+        "Mouth_Right": 1
+      },
+      "up": {
+        "Mouth_Upper_UpLeft": 1,
+        "Mouth_Upper_UpRight": 1
+      },
+      "down": {
+        "Mouth_Lower_DownLeft": 1,
+        "Mouth_Lower_DownRight": 1
+      }
+    }
+  }
+}

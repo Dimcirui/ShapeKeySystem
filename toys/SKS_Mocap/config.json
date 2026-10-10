@@ -1,0 +1,73 @@
+{
+  "channel_gains": {
+    "eyeLookDownLeft": 1.003999948501587,
+    "eyeLookInLeft": 1.0049999952316284,
+    "eyeLookOutLeft": 1.00600004196167,
+    "eyeLookOutRight": 1.0049999952316284,
+    "eyeLookUpLeft": 1.00600004196167,
+    "eyeSquintLeft": 1.003000020980835,
+    "jawOpen": 0.8619999885559082
+  },
+  "cutscene": true,
+  "cutscene_ignore_fix": true,
+  "cutscene_tail": 120,
+  "enabled": false,
+  "fade_sec": 0.25,
+  "gain": 1.0759999752044678,
+  "head": {
+    "enabled": true,
+    "gain": 1.1749999523162842,
+    "invert": {
+      "pitch": false,
+      "roll": true,
+      "yaw": true
+    },
+    "max_deg": 47.448001861572266,
+    "neutral": [
+      -4.702317,
+      -6.8134933,
+      6.654765
+    ],
+    "order": {
+      "pitch": 1,
+      "roll": 3,
+      "yaw": 2
+    },
+    "smoothing": 0.6
+  },
+  "mirror": true,
+  "neutral": {
+    "browDownLeft": 0.05,
+    "browDownRight": 0.05,
+    "browInnerUp": 0.07,
+    "cheekPuff": 0.03,
+    "cheekSquintLeft": 0.05,
+    "cheekSquintRight": 0.05,
+    "eyeLookDownLeft": 0.18,
+    "eyeLookDownRight": 0.17,
+    "eyeLookInLeft": 0.03,
+    "eyeLookInRight": 0.08,
+    "eyeSquintLeft": 0.03,
+    "eyeSquintRight": 0.03,
+    "eyeWideLeft": 0.03,
+    "eyeWideRight": 0.03,
+    "jawOpen": 0.02,
+    "mouthClose": 0.02,
+    "mouthLowerDownLeft": 0.02,
+    "mouthLowerDownRight": 0.02,
+    "mouthPressLeft": 0.08,
+    "mouthPressRight": 0.08,
+    "mouthPucker": 0.05,
+    "mouthRollLower": 0.03,
+    "mouthShrugLower": 0.11,
+    "mouthShrugUpper": 0.08,
+    "mouthStretchLeft": 0.06,
+    "mouthStretchRight": 0.07,
+    "mouthUpperUpLeft": 0.03,
+    "mouthUpperUpRight": 0.03,
+    "noseSneerLeft": 0.19,
+    "noseSneerRight": 0.19
+  },
+  "smoothing": 0.32600000500679016,
+  "timeout": 0.5
+}
