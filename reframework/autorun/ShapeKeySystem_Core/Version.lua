@@ -8,7 +8,7 @@ local V = {}
 
 V.name = "ShapeKeySystem"
 V.number = "1.1.1"
-V.author = "谛听 Dimcirui"
+V.author = "谛听 Dimcirui, MonkeySama"
 
 V.history = {
     { version = "1.1.1", notes = "修复渲染重置时面板报错" },
