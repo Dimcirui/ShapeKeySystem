@@ -180,6 +180,22 @@ check(not ok and IMGUI_STACK.var == 0 and IMGUI_STACK.color == 0 and IMGUI_STACK
 X.fields, D.S = saved_fields, saved_scale
 frame()
 
+-- searchable select: while closed the ImGui buffer stays empty (the d2d layout runs a frame after
+-- ImGui, so the click that opens it activates whatever was registered before)
+local Wd = require("ShapeKeySystem_UI.Widgets")
+X.begin_layout(); DRAWS = {}
+Wd.search_select({}, "probe_search", 10, 20, 240, { { value = "a", label = "alpha" } }, "blink.L · fcParam_001", {})
+check(X.fields[1] and X.fields[1].text == "" and find("blink.L · fcParam_001", true) ~= nil,
+    "search select: closed field registers an empty buffer, the selection is drawn")
+X.fields = saved_fields
+frame()
+
+-- an open dropdown removes the ImGui fields: their text is still drawn under the popup
+INPUT_ACTIVE = "sculpt_filter"; INPUT_EDITS.sculpt_filter = "Bang"; frame(); frame(); INPUT_ACTIVE = nil; frame()
+Wd.open_select = "sculpt_preset"; frame()
+check(find("Bang", true) ~= nil and #X.fields == 0, "dropdown open: field text kept, ImGui windows removed")
+Wd.open_select = nil; INPUT_EDITS.sculpt_filter = ""; frame(); frame()
+
 -- undo with nothing to undo is not shown as an error
 local errs = 0
 for _, t in ipairs(Panel.ui.toasts) do if t.level == "error" then errs = errs + 1 end end

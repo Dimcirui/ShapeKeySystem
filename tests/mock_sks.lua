@@ -151,7 +151,7 @@ MOUSE = { x = -1, y = -1, down = false }
 KEYS = {}
 DRAWS = {}          -- text draws of the last d2d frame: { s, x, y }
 DRAWN_IMAGES = {}
-INPUT_EDITS, INPUT_RECTS, INPUT_WINDOWS = {}, {}, {}
+INPUT_EDITS, INPUT_RECTS, INPUT_WINDOWS, INPUT_BUFFERS = {}, {}, {}, {}
 INPUT_ACTIVE = nil
 local input_id, input_rect, input_window
 imgui.get_mouse = function() return { x = MOUSE.x, y = MOUSE.y } end
@@ -166,7 +166,7 @@ imgui.end_window = function() IMGUI_STACK.window = IMGUI_STACK.window - 1 end
 imgui.input_text = function(label, v)
     input_id = label:match("^##sks_text_(.+)$")
     if not input_id then return false, v end
-    INPUT_RECTS[input_id], INPUT_WINDOWS[input_id] = input_rect, input_window
+    INPUT_RECTS[input_id], INPUT_WINDOWS[input_id], INPUT_BUFFERS[input_id] = input_rect, input_window, v
     local t = INPUT_EDITS[input_id]
     INPUT_EDITS[input_id] = nil
     return t ~= nil, t or v

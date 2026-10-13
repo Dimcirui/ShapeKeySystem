@@ -24,7 +24,7 @@ function X.register(id, x, y, w, h, value, on_change)
     if c and (x < c[1] or y < c[2] or x + w > c[3] or y + h > c[4]) then return false end
     if w <= 16 or h <= 0 then return false end
     local s = D.S
-    X.fields[#X.fields + 1] = { id = id, x = (x + 8) * s, y = y * s,
+    X.fields[#X.fields + 1] = { id = id, lx = x, ly = y, lw = w, lh = h, x = (x + 8) * s, y = y * s,
         w = (w - 16) * s, h = h * s, px = max(6, floor(T.font.body * s + 0.5)),
         text = value or "", on_change = on_change }
     return true
@@ -61,6 +61,14 @@ local function draw_field(f)
     if type(text) == "string" and text ~= f.text then
         f.text = text
         if f.on_change then f.on_change(text) end
+    end
+end
+
+-- 下拉浮层打开时 ImGui 输入窗口会被移除（否则盖住浮层）：在浮层之前自绘各框的文字。
+function X.draw_static()
+    local f = D.font(T.font.body)
+    for _, fd in ipairs(X.fields) do
+        if fd.text ~= "" then D.text_mid(fd.text, fd.lx + 8, fd.ly, fd.lh, T.c.text, f, fd.lw - 16) end
     end
 end
 

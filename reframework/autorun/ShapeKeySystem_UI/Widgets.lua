@@ -311,7 +311,8 @@ function W.header(label, x, y, w, open, stat)
 end
 
 -- 原位置输入框：自绘边框与占位文字，标准 ImGui InputText 负责文字、选择、剪贴板和 IME。
-function W.text_box(id, x, y, w, h, value, placeholder, on_change)
+-- shown：输入框为空且未激活时代替占位符显示的正常文字（搜索框收起时显示已选值）。
+function W.text_box(id, x, y, w, h, value, placeholder, on_change, shown)
     h = h or T.m.row_h
     local hover = I.hit(x, y, w, h)
     D.rrect(x, y, w, h, 3, C.ink)
@@ -319,7 +320,8 @@ function W.text_box(id, x, y, w, h, value, placeholder, on_change)
     local registered = TextInput.register(id, x, y, w, h, value, on_change)
     if not registered and value and value ~= "" then D.text_mid(value, x + 8, y, h, C.text, body(), w - 16)
     elseif (not value or value == "") and TextInput.active ~= id then
-        D.text_mid(placeholder or "", x + 8, y, h, C.faint, body(), w - 16)
+        if shown and shown ~= "" then D.text_mid(shown, x + 8, y, h, C.text, body(), w - 16)
+        else D.text_mid(placeholder or "", x + 8, y, h, C.faint, body(), w - 16) end
     end
     I.click(x, y, w, h) -- 只消费自绘控件的点击队列；ImGui 仍独立收到鼠标事件。
 end
@@ -342,11 +344,13 @@ function W.search_select(state, id, x, y, w, items, value, opt)
         else W.open_search, open, s.query, s.offset = id, true, "", 0 end
     end
     D.icon_tri(x + w - 14, y + 14, 4, open, C.muted)
-    W.text_box(id, x, y, field_w, 28, open and s.query or value,
+    -- 收起时 ImGui 缓冲区登记为空、已选值只做自绘显示：d2d 布局晚于 ImGui 一帧，
+    -- 点开那一下 ImGui 用的是上一次登记的文字，登记已选值会让搜索从旧值开始追加。
+    W.text_box(id, x, y, field_w, 28, open and s.query or "",
         opt.placeholder or "输入文字搜索…", function(text)
             s.query, s.offset, W.open_search = text, 0, id
             if opt.on_query then opt.on_query(text) end
-        end)
+        end, (not open) and value or nil)
     if not open then return false, nil, 34 end
     local matches, query = {}, s.query:lower()
     -- 前缀匹配优先，其他匹配维持原有顺序；plain=true，不把玩家输入当作 Lua 模式。

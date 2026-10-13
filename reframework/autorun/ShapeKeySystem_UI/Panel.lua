@@ -322,6 +322,7 @@ function Panel.draw()
         ui.drag = { kind = "size", w0 = w, h0 = h, mx0 = I.mx, my0 = I.my }
     end
 
+    if W.open_select then TextInput.draw_static() end
     D.flush_deferred()
     if W.open_select or not Panel.open then TextInput.clear() end
     draw_cursor()
