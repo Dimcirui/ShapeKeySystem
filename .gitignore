@@ -17,5 +17,10 @@ tests/out.txt
 tests/shots/
 tests/preview_shot.png
 tools/face_gen/out/
+tools/vrc_profiles/probe/
+tools/vrc_profiles/ext/
 __pycache__/
 *.pyc
+
+# release packages
+dist/

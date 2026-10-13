@@ -20,6 +20,15 @@ check(Profile.registry["mmd"] ~= nil, "mmd profile registered")
 local r = Profile.resolve("mmd")
 local prog = r and Profile.compile(r, {})
 check(prog ~= nil, "mmd profile compiles")
+for _, id in ipairs({ "eku", "milltina", "manuka", "chocolat", "airi", "kaguya", "karin", "kipfel",
+                      "mafuyu", "maya", "moko", "nitco", "sairou" }) do
+    local rr = Profile.resolve(id)
+    local pp, code, msg = rr and Profile.compile(rr, {})
+    check(pp ~= nil and pp.n == #rr.channels, id .. " profile compiles " .. tostring(msg or ""))
+    local driven = 0
+    for _, c in ipairs(pp and pp.channels or {}) do if c.has_signal then driven = driven + 1 end end
+    check(pp ~= nil and driven == pp.n, id .. ": every channel has a signal")
+end
 local names = {}
 for i, c in ipairs(prog.channels) do names[i] = c.name end
 local idx = Names.build_index(names, r.aliases, r.channels)
@@ -83,5 +92,21 @@ for i, c in ipairs(ra.channels) do an[i] = c.name end
 local aidx = Names.build_index(an, ra.aliases, ra.channels)
 local asel = Names.match_part(aidx, { "eyeBlinkLeft", "EyeClosedLeft" })
 check(asel[1] and asel[2] == asel[1], "ARKit: alias and canonical both kept (no ranking)")
+
+-- VRChat avatar faces (real key lists from the "Body" mesh): coverage ranking picks the avatar's own profile
+local VRC_EXPECT = { airi = "airi", chocolat = "chocolat", plum = "chocolat", lime = "chocolat",
+    kaguya = "kaguya", karin = "karin", kipfel = "kipfel", mafuyu = "mafuyu", maya = "maya",
+    moko = "moko", nitco = "nitco", sairou = "sairou", milltina = "milltina", shinano = "shinano",
+    shinano_arkit = "arkit", manuka = "manuka", kumaly = "manuka", rindo = "manuka", selestia = "manuka" }
+for face, want in pairs(VRC_EXPECT) do
+    local best, best_n, second = nil, -1, -1
+    for _, e in ipairs(Profile.list) do
+        if e.source == "builtin" then   -- earlier groups save user copies of builtin profiles
+            local n = Profile.match_count(e.id, VRC_FACES[face], Names)
+            if n > best_n then best, best_n, second = e.id, n, best_n elseif n > second then second = n end
+        end
+    end
+    check(best == want and best_n > second, string.format("vrc face %s -> %s (%d, next %d)", face, tostring(best), best_n, second))
+end
 
 print("MMD FAILS:", mf)
