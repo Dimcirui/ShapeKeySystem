@@ -60,6 +60,7 @@ local jaw = mk_bone("C_Jaw_LOD02", head_j, { 0, -0.03, 0.04 }, JAW_ROT, { 0, -0.
 local chin_local = { 0, -0.05, 0.03 }
 local chin_rest = qrot(JAW_ROT, chin_local)
 mk_bone("C_Chin_LOD00", jaw, chin_local, IDENT, { chin_rest[1], chin_rest[2] - 0.03, chin_rest[3] + 0.04 })
+mk_bone("C_loLip_LOD02", head_j, { 0, -0.055, 0.085 }, IDENT, { 0, -0.055, 0.085 })
 for _, s in ipairs({ "L", "R" }) do
     local x = (s == "L") and 0.025 or -0.025
     for name, p in pairs({ cornerLip_LOD02 = { x, -0.05, 0.08 }, BetweenEyeBrow_LOD01 = { x * 0.4, 0.04, 0.09 },

@@ -28,7 +28,7 @@ end
 -- The game's idle face is not the bones' bind pose: measured in game (sks_lid_probe, 2026-10-13,
 -- standing still), offsets from the bind pose in the head's frame (mm) and the upper lids' turn (deg).
 local IDLE_MM = {
-    C_Chin_LOD00 = { 0, 0.8, 0 },
+    C_Chin_LOD00 = { 0, 0.8, 0 }, C_loLip_LOD02 = { 0, 0.0, 0 },
     L_cornerLip_LOD02 = { -2.1, -1.4, 0 }, R_cornerLip_LOD02 = { 3.0, -1.1, 0 },
     L_BetweenEyeBrow_LOD01 = { 0, -4.2, 0 }, R_BetweenEyeBrow_LOD01 = { 0, -4.2, 0 },
     L_EyeBrow_A_LOD01 = { 0, -3.3, 0 }, R_EyeBrow_A_LOD01 = { 0, -3.5, 0 },
@@ -147,11 +147,24 @@ LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 15; ticks(3)
 local half = expect("lowerLidRaise.L", 4.4) * expect("mouthCornerUp.L", 0.008) * (1 - expect("eyeClose.L", 15))
 check(near(w("ウィンク"), half), string.format("half blink -> ウィンク %.3f (want %.3f, ^^ x (1 - close))", w("ウィンク"), half))
 idle_face()
+-- happy 2's laughs: the lower lip drops ~6.4 mm while the chin barely moves (inside jawDrop's
+-- deadzone) -> あ opens through lowerLipDrop; idle lip drift (-2 mm) keeps the mouth shut
+pose("C_loLip_LOD02", { 0, -0.0064, 0 }); pose("C_Chin_LOD00", { 0, -0.006, 0 }); ticks(3)
+check(near(w("あ"), expect("lowerLipDrop", 0.0064)) and w("あ") > 0.3,
+      string.format("laugh: lower lip 6.4 mm down, chin 6 mm -> あ %.3f (want %.3f)", w("あ"), expect("lowerLipDrop", 0.0064)))
+pose("C_loLip_LOD02", { 0, -0.002, 0 }); pose("C_Chin_LOD00", { 0, 0, 0 }); ticks(3)
+check(w("あ") < 1e-6, "idle lip drift (2 mm) -> mouth stays shut")
+pose("C_loLip_LOD02", { 0, -0.020, 0 }); ticks(3)
+check(near(w("あ"), 1), string.format("big opening, lower lip 20 mm -> あ %.3f", w("あ")))
+idle_face(); ticks(3)
 -- the widest smile opens into a grin: い at half once both corners are near fully outward
 pose("L_cornerLip_LOD02", { 0.009, 0, 0 }); pose("R_cornerLip_LOD02", { -0.009, 0, 0 }); ticks(3)
 check(near(w("い"), 0.5), string.format("corners fully outward (9 mm) -> い %.3f (want 0.5)", w("い")))
 pose("L_cornerLip_LOD02", { 0.005, 0, 0 }); pose("R_cornerLip_LOD02", { -0.005, 0, 0 }); ticks(3)
 check(w("い") < 1e-6 and w("口_横幅1") > 0.2, string.format("corners 5 mm outward -> 口_横幅1 %.3f but no い", w("口_横幅1")))
+-- past calibration (happy 2: corners 9.5 mm out) a bone signal stays at 1, so い stops at 0.5
+pose("L_cornerLip_LOD02", { 0.012, 0, 0 }); pose("R_cornerLip_LOD02", { -0.012, 0, 0 }); ticks(3)
+check(near(w("い"), 0.5), string.format("corners 12 mm outward -> い %.3f (bone signals cap at 1)", w("い")))
 idle_face(); ticks(3)
 FC[1] = 0.006; LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 10; ticks(3)
 check(near(w("ウィンク２"), math.max(0.6, expect("eyeClose.L", 10))),
@@ -171,7 +184,7 @@ for k in pairs(LID_DEG) do LID_DEG[k] = nil end
 -- every profile tools/vrc_profiles/gen.py builds: a channel driven by one of these game signals
 -- also reads the bone signal of the same motion, same side (the emote face)
 local BONE_OF = { browOuterUp = "browRaise", browDown = "browLower", browBring = "browInnerDown",
-                  cheekSquint = "cheekRaise", jawOpen = "jawDrop", smile = "mouthCornerUp",
+                  cheekSquint = "cheekRaise", jawOpen = { "jawDrop", "lowerLipDrop" }, smile = "mouthCornerUp",
                   frown = "mouthCornerDown", stretch = "mouthCornerOut", blink = "eyeClose",
                   eyeWide = "eyeWiden" }
 local GENERATED = { "airi", "chocolat", "kaguya", "karin", "kipfel", "mafuyu", "manuka", "maya", "moko",
@@ -190,10 +203,10 @@ for _, id in ipairs(GENERATED) do
         local sig = reads(Profile.node_of(ch), {})
         for s in pairs(sig) do
             local base, side = s:match("^([^.]+)(.*)$")
-            local bone = BONE_OF[base]
-            if bone then
+            local bones = BONE_OF[base]
+            for _, bone in ipairs(type(bones) == "table" and bones or { bones }) do
                 if sig[bone .. side] then paired = paired + 1
-                else missing[#missing + 1] = ch.name .. ":" .. s end
+                else missing[#missing + 1] = ch.name .. ":" .. s .. "->" .. bone end
             end
         end
     end

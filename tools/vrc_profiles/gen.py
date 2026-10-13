@@ -68,28 +68,31 @@ def joint_node(slot):
 
 
 # slot -> bone signal (builtin/signals.json). Gameplay emotes move the face's bones, not the
-# fcParams (in-game probes, 2026-10-13), so these keys take the larger of the two. Emote blinks
-# close (and widen) the eyes with the upper-lid bones while the eye fcParams stay 0.
+# fcParams (in-game probes, 2026-10-13), so these keys take the largest of them. Emote blinks
+# close (and widen) the eyes with the upper-lid bones while the eye fcParams stay 0; laughs open
+# the mouth with the lower lip while the chin stays inside jawDrop's deadzone.
 BONE = {
     "brow_outer": "browRaise", "brow_down": "browLower", "brow_bring": "browInnerDown",
-    "blink": "eyeClose", "wide": "eyeWiden", "lower_up": "cheekRaise", "jaw": "jawDrop",
+    "blink": "eyeClose", "wide": "eyeWiden", "lower_up": "cheekRaise", "jaw": ["jawDrop", "lowerLipDrop"],
     "smile": "mouthCornerUp", "frown": "mouthCornerDown", "stretch": "mouthCornerOut",
 }
 BONE_NOTE = "游戏动作表情由面部骨骼驱动：同时读骨骼信号 {}，取较大者"
 
 
 def with_bone(slot, node, side=None):
-    """(node, note sentence) -> node maxed with the slot's bone signal, or (node, None)"""
+    """(node, note sentence) -> node maxed with the slot's bone signal(s), or (node, None)"""
     b = BONE.get(slot)
     if not b:
         return node, None
-    if slot == "jaw":
-        bone, names = {"s": b}, b
-    elif side:
-        bone, names = {"s": b + "." + side}, b + "." + side
-    else:
-        bone, names = {"sum": [{"s": b + ".L", "k": 0.5}, {"s": b + ".R", "k": 0.5}]}, f"{b}.L / {b}.R"
-    return {"max": [node, bone]}, BONE_NOTE.format(names)
+    bones, names = [], []
+    for b in (b if isinstance(b, list) else [b]):
+        if slot == "jaw":
+            bones.append({"s": b}); names.append(b)
+        elif side:
+            bones.append({"s": b + "." + side}); names.append(b + "." + side)
+        else:
+            bones.append({"sum": [{"s": b + ".L", "k": 0.5}, {"s": b + ".R", "k": 0.5}]}); names.append(f"{b}.L / {b}.R")
+    return {"max": [node] + bones}, BONE_NOTE.format(" / ".join(names))
 
 
 def gaze_node(slot, eye=None):

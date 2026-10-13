@@ -39,7 +39,7 @@ local function quat_to_yaw_pitch(q)
 end
 
 -- Bone signals (Profile.BONE_BASE ids), past the idle offset `off`, times sign, over full, past the
--- deadzone, never below 0:
+-- deadzone, within 0..1:
 --   pos: the bone's position in the head's frame against its rest pose, along the signal's axis
 --        (a bone without a rest pose takes its first reading as rest);
 --   rot: the bone's local turn (degrees) about its own axis against its base rotation.
@@ -79,7 +79,7 @@ local function read_bones(bones, P)
         end
         if val then
             if b.deadzone > 0 then val = (val - b.deadzone) / (1 - b.deadzone) end
-            P[b.id] = val > 0 and val or 0
+            P[b.id] = val <= 0 and 0 or (val < 1 and val or 1)   -- past calibration stays at full
         end
     end
 end
