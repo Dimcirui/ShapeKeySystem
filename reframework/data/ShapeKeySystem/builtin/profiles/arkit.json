@@ -2,7 +2,9 @@
   "schema": "sks.profile/1",
   "id": "arkit",
   "name": "ARKit 52",
+  "name_en": "ARKit 52",
   "description": "Apple ARKit 52 个标准形态键，另加常见的左右拆分版（BrowInnerUpLeft/Right、CheekPuffLeft/Right）和虹膜平面移动（Look*）。",
+  "description_en": "Apple ARKit's 52 standard shape keys, plus the common left / right split versions (BrowInnerUpLeft/Right, CheekPuffLeft/Right) and the iris slides (Look*).",
   "aliases": [ "unified_expressions", "sranipal" ],
   "channels": [
     { "name": "browDownLeft",       "group": "brow", "sum": [ { "s": "browDown.L" }, { "s": "browBring.L", "k": 0.5 } ] },
@@ -70,10 +72,10 @@
     { "name": "mouthClose",         "group": "mouth", "sum": [ { "s": "lipsTogether.L", "k": 0.5 }, { "s": "lipsTogether.R", "k": 0.5 } ] },
 
     { "name": "jawOpen",            "group": "jaw", "s": "jawOpen" },
-    { "name": "jawForward",         "group": "jaw", "note": "游戏里没有对应信号" },
-    { "name": "jawLeft",            "group": "jaw", "note": "游戏里没有对应信号（fcParam 053-056 可能是下巴横移，待实测）" },
-    { "name": "jawRight",           "group": "jaw", "note": "游戏里没有对应信号" },
+    { "name": "jawForward",         "group": "jaw", "note": "游戏里没有对应信号", "note_en": "No matching game signal" },
+    { "name": "jawLeft",            "group": "jaw", "note": "游戏里没有对应信号（fcParam 053-056 可能是下巴横移，待实测）", "note_en": "No matching game signal (fcParam 053-056 may be the jaw moving sideways, to be measured)" },
+    { "name": "jawRight",           "group": "jaw", "note": "游戏里没有对应信号", "note_en": "No matching game signal" },
 
-    { "name": "tongueOut",          "group": "tongue", "note": "游戏里没有舌头信号" }
+    { "name": "tongueOut",          "group": "tongue", "note": "游戏里没有舌头信号", "note_en": "The game has no tongue signal" }
   ]
 }

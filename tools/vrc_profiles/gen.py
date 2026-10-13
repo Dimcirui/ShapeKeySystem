@@ -6,11 +6,15 @@ Slot spec values:
   "name" or ("name", ["alt"])      one combined key: left/right signals averaged
 Gaze slots take ("L", "R") for per-eye keys or "name" for a both-eyes key.
 Optional per-slot overrides in NOTE[slot] / GUESS[slot].
+English (name_en, description_en, note_en) comes from tools/i18n/data_en.py; a note sentence it
+does not know stops the run (add it there).
 """
 import json, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROBE = os.path.join(HERE, "probe")
+sys.path.insert(0, os.path.join(HERE, "..", "i18n"))
+from data_en import PROFILE_EN, note_en  # noqa: E402
 
 # slot -> (group, signal base, always guessed, description of the expected deformation)
 SLOTS = {
@@ -128,13 +132,15 @@ def build(spec, probes):
             if guessed:
                 ch["guessed"] = True
             ch["note"] = note
+            ch["note_en"] = note_en(note)
             chans.append(ch)
     return chans
 
 
 def dump(spec, chans, out_dir):
-    head = {"schema": "sks.profile/1", "id": spec["id"], "name": spec["name"],
-            "description": spec["description"], "aliases": []}
+    name_en, desc_en = PROFILE_EN[spec["id"]]
+    head = {"schema": "sks.profile/1", "id": spec["id"], "name": spec["name"], "name_en": name_en,
+            "description": spec["description"], "description_en": desc_en, "aliases": []}
     lines = ["{"]
     for k, v in head.items():
         lines.append(f"  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)},")

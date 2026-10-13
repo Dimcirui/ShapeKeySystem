@@ -2,7 +2,9 @@
   "schema": "sks.profile/1",
   "id": "shinano",
   "name": "Shinano 原生形态键",
+  "name_en": "Shinano native keys",
   "description": "Shinano 自带的表情形态键（eye_close_L、mouth_smile_L 等），用于没有 ARKit 形态键的 Shinano 脸。左右拆分版优先；标了 guessed 的映射需要实测。",
+  "description_en": "Shinano's own expression shape keys (eye_close_L, mouth_smile_L, ...), for Shinano faces without ARKit keys. Left / right split versions come first; mappings marked guessed need testing in game.",
   "aliases": [],
   "channels": [
     { "name": "eyebrow_up_L",        "group": "brow", "max": [ { "s": "browOuterUp.L" }, { "s": "browInnerUp.L", "k": 0.5 } ] },
@@ -13,8 +15,8 @@
     { "name": "eyebrow_sad1_R",      "group": "brow", "s": "browInnerUp.R" },
     { "name": "eyebrow_angry1_L",    "group": "brow", "s": "browBring.L" },
     { "name": "eyebrow_angry1_R",    "group": "brow", "s": "browBring.R" },
-    { "name": "eyebrow_surprised_L", "group": "brow", "note": "没有直接对应的信号" },
-    { "name": "eyebrow_surprised_R", "group": "brow", "note": "没有直接对应的信号" },
+    { "name": "eyebrow_surprised_L", "group": "brow", "note": "没有直接对应的信号", "note_en": "No directly matching signal" },
+    { "name": "eyebrow_surprised_R", "group": "brow", "note": "没有直接对应的信号", "note_en": "No directly matching signal" },
 
     { "name": "eye_close_L",         "group": "eye", "s": "blink.L" },
     { "name": "eye_close_R",         "group": "eye", "s": "blink.R" },
@@ -22,27 +24,27 @@
     { "name": "eye_zitome1_R",       "group": "eye", "s": "eyeSquint.R" },
     { "name": "eye_surprise_L",      "group": "eye", "s": "eyeWide.L" },
     { "name": "eye_surprise_R",      "group": "eye", "s": "eyeWide.R" },
-    { "name": "eye_joy_L",           "group": "eye", "s": "cheekSquint.L", "note": "笑眼，用笑+闭眼修正信号（推测）" },
-    { "name": "eye_joy_R",           "group": "eye", "s": "cheekSquint.R", "note": "笑眼，用笑+闭眼修正信号（推测）" },
-    { "name": "eye_halfclose_L",     "group": "eye", "note": "没有直接对应的信号（眨眼已由 eye_close 驱动）" },
-    { "name": "eye_halfclose_R",     "group": "eye", "note": "没有直接对应的信号（眨眼已由 eye_close 驱动）" },
+    { "name": "eye_joy_L",           "group": "eye", "s": "cheekSquint.L", "note": "笑眼，用笑+闭眼修正信号（推测）", "note_en": "Smiling eyes, from the smile + eye-close corrective signal (guess)" },
+    { "name": "eye_joy_R",           "group": "eye", "s": "cheekSquint.R", "note": "笑眼，用笑+闭眼修正信号（推测）", "note_en": "Smiling eyes, from the smile + eye-close corrective signal (guess)" },
+    { "name": "eye_halfclose_L",     "group": "eye", "note": "没有直接对应的信号（眨眼已由 eye_close 驱动）", "note_en": "No directly matching signal (blinking is driven by eye_close)" },
+    { "name": "eye_halfclose_R",     "group": "eye", "note": "没有直接对应的信号（眨眼已由 eye_close 驱动）", "note_en": "No directly matching signal (blinking is driven by eye_close)" },
 
     { "name": "eye_look_up",         "group": "gaze", "gaze_set": "eye_look", "eye": "L", "axis": "pitch", "sign": 1 },
     { "name": "eye_look_down",       "group": "gaze", "gaze_set": "eye_look", "eye": "L", "axis": "pitch", "sign": -1 },
     { "name": "eye_look_right",      "group": "gaze", "gaze_set": "eye_look", "eye": "L", "axis": "yaw", "sign": -1,
-      "note": "按观察者的左右（2026-10-10 游戏内实测：原先按角色自身映射，方向反了）" },
+      "note": "按观察者的左右（2026-10-10 游戏内实测：原先按角色自身映射，方向反了）", "note_en": "By the viewer's left / right (measured in game 2026-10-10: mapping by the character's own side came out reversed)" },
     { "name": "eye_look_left",       "group": "gaze", "gaze_set": "eye_look", "eye": "L", "axis": "yaw", "sign": 1,
-      "note": "按观察者的左右（2026-10-10 游戏内实测：原先按角色自身映射，方向反了）" },
+      "note": "按观察者的左右（2026-10-10 游戏内实测：原先按角色自身映射，方向反了）", "note_en": "By the viewer's left / right (measured in game 2026-10-10: mapping by the character's own side came out reversed)" },
 
-    { "name": "other_pout_L",        "group": "nose_cheek", "s": "puff.L", "guessed": true, "note": "鼓腮（推测 pout 是鼓腮）" },
-    { "name": "other_pout_R",        "group": "nose_cheek", "s": "puff.R", "guessed": true, "note": "鼓腮（推测 pout 是鼓腮）" },
+    { "name": "other_pout_L",        "group": "nose_cheek", "s": "puff.L", "guessed": true, "note": "鼓腮（推测 pout 是鼓腮）", "note_en": "Cheek puff (pout guessed to be a cheek puff)" },
+    { "name": "other_pout_R",        "group": "nose_cheek", "s": "puff.R", "guessed": true, "note": "鼓腮（推测 pout 是鼓腮）", "note_en": "Cheek puff (pout guessed to be a cheek puff)" },
 
     { "name": "mouth_a1",            "group": "mouth", "s": "jawOpen" },
     { "name": "mouth_u1",            "group": "mouth", "sum": [ { "s": "funnel.L", "k": 0.5 }, { "s": "funnel.R", "k": 0.5 } ] },
     { "name": "mouth_o1",            "group": "mouth", "mul": [ { "s": "jawOpen" }, { "sum": [ { "s": "funnel.L", "k": 0.5 }, { "s": "funnel.R", "k": 0.5 } ] } ],
-      "guessed": true, "note": "张嘴 × 嘟嘴" },
-    { "name": "mouth_i1",            "group": "mouth", "note": "元音口型，没有直接对应的信号" },
-    { "name": "mouth_e1",            "group": "mouth", "note": "元音口型，没有直接对应的信号" },
+      "guessed": true, "note": "张嘴 × 嘟嘴", "note_en": "Mouth open × pucker" },
+    { "name": "mouth_i1",            "group": "mouth", "note": "元音口型，没有直接对应的信号", "note_en": "Vowel mouth shape, no directly matching signal" },
+    { "name": "mouth_e1",            "group": "mouth", "note": "元音口型，没有直接对应的信号", "note_en": "Vowel mouth shape, no directly matching signal" },
     { "name": "mouth_smile_L",       "group": "mouth", "sum": [ { "s": "smile.L" }, { "s": "smileMinor.L", "k": 0.5 } ] },
     { "name": "mouth_smile_R",       "group": "mouth", "sum": [ { "s": "smile.R" }, { "s": "smileMinor.R", "k": 0.5 } ] },
     { "name": "mouth_sad_L",         "group": "mouth", "s": "frown.L" },
@@ -54,6 +56,6 @@
     { "name": "mouth_straight_L",    "group": "mouth", "s": "press.L" },
     { "name": "mouth_straight_R",    "group": "mouth", "s": "press.R" },
 
-    { "name": "tongue_pero",         "group": "tongue", "note": "游戏里没有舌头信号" }
+    { "name": "tongue_pero",         "group": "tongue", "note": "游戏里没有舌头信号", "note_en": "The game has no tongue signal" }
   ]
 }

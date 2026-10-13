@@ -1,4 +1,4 @@
-{ "id": "chibi", "name": "Q 版大头", "size": 600,
+{ "id": "chibi", "name": "Q 版大头", "name_en": "Chibi", "size": 600,
   "zones": {
     "brow":  { "boxes": [[400, 780, 860, 830]] },
     "mouth": { "boxes": [[570, 1030, 690, 1060]] },

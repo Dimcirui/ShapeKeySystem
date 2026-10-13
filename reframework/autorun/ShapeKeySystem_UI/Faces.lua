@@ -1,6 +1,6 @@
 -- ShapeKeySystem panel: face navigator styles. One style = a manifest
 -- reframework/data/ShapeKeySystem/faces/<id>.json
---   { "name": "Q 版大头", "size": [600, 600], "images": "ShapeKeySystem/faces/<id>/",
+--   { "name": "Q 版大头", "name_en": "Chibi", "size": [600, 600], "images": "ShapeKeySystem/faces/<id>/",
 --     "zones": { "brow": [[cx, cy, rx, ry], ...], "eye": [...], "cheek": [...], "mouth": [...] } }
 -- plus images under reframework/images/<images>: face_lines.png and face_<zone>_<idle|hover|sel|glow>.png
 -- (ellipses in image pixels). Drop in a new pair of manifest + folder to add a style; it is picked up
@@ -42,7 +42,8 @@ local function load_one(path, id)
         local ells = ells_of(type(m.zones) == "table" and m.zones[z.zone])
         if #ells > 0 then zones[#zones + 1] = { key = z.key, img = z.zone, ells = ells } end
     end
-    return { id = id, name = type(m.name) == "string" and m.name or id, w = w, h = h, prefix = prefix, zones = zones }
+    return { id = id, name = type(m.name) == "string" and m.name or id,
+             name_en = type(m.name_en) == "string" and m.name_en or nil, w = w, h = h, prefix = prefix, zones = zones }
 end
 
 function F.refresh()

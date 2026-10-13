@@ -7,6 +7,8 @@
 --   live: on_change is called on every edit (search boxes)
 --   extra: one optional checkbox shown under the field (e.g. "save as general preset")
 
+local L = require("ShapeKeySystem_Core.I18n")
+
 local P = { req = nil }
 
 function P.open(req)
@@ -33,7 +35,7 @@ function P.draw(screen_w, screen_h)
         pcall(imgui.set_next_window_pos, Vector2f.new((screen_w or 1920) / 2 - 200, (screen_h or 1080) / 3), 1 << 3)
         pcall(imgui.set_next_window_size, Vector2f.new(400, 0), 1 << 3)
     end
-    local open = imgui.begin_window((r.title or "输入") .. "##sks_prompt", true, 1 << 5 | 1 << 1)  -- NoCollapse | NoResize
+    local open = imgui.begin_window((r.title or L.t("prompt.title")) .. "##sks_prompt", true, 1 << 5 | 1 << 1)  -- NoCollapse | NoResize
     if open == false then imgui.end_window(); P.req = nil; return end
     if r.first then pcall(imgui.set_keyboard_focus_here, 0); r.first = false end
     local _, text = imgui.input_text("##sks_prompt_text", r.text)
@@ -53,9 +55,9 @@ function P.draw(screen_w, screen_h)
         local c, v = imgui.checkbox(r.extra.label, r.extra.value)
         if c then r.extra.value = v end
     end
-    local ok_clicked = imgui.button(r.live and "完成" or "确定")
+    local ok_clicked = imgui.button(r.live and L.t("prompt.done") or L.t("prompt.ok"))
     imgui.same_line()
-    local cancel = imgui.button("取消")
+    local cancel = imgui.button(L.t("common.cancel"))
     imgui.end_window()
     if (changed and P.req == r) or ok_clicked then
         submit(r)

@@ -79,6 +79,7 @@ L.execute('dofile("%s")' % os.path.join(GAME, "autorun", "ShapeKeySystem.lua").r
 # REFramework finds autorun modules only while scripts load: later requires of files fail
 L.execute('package.searchers[2] = function(name) return "autorun module after load: " .. name end')
 G.TESTS_DIR = HERE.replace("\\", "/")
+G.AUTORUN_DIR = os.path.join(GAME, "autorun").replace("\\", "/")
 L.execute(open(os.path.join(HERE, "tests.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_ui.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_api.lua"), encoding="utf-8").read())
@@ -90,6 +91,7 @@ L.execute(open(os.path.join(HERE, "tests_shinano.lua"), encoding="utf-8").read()
 G.MMD_NAMES = to_lua(json.load(open(os.path.join(HERE, "mmd_names.json"), encoding="utf-8")))
 G.VRC_FACES = to_lua(json.load(open(os.path.join(HERE, "vrc_faces.json"), encoding="utf-8")))
 L.execute(open(os.path.join(HERE, "tests_mmd.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_i18n.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))
@@ -108,7 +110,7 @@ if "--shots" in sys.argv:
         for j in range(1, len(sn.cmds) + 1):
             c = sn.cmds[j]
             cmds.append([c[k] for k in range(1, c.n + 1)])
-        out = os.path.join(HERE, "shots", "page_%d.png" % i)
+        out = os.path.join(HERE, "shots", (sn.file and (sn.file + ".png")) or ("page_%d.png" % i))
         render(cmds, out)
         print("shot", out, len(cmds))
 

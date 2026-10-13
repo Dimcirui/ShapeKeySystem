@@ -4,22 +4,23 @@ local W = require("ShapeKeySystem_Core.Writer")
 
 local X = {}
 
+-- name: Chinese (default UI language), name_en: English (I18n.field picks by settings.language)
 X.REGIONS = {
-    { key = "brow",       name = "眉" },
-    { key = "eye",        name = "眼" },
-    { key = "nose_cheek", name = "鼻·颊" },
-    { key = "mouth",      name = "嘴" },
+    { key = "brow",       name = "眉",    name_en = "Brows" },
+    { key = "eye",        name = "眼",    name_en = "Eyes" },
+    { key = "nose_cheek", name = "鼻·颊", name_en = "Nose & cheeks" },
+    { key = "mouth",      name = "嘴",    name_en = "Mouth" },
 }
 -- group key -> region key (nil = not in a region: gaze uses gaze_gain, extra only master gain)
 X.GROUPS = {
-    { key = "brow",       name = "眉",    region = "brow" },
-    { key = "eye",        name = "眼",    region = "eye" },
-    { key = "gaze",       name = "视线" },
-    { key = "nose_cheek", name = "鼻·颊", region = "nose_cheek" },
-    { key = "mouth",      name = "嘴",    region = "mouth" },
-    { key = "jaw",        name = "下颌",  region = "mouth" },
-    { key = "tongue",     name = "舌",    region = "mouth" },
-    { key = "extra",      name = "扩展" },
+    { key = "brow",       name = "眉",    name_en = "Brows",         region = "brow" },
+    { key = "eye",        name = "眼",    name_en = "Eyes",          region = "eye" },
+    { key = "gaze",       name = "视线",  name_en = "Gaze" },
+    { key = "nose_cheek", name = "鼻·颊", name_en = "Nose & cheeks", region = "nose_cheek" },
+    { key = "mouth",      name = "嘴",    name_en = "Mouth",         region = "mouth" },
+    { key = "jaw",        name = "下颌",  name_en = "Jaw",           region = "mouth" },
+    { key = "tongue",     name = "舌",    name_en = "Tongue",        region = "mouth" },
+    { key = "extra",      name = "扩展",  name_en = "Extra" },
 }
 X.REGION_OF = {}
 for _, g in ipairs(X.GROUPS) do X.REGION_OF[g.key] = g.region end

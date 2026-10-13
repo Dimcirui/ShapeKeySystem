@@ -9,18 +9,20 @@ local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
 local P = require("ShapeKeySystem_UI.Prompt")
 local Blocker = require("ShapeKeySystem_UI.InputBlocker")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Panel = { open = false }
 local C, M = T.c, T.m
 local max, min = math.max, math.min
 
 local SKS
+-- rail label: L.t("page." .. key)
 local PAGES = {
-    { key = "basic",   name = "表情",     mod = "ShapeKeySystem_UI.PageBasic" },
-    { key = "sculpt",  name = "捏脸",     mod = "ShapeKeySystem_UI.PageSculpt" },
-    { key = "expr",    name = "表情详情", mod = "ShapeKeySystem_UI.PageExpression", adv = true },
-    { key = "cond",    name = "条件表情", mod = "ShapeKeySystem_UI.PageConditions", adv = true },
-    { key = "debug",   name = "设置与调试", mod = "ShapeKeySystem_UI.PageDebug",    adv = true },
+    { key = "basic",   mod = "ShapeKeySystem_UI.PageBasic" },
+    { key = "sculpt",  mod = "ShapeKeySystem_UI.PageSculpt" },
+    { key = "expr",    mod = "ShapeKeySystem_UI.PageExpression", adv = true },
+    { key = "cond",    mod = "ShapeKeySystem_UI.PageConditions", adv = true },
+    { key = "debug",   mod = "ShapeKeySystem_UI.PageDebug",    adv = true },
 }
 local page_impl = {}
 -- REFramework resolves autorun modules only while scripts load: require every page now, a lazy
@@ -35,9 +37,12 @@ Panel.ui = ui
 
 -- ---------------------------------------------------------------- commands
 local toast_seq = 0
+-- text: a string, or a message { k = id, args = {...} } that is redrawn in the current language
 local function toast(level, text)
     toast_seq = toast_seq + 1
-    ui.toasts[#ui.toasts + 1] = { id = "t" .. toast_seq, level = level, text = text, until_t = os.clock() + 6 }
+    local msg = type(text) == "table" and text or nil
+    ui.toasts[#ui.toasts + 1] = { id = "t" .. toast_seq, level = level, msg = msg, text = msg and L.pick(msg) or text,
+                                  until_t = os.clock() + 6 }
     if #ui.toasts > 4 then table.remove(ui.toasts, 1) end
 end
 Panel.toast = toast
@@ -45,7 +50,7 @@ Panel.toast = toast
 -- SKS.call with failures shown as a toast
 local function call(cmd, args)
     local ok, code, msg, res = SKS.call(cmd, args)
-    if not ok then toast("error", string.format("%s：%s %s", cmd, tostring(code), tostring(msg or ""))) end
+    if not ok then toast("error", { k = "panel.cmd_failed", args = { cmd, tostring(code), tostring(msg or "") } }) end
     return ok, res
 end
 
@@ -65,7 +70,7 @@ end
 local function get_page(key)
     local impl = page_impl[key]
     if not impl and page_load_err[key] then
-        toast("error", "页面加载失败：" .. page_load_err[key])
+        toast("error", { k = "panel.page_load_failed", args = { page_load_err[key] } })
         page_load_err[key] = nil
     end
     return impl or nil
@@ -101,18 +106,19 @@ local function draw_titlebar(st, x, y, w)
     D.rect(x, y, w, 2, C.brass_dim)
     D.rect(x, y + h - 1, w, 1, C.line)
     local bw = D.text_mid("SHAPEKEYSYSTEM", x + 14, y, h, C.brass, D.font(T.font.title, true))
-    D.text_mid("形态键系统", x + 22 + bw, y + 1, h, C.muted, W.small())
+    D.text_mid(L.t("panel.subtitle"), x + 22 + bw, y + 1, h, C.muted, W.small())
     -- right side, right to left
     local rx = x + w - 12 - 26
     if W.close_button(rx, y + 7, 26) then Panel.set_open(false) end
     local rt = st.runtime
-    local tw = D.measure(W.body(), "启用") + 38
+    local on_label, adv_label = L.t("panel.enabled"), L.t("panel.advanced")
+    local tw = D.measure(W.body(), on_label) + 38
     rx = rx - 16 - tw
-    local ch, v = W.toggle("启用", rx, y + 6, rt.enabled)
+    local ch, v = W.toggle(on_label, rx, y + 6, rt.enabled)
     if ch then call("set_enabled", { on = v }) end
-    tw = D.measure(W.body(), "进阶") + 38
+    tw = D.measure(W.body(), adv_label) + 38
     rx = rx - 16 - tw
-    ch, v = W.toggle("进阶", rx, y + 6, rt.advanced == true)
+    ch, v = W.toggle(adv_label, rx, y + 6, rt.advanced == true)
     if ch then
         call("set_setting", { key = "advanced", value = v })
         if not v then
@@ -131,7 +137,7 @@ local function draw_rail(st, x, y, h)
     local section
     for _, p in ipairs(PAGES) do
         if not p.adv or adv then
-            local sec = p.adv and "进阶" or "基础"
+            local sec = p.adv and L.t("panel.section_adv") or L.t("panel.section_basic")
             if sec ~= section then
                 section = sec
                 D.text(sec, x + 14, cy + 6, C.faint, W.small())
@@ -142,7 +148,7 @@ local function draw_rail(st, x, y, h)
             local hover = I.hit(x, cy, w - 1, ih)
             if cur or hover then D.rect(x, cy, w - 1, ih, C.panel2) end
             if cur then D.rect(x, cy, 2, ih, C.brass) end
-            D.text_mid(p.name, x + 14, cy, ih, (cur or hover) and C.text or C.muted, W.body())
+            D.text_mid(L.t("page." .. p.key), x + 14, cy, ih, (cur or hover) and C.text or C.muted, W.body(), w - 22)
             if p.key == "sculpt" and st.sculpt.dirty then D.fill_circle(x + w - 16, cy + ih / 2, 3, C.warn) end
             if I.click(x, cy, w - 1, ih) then goto_page(p.key) end
             cy = cy + ih + 2
@@ -155,7 +161,7 @@ local function draw_statusbar(st, x, y, w)
     D.rect(x, y, w, h, C.panel)
     D.rect(x, y, w, 1, C.line)
     local a = st.debug.perf or {}
-    local text = string.format("%.2f ms/帧 · 写入 %.1f / 跳过 %.1f", a.total or 0, a.writes or 0, a.skipped or 0)
+    local text = L.t("panel.status", a.total or 0, a.writes or 0, a.skipped or 0)
     local f = W.small()
     local used = D.text_mid(text, x + 12, y, h, C.muted, f, w * 0.6)
     D.text_mid(st.debug.status or "", x + 24 + used, y, h, C.faint, f, w - used - 40)
@@ -169,7 +175,10 @@ local function draw_notices(st, x, y, w)
         if ui.toasts[i].until_t < now_c then table.remove(ui.toasts, i) end
     end
     for _, n in ipairs(st.runtime.notices or {}) do items[#items + 1] = { backend = true, n = n } end
-    for _, t in ipairs(ui.toasts) do items[#items + 1] = { n = t } end
+    for _, t in ipairs(ui.toasts) do
+        if t.msg then t.text = L.pick(t.msg) end
+        items[#items + 1] = { n = t }
+    end
     local first = max(1, #items - 2)
     local cy = y
     for i = first, #items do
@@ -178,7 +187,8 @@ local function draw_notices(st, x, y, w)
         local col = n.level == "error" and C.error or (n.level == "warn" and C.warn or C.signal)
         D.rrect(x, cy, w, 26, 3, C.ink)
         D.outline(x, cy, w, 26, 3, 1, col)
-        D.text_mid(n.text, x + 10, cy, 26, col, W.small(), w - 50)
+        -- backend notices are re-rendered from their message id (language switches apply at once)
+        D.text_mid(it.backend and L.notice_text(n) or n.text, x + 10, cy, 26, col, W.small(), w - 50)
         if W.close_button(x + w - 25, cy + 3, 20) then
             if it.backend then call("dismiss_notice", { id = n.id })
             else for k, t in ipairs(ui.toasts) do if t == n then table.remove(ui.toasts, k) break end end end
@@ -225,7 +235,7 @@ function Panel.frame()
     others_were = others
     if I.key_pressed(st.settings.hotkey or "Delete") and not P.is_open() then
         Panel.set_open(not Panel.open)
-        if Panel.open and others then toast("warn", "ArmorVariantManager 的面板也开着：点击会同时传给两个面板") end
+        if Panel.open and others then toast("warn", { k = "panel.avm_open" }) end
     end
     if Panel.open then
         I.capture()
@@ -233,7 +243,7 @@ function Panel.frame()
         pcall(function() sw, sh = d2d.surface_size() end)
         Blocker.surface = function() return sw, sh end
         local ok, e = pcall(P.draw, sw, sh)
-        if not ok then P.close(); toast("error", "输入框：" .. tostring(e)) end
+        if not ok then P.close(); toast("error", { k = "panel.prompt_error", args = { tostring(e) } }) end
     end
 end
 
@@ -293,7 +303,7 @@ function Panel.draw()
         if not ok then
             local e = tostring(used)
             used = 40
-            D.text("页面出错：" .. e, cx, y0 + 4, C.error, W.small(), cw)
+            D.text(L.t("panel.page_error", e), cx, y0 + 4, C.error, W.small(), cw)
             if ctx.state.last_err ~= e then ctx.state.last_err = e; SKS.log("panel page error: %s", e) end
         end
         W.end_scroll((tonumber(used) or 0) + 12)

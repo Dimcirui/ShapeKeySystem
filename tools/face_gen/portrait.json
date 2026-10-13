@@ -1,4 +1,4 @@
-{ "id": "portrait", "name": "正常比例", "size": 600,
+{ "id": "portrait", "name": "正常比例", "name_en": "Realistic", "size": 600,
   "zones": {
     "brow":  { "min_px": 60, "merge": 6, "polys": [
       [[446, 578], [470, 569], [503, 566], [506, 580], [472, 585], [448, 593]],

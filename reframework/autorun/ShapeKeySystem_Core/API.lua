@@ -18,6 +18,7 @@ local Ext     = require("ShapeKeySystem_Core.External")
 local Cnd     = require("ShapeKeySystem_Core.Conditions")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch   = require("ShapeKeySystem_Core.Touch")
+local I18n    = require("ShapeKeySystem_Core.I18n")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -68,6 +69,7 @@ local function load_settings()
     local data = U.load_json(SETTINGS_PATH)
     if data then
         merge(cfg, data)
+        if not I18n.set(cfg.language) then cfg.language = I18n.lang end
         -- once: the old defaults Home (ArmorVariantManager) and End (game pause) move to Delete
         if (tonumber(data.hotkey_rev) or 0) < 2 then
             if cfg.hotkey == "Home" or cfg.hotkey == "End" then
@@ -156,6 +158,9 @@ local prof = { read = 0, compute = 0, write = 0, scan = 0, writes = 0, skipped =
 
 local function bump(section) state[section].rev = state[section].rev + 1 end
 
+-- a data name as a notice param: {zh = name, en = name_en or name}
+local function pair(name, name_en) return { zh = name, en = name_en or name } end
+
 local function log(fmt, ...)
     local text = select("#", ...) > 0 and string.format(fmt, ...) or fmt
     Trail.event("%s", text)
@@ -165,11 +170,15 @@ local function log(fmt, ...)
     bump("debug")
 end
 
+-- notices carry a message id + params (I18n.lua); `text` is their rendering in the current
+-- language, redone when the language changes. args may hold {zh, en} pairs (data names).
 local notice_seq = 0
-local function notice(level, text)
+local function notice(level, key, args)
     notice_seq = notice_seq + 1
     local n = state.runtime.notices
-    n[#n + 1] = { id = notice_seq, level = level, text = text, time = os.time() }
+    args = args or {}
+    n[#n + 1] = { id = notice_seq, level = level, key = key, args = args, text = I18n.t(key, table.unpack(args)),
+                  time = os.time() }
     if #n > 20 then table.remove(n, 1) end
     bump("runtime")
     return notice_seq
@@ -288,7 +297,7 @@ local function build_expression_state()
     local eg = cfg.expression
     ex.master_gain, ex.gaze_gain, ex.smoothing = eg.master_gain, eg.gaze_gain, eg.smoothing
     if not prog then ex.channels, ex.regions, ex.groups = {}, {}, {}; bump("expression"); return end
-    ex.profile = { id = prog.id, name = prog.name, source = prog.source, extends = prog.extends }
+    ex.profile = { id = prog.id, name = prog.name, name_en = prog.name_en, source = prog.source, extends = prog.extends }
     local present = C.mesh_name_of or {}
     local channels = {}
     local by_group = {}
@@ -296,7 +305,7 @@ local function build_expression_state()
         channels[s] = {
             slot = s, name = present[s] or c.name, canonical = c.name, group = c.group,
             source_text = c.source_text, has_signal = c.has_signal, guessed = c.guessed,
-            extension = c.extension, gaze_set = c.gaze_set, note = c.note, edited = c.edited,
+            extension = c.extension, gaze_set = c.gaze_set, note = c.note, note_en = c.note_en, edited = c.edited,
             gain = tonumber(eg.channel_gains[c.name]) or 1.0,
             forced = C.forced[s] == true, present = present[s] ~= nil,
             owner = "expression",
@@ -311,7 +320,7 @@ local function build_expression_state()
         for _, g in ipairs(X.GROUPS) do
             if g.region == r.key then for _, s in ipairs(by_group[g.key] or {}) do slots[#slots + 1] = s end end
         end
-        regions[i] = { key = r.key, name = r.name, gain = eg.region_gains[r.key] or 1.0, channel_slots = slots }
+        regions[i] = { key = r.key, name = r.name, name_en = r.name_en, gain = eg.region_gains[r.key] or 1.0, channel_slots = slots }
     end
     ex.regions = regions
     local groups = {}
@@ -319,7 +328,7 @@ local function build_expression_state()
     for _, g in ipairs(X.GROUPS) do
         known[g.key] = true
         if by_group[g.key] then
-            groups[#groups + 1] = { key = g.key, name = g.name, region = g.region, channel_slots = by_group[g.key] }
+            groups[#groups + 1] = { key = g.key, name = g.name, name_en = g.name_en, region = g.region, channel_slots = by_group[g.key] }
         end
     end
     for key, slots in pairs(by_group) do
@@ -360,19 +369,19 @@ function build_preview_state()
         if present[sl] then hit = hit + 1 end
         channels[sl] = { slot = sl, name = present[sl] or c.name, canonical = c.name, group = c.group,
                          source_text = c.source_text, has_signal = c.has_signal, guessed = c.guessed,
-                         extension = c.extension, note = c.note, present = present[sl] ~= nil }
+                         extension = c.extension, note = c.note, note_en = c.note_en, present = present[sl] ~= nil }
         by_group[c.group] = by_group[c.group] or {}
         table.insert(by_group[c.group], sl)
     end
     local groups, known = {}, {}
     for _, g in ipairs(X.GROUPS) do
         known[g.key] = true
-        if by_group[g.key] then groups[#groups + 1] = { key = g.key, name = g.name, channel_slots = by_group[g.key] } end
+        if by_group[g.key] then groups[#groups + 1] = { key = g.key, name = g.name, name_en = g.name_en, channel_slots = by_group[g.key] } end
     end
     for key, slots in pairs(by_group) do
         if not known[key] then groups[#groups + 1] = { key = key, name = key, channel_slots = slots } end
     end
-    ex.preview = { id = prog.id, name = prog.name, source = prog.source, extends = prog.extends,
+    ex.preview = { id = prog.id, name = prog.name, name_en = prog.name_en, source = prog.source, extends = prog.extends,
                    channels = channels, groups = groups, present = hit, total = prog.n }
     bump("expression")
 end
@@ -381,7 +390,7 @@ local function build_mapping_state()
     local m = state.mapping
     local sigs = {}
     for i, s in ipairs(Profile.signals.list) do
-        sigs[i] = { slot = s.slot, name = s.name, param = s.param, guessed = s.guessed, note = s.note }
+        sigs[i] = { slot = s.slot, name = s.name, param = s.param, guessed = s.guessed, note = s.note, note_en = s.note_en }
     end
     m.signals = sigs
     local nodes, edited = {}, {}
@@ -399,8 +408,9 @@ local function sculpt_entry_state(e)
     return { id = e.id, name = e.name, source = e.source, folder = e.folder, target_part = e.target_part }
 end
 
--- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β"), builtin/armor_names.json
--- (generated from Modding-Toolkit's mhws_armor_sets.json); nil when unknown
+-- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β", "Guardian Seregios α/β"),
+-- builtin/armor_names.json (generated from Modding-Toolkit's mhws_armor_sets.json). Returns zh, en;
+-- nil when unknown
 local armor_names = nil
 local function armor_name(model)
     if armor_names == nil then
@@ -408,28 +418,33 @@ local function armor_name(model)
         armor_names = d and type(d.models) == "table" and d.models or false
     end
     local e = armor_names and model and armor_names[model]
-    return e and (e.zh or e.en) or nil
+    if not e then return nil end
+    return e.zh or e.en, e.en or e.zh
 end
 
 -- where "绑定到" writes: the binding in effect (its file base) or, without one, a model-wide
--- binding for the part with the most channels. Returns base, model, display name, data to start from
+-- binding for the part with the most channels. Returns base, model, display name, data to start
+-- from, English display name (a binding file's own `name` is shown as it is in both languages)
 local function bind_target()
     local b = C.binding
     if b and b.base and b.base ~= "default" and b.data then
         local model = Presets.model_of(b.base) or b.base
-        return b.base, model, b.data.name or armor_name(model) or model, U.copy(b.data)
+        local zh, en = armor_name(model)
+        if b.data.name then zh, en = b.data.name, b.data.name end
+        return b.base, model, zh or model, U.copy(b.data), en or model
     end
     local best
     for _, p in ipairs(C.parts) do if not best or (p.n or 0) > (best.n or 0) then best = p end end
     if not best then return nil end
     local model = Presets.model_of(best.id) or best.id
-    return Presets.representative_of(best.id) or best.id, model, armor_name(model) or model, { global = true }
+    local zh, en = armor_name(model)
+    return Presets.representative_of(best.id) or best.id, model, zh or model, { global = true }, en or model
 end
 
 local function build_presets_state()
     local list = {}
     for _, e in ipairs(Profile.list) do
-        list[#list + 1] = { id = e.id, name = e.name, source = e.source, extends = e.extends }
+        list[#list + 1] = { id = e.id, name = e.name, name_en = e.name_en, source = e.source, extends = e.extends }
     end
     state.presets.expression = list
     local sc = {}
@@ -449,6 +464,7 @@ local function build_presets_state()
             part = b.part, chain = b.chain, hit = b.hit, source = b.source, level = b.level,
             base = b.base, folder = b.folder,
             expression = prof_entry and prof_entry.name or d.profile,
+            expression_en = prof_entry and (prof_entry.name_en or prof_entry.name) or d.profile,
             sculpt = d.sculpt, sculpt_found = sp ~= nil, fingerprint_ok = fp_ok,
             profile_id = d.profile, conditions = d.conditions,
         }
@@ -456,10 +472,10 @@ local function build_presets_state()
         state.presets.binding = nil
     end
     -- "当前绑定": the name shown in the panel and where 绑定到 writes
-    local base, model, display = bind_target()
+    local base, model, display, _, display_en = bind_target()
     -- active: this outfit has its own binding in effect; global_default: only default.json applies
     local gd = C.binding ~= nil and C.binding.base == "default"
-    state.presets.bind = base and { base = base, model = model, display = display,
+    state.presets.bind = base and { base = base, model = model, display = display, display_en = display_en,
                                     active = C.binding ~= nil and C.binding.base == base,
                                     global_default = gd } or nil
     state.presets.pending_delete = C.pending_delete and U.copy(C.pending_delete) or nil
@@ -508,7 +524,8 @@ local function resolve_bindings(parts)
                 local key = e.error and (p.id .. "|" .. e.path .. "|" .. e.error)
                 if key and not C.warned[key] then
                     C.warned[key] = true
-                    notice("warn", string.format("%s：%s %s", p.id, e.path, e.error))
+                    notice("warn", "notice.binding_error",
+                        { p.id, e.path, e.error_key and { k = e.error_key } or e.error })
                 end
             end
         end
@@ -805,7 +822,7 @@ local function do_scan()
     if want and not Profile.registry[want] then
         if C.missing_profile ~= want then
             C.missing_profile = want
-            notice("warn", string.format("绑定 %s 指定的表情配置 %s 不存在", tostring(b.hit), want))
+            notice("warn", "notice.missing_profile", { tostring(b.hit), want })
         end
         want = nil
     end
@@ -829,10 +846,10 @@ local function do_scan()
     -- without a parent preset that names a profile.
     local cov = state.expression.coverage
     if not want and #res.rigs == 0 and cov and cov.recommended and cov.recommended ~= C.prog.id and (cov.recommended_hits or 0) >= 3 then
-        local from = C.prog.name
+        local from = pair(C.prog.name, C.prog.name_en)
         if apply_profile(cov.recommended, false) then
             cfg.profile = cov.recommended; save_soon()
-            notice("info", string.format("当前部件没有 %s 的通道，已切换到 %s", from, C.prog.name))
+            notice("info", "notice.auto_switched", { from, pair(C.prog.name, C.prog.name_en) })
             return
         end
     end
@@ -1223,6 +1240,13 @@ function cmds.set_setting(a)
         return false, "E_BAD_ARGS", t .. " expected"
     end
     if a.key == "window" then v = { x = tonumber(v.x) or 0, y = tonumber(v.y) or 0, w = tonumber(v.w) or 900, h = tonumber(v.h) or 640 } end
+    if a.key == "language" then
+        if not I18n.set(v) then return false, "E_BAD_ARGS", "language: " .. table.concat(I18n.LANGS, " / ") end
+        -- notices keep their message id: re-render them. State sections carry both languages
+        -- (name / name_en ...); their revs move so a UI that caches by rev rebuilds its labels
+        for _, n in ipairs(state.runtime.notices) do if n.key then n.text = I18n.notice_text(n) end end
+        for _, sec in ipairs({ "expression", "presets", "conditions", "sculpt", "mapping" }) do bump(sec) end
+    end
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end
     if a.key == "sculpt_max" then cfg.sculpt_max = Sculpt.set_max(v); build_sculpt_state() end
@@ -1392,7 +1416,7 @@ function cmds.save_profile(a)
     local ok, code, msg = apply_profile(id, true)
     if not ok then return false, code, msg end
     cfg.profile = id; save_soon()
-    notice("info", "已保存表情配置：" .. name)
+    notice("info", "notice.profile_saved", { name })
     return true, nil, nil, { id = id }
 end
 
@@ -1527,7 +1551,7 @@ function cmds.load_sculpt(a)
     Sculpt.apply_preset(e)
     C.sculpt_preset, C.sculpt_preset_manual = e, true
     build_sculpt_state()
-    notice("info", "已加载捏脸配置：" .. e.name)
+    notice("info", "notice.sculpt_loaded", { e.name })
     return true
 end
 
@@ -1547,7 +1571,7 @@ function cmds.save_sculpt(a)
     C.sculpt_preset = Presets.find_sculpt(a.name, folder, "user")
     C.sculpt_preset_manual = true
     build_presets_state(); build_sculpt_state()
-    notice("info", "已保存捏脸配置：" .. a.name)
+    notice("info", "notice.sculpt_saved", { a.name })
     return true, nil, nil, r4
 end
 
@@ -1590,7 +1614,7 @@ function cmds.write_binding(a)
     local ok, code, msg, res = Presets.write_binding(a.part, data)
     if not ok then return false, code, msg end
     request_rescan(1)
-    notice("info", "已写入绑定：" .. res.path)
+    notice("info", "notice.binding_written", { res.path })
     return true, nil, nil, res
 end
 
@@ -1600,7 +1624,7 @@ end
 -- the outfit worn ("绑定到 ..."). Only that field changes; the binding's other fields are kept and
 -- the result goes to user/ (a mod's binding is copied, never modified).
 function cmds.bind_config(a)
-    local base, model, display, data = bind_target()
+    local base, model, display, data, display_en = bind_target()
     if not base then return false, "E_NOT_FOUND", "no parts with shape keys worn" end
     data.schema, data.part = nil, nil
     if a.kind == "sculpt" then
@@ -1622,7 +1646,7 @@ function cmds.bind_config(a)
     if not ok then return false, code, msg end
     request_rescan(1)
     build_presets_state()
-    notice("info", "已绑定到 " .. display)
+    notice("info", "notice.bound_to", { pair(display, display_en) })
     return true, nil, nil, res
 end
 
@@ -1637,7 +1661,7 @@ function cmds.save_tuning()
     C.tuning.dirty = false
     build_tuning_state()
     request_rescan(1)
-    notice("info", "已保存到绑定：" .. res.path)
+    notice("info", "notice.tuning_saved", { res.path })
     return true, nil, nil, res
 end
 
@@ -1701,7 +1725,7 @@ function cmds.confirm_delete()
     if not ok then return false, "E_IO", "write failed" end
     request_rescan(1)
     build_presets_state()
-    notice("info", "已删除：" .. d.name)
+    notice("info", "notice.deleted", { d.name })
     return true
 end
 
@@ -1747,7 +1771,7 @@ function SKS.init()
     Trail.open()
     load_settings()
     if hotkey_migrated_now then
-        notice("info", "打开面板的按键改成了 Delete（End 是游戏的暂停键，Home 和 ArmorVariantManager 冲突），可在设置里修改")
+        notice("info", "notice.hotkey_moved")
         save_soon()
     end
     cfg.sculpt_max = Sculpt.set_max(cfg.sculpt_max)
@@ -1763,12 +1787,12 @@ function SKS.init()
     C.build_cond_state()
     local ok, code, msg = apply_profile(cfg.profile, false)
     if not ok and cfg.profile ~= "arkit" then
-        notice("warn", "表情配置加载失败，改用 ARKit：" .. tostring(msg))
+        notice("warn", "notice.profile_fallback", { tostring(msg) })
         ok, code, msg = apply_profile("arkit", false)
         if ok then cfg.profile = "arkit" end
     end
     if not ok then
-        notice("error", "没有可用的表情配置：" .. tostring(code) .. " " .. tostring(msg))
+        notice("error", "notice.no_profile", { tostring(code), tostring(msg) })
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
     C.publish_api()
@@ -1846,7 +1870,7 @@ function C.build_cond_state()
                            data = U.copy(cur.data) } or nil
     local defs = {}
     for i, d in ipairs(Cnd.order) do
-        defs[i] = { id = d.id, label = d.label, kind = d.kind, options = d.options, min = d.min, max = d.max }
+        defs[i] = { id = d.id, label = d.label, label_en = d.label_en, kind = d.kind, options = d.options, min = d.min, max = d.max }
     end
     cs.defs = defs
     local b = C.binding
@@ -1885,7 +1909,7 @@ function C.select_conditions()
         if not cur or cur.id ~= want then
             if not CondExpr.select(want) then
                 local key = "cond:" .. want
-                if not C.warned[key] then C.warned[key] = true; notice("warn", "条件表情配置不存在：" .. want) end
+                if not C.warned[key] then C.warned[key] = true; notice("warn", "notice.cond_missing", { want }) end
             end
             C.build_cond_state()
         end
@@ -1935,7 +1959,7 @@ function cmds.cond_save(a)
     if not ok then return false, code, msg end
     if not (C.binding and C.binding.data and C.binding.data.conditions) then cfg.conditions = res.id; save_soon() end
     C.build_cond_state()
-    notice("info", "已保存条件表情：" .. CondExpr.current.name)
+    notice("info", "notice.cond_saved", { CondExpr.current.name })
     return true, nil, nil, res
 end
 
