@@ -27,3 +27,6 @@ __pycache__/
 
 # release packages
 dist/
+
+# loacl
+AGENTS.md
