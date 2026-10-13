@@ -1,7 +1,7 @@
 {
   "schema": "sks.profile/1",
   "id": "shinano",
-  "name": "Shinano 原生形态键",
+  "name": "Shinano",
   "description": "Shinano 自带的表情形态键（eye_close_L、mouth_smile_L 等），用于没有 ARKit 形态键的 Shinano 脸。左右拆分版优先；标了 guessed 的映射需要实测。",
   "aliases": [],
   "channels": [

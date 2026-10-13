@@ -26,6 +26,7 @@ $owned = @(
     "data\ShapeKeySystem\faces",
     "images\ShapeKeySystem"
 )
+# addons/ (e.g. WildsChineseInput, a DLL) are separate optional components: not deployed here
 
 function Get-Files($root, $rel) {
     $p = Join-Path $root $rel

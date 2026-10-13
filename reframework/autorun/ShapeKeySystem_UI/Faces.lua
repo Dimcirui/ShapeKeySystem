@@ -8,7 +8,7 @@
 
 local F = {}
 
-F.DEFAULT = "chibi"
+F.DEFAULT = "portrait"
 
 -- manifest zone -> expression region key; draw / hit-test order
 local ZONE_ORDER = {

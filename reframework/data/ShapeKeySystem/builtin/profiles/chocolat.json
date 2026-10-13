@@ -1,7 +1,7 @@
 {
   "schema": "sks.profile/1",
   "id": "chocolat",
-  "name": "Chocolat 系（こまど：Chocolat / Plum / Lime）",
+  "name": "Chocolat / Plum / Lime",
   "description": "こまど的 Chocolat、Plum、Lime 共用的原生形态键（eye_blink_1_L、jitome_1_L、mouth_smile_1_L、eyebrow_angry_1_L 等），Lime 的不同拼写（eye_brink_1_L、A / U）作为备选名。标了 guessed 的需要游戏实测。",
   "aliases": [],
   "channels": [

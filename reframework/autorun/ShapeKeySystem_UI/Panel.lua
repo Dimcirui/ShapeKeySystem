@@ -1,7 +1,8 @@
--- ShapeKeySystem panel (M3): standalone window drawn with reframework-d2d.
--- Talks to the backend only through SKS.state / SKS.live / SKS.call (docs/plans/shape-key-system-api.md).
+-- ShapeKeySystem panel (M3): standalone window drawn with reframework-d2d or REFramework's ImGui
+-- draw list (Draw.lua). Talks to the backend only through SKS.state / SKS.live / SKS.call
+-- (docs/plans/shape-key-system-api.md).
 --   re.on_frame  -> Panel.frame()  hotkey, input sampling, text prompt, ui_open flag
---   d2d draw     -> Panel.draw()   layout + widgets (only while open)
+--   d2d draw / re.on_frame (imgui) -> Panel.draw()   layout + widgets (only while open)
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -213,6 +214,7 @@ end
 
 -- re.on_frame
 local others_were = false
+local external_was = false
 function Panel.frame()
     local st = SKS.state
     pcall(Blocker.frame)
@@ -223,9 +225,20 @@ function Panel.frame()
         SKS.log("panel closed: %s opened its panel", tostring(who))
     end
     others_were = others
+    -- nothing to draw with (no d2d, REFramework too old for the ImGui backend): stay closed
+    if not D.available() then
+        if Panel.open then Panel.set_open(false) end
+        return
+    end
     if I.key_pressed(st.settings.hotkey or "Delete") and not P.is_open() then
         Panel.set_open(not Panel.open)
         if Panel.open and others then toast("warn", "ArmorVariantManager 的面板也开着：点击会同时传给两个面板") end
+    end
+    -- the game's text form (Prompt 中文) is up: let the game have mouse and keyboard meanwhile
+    local external = Panel.open and P.external_active()
+    if external ~= external_was then
+        external_was = external
+        if Panel.open then pcall(Blocker.set_enabled, not external and st.settings.block_input ~= false) end
     end
     if Panel.open then
         I.capture()
@@ -237,9 +250,9 @@ end
 
 function Panel.ui_open() return Panel.open, Panel.open and ui.want_signals end
 
--- d2d draw callback
+-- active backend's draw callback (d2d draw / re.on_frame for ImGui)
 function Panel.draw()
-    if not Panel.open then return end
+    if not Panel.open or P.external_active() then return end
     local st, live = SKS.state, SKS.live
     if not D.reset_frame(max(0.5, min(3, tonumber(st.settings.ui_scale) or 1))) then return end
     I.begin_frame()
@@ -308,6 +321,7 @@ function Panel.draw()
     end
 
     D.flush_deferred()
+    P.draw_dialog(x, y, w, h)
     draw_cursor()
 end
 

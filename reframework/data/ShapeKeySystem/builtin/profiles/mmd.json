@@ -1,7 +1,7 @@
 {
   "schema": "sks.profile/1",
   "id": "mmd",
-  "name": "MMD 基础动作",
+  "name": "MMD",
   "description": "PMX 模型的通用表情（保下限）：上眼皮、嘴角、张嘴、横拉、收窄、眉。每个通道按 any 列表找 mesh 上第一个存在的名字；全角/半角、大小写、空格不区分。选错的键可以另存一份 extends mmd 的配置，改 any 顺序后绑定到这个部件。",
   "aliases": [],
   "channels": [

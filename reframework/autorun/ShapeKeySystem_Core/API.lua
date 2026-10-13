@@ -40,7 +40,9 @@ local DEFAULTS = {
     -- conditional expression set used when no parent preset names one ("" = none)
     conditions = "",
     -- face navigator art on the basic page: data/ShapeKeySystem/faces/<id>.json
-    face_style = "chibi",
+    face_style = "portrait",
+    -- panel drawing: "auto" (reframework-d2d when installed, else REFramework's ImGui) / "d2d" / "imgui"
+    ui_backend = "auto",
     window = { x = 120, y = 120, w = 920, h = 640 },
     profile = "arkit",
     -- M1: expression gains live here until per-part bindings exist (M2)
@@ -265,7 +267,7 @@ end
 local function build_settings_state()
     local st = state.settings
     for _, k in ipairs({ "hotkey", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
-                         "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style" }) do st[k] = cfg[k] end
+                         "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend" }) do st[k] = cfg[k] end
     st.window = U.copy(cfg.window)
     state.runtime.enabled = cfg.enabled
     state.runtime.advanced = cfg.advanced
@@ -1212,7 +1214,9 @@ local SETTING_TYPES = {
     scene_search_always = "boolean", periodic_scan_sec = { 0, 120 }, write_epsilon = { 0, 0.05 },
     clamp = "boolean", window = "table", advanced = "boolean",
     cutscene_drive = "boolean", sculpt_max = { 1, Sculpt.MAX_LIMIT }, face_style = "string",
+    ui_backend = "string",
 }
+local UI_BACKENDS = { auto = true, d2d = true, imgui = true }
 function cmds.set_setting(a)
     local t = SETTING_TYPES[a.key]
     if not t then return false, "E_BAD_ARGS", "unknown setting: " .. tostring(a.key) end
@@ -1222,6 +1226,7 @@ function cmds.set_setting(a)
     elseif type(v) ~= t then
         return false, "E_BAD_ARGS", t .. " expected"
     end
+    if a.key == "ui_backend" and not UI_BACKENDS[v] then return false, "E_BAD_ARGS", "ui_backend: auto / d2d / imgui" end
     if a.key == "window" then v = { x = tonumber(v.x) or 0, y = tonumber(v.y) or 0, w = tonumber(v.w) or 900, h = tonumber(v.h) or 640 } end
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end

@@ -1,7 +1,12 @@
--- ShapeKeySystem panel: thin layer over reframework-d2d.
+-- ShapeKeySystem panel: thin drawing layer with two backends.
+--   * "d2d":   reframework-d2d (optional plugin), drawn from its own callback
+--   * "imgui": REFramework's ImGui background draw list, drawn from re.on_frame. For players
+--     without d2d (frame drops, Linux / Proton). No images: the face art on the basic page is
+--     decoration only and is left out. Needs a REFramework with ImDrawList in Lua (2025-05) and
+--     dynamic font sizes (2025-07); the built-in font (Roboto CJK SC) has the Chinese glyphs.
 --   * every coordinate is logical; D.S (ui scale) converts to screen pixels
 --   * d2d has no clipping: D.push_clip keeps a clip rect; rectangles are cut to it, text and
---     images that do not fit inside it entirely are skipped
+--     images that do not fit inside it entirely are skipped (the same on both backends)
 --   * fonts are created on first use per (size, bold, mono) and text sizes are cached
 --   * D.defer(fn) runs fn after the page (dropdown popups, tooltips) without any clip
 
@@ -21,16 +26,36 @@ local images = {}
 local deferred = {}
 local surface_w, surface_h = 1920, 1080
 
-function D.available() return type(d2d) == "table" and d2d.fill_rect ~= nil end
+-- ---------------------------------------------------------------- backends
+D.BACKENDS = { "auto", "d2d", "imgui" }
+D.backend = nil           -- "d2d" / "imgui" / nil (nothing to draw with: no panel)
+
+function D.has_d2d()
+    return type(d2d) == "table" and type(d2d.register) == "function" and d2d.fill_rect ~= nil
+        and type(d2d.Font) == "table"
+end
+
+function D.has_imgui()
+    return type(imgui) == "table" and imgui.get_background_draw_list ~= nil
+        and imgui.calc_text_size ~= nil and imgui.get_display_size ~= nil
+end
+
+-- backend for a setting value ("auto" = d2d when installed); the other one when the wanted one is missing
+function D.pick(pref)
+    local d, g = D.has_d2d(), D.has_imgui()
+    if pref == "imgui" then return (g and "imgui") or (d and "d2d") or nil end
+    return (d and "d2d") or (g and "imgui") or nil
+end
+
+function D.available() return D.backend ~= nil end
+function D.images() return D.backend == "d2d" end
+
+local A, A_src = {}, nil
+local function noop() end
 
 -- the d2d table in use, with fallbacks for anything missing: ArmorVariantManager's UI DLL ships
 -- its own d2d build, which may replace reframework-d2d's global table
-local A, A_src = {}, nil
-local function noop() end
-local function bind_api()
-    local g = d2d
-    if g == A_src then return end
-    A_src = g
+local function bind_d2d(g)
     for _, k in ipairs({ "text", "fill_rect", "outline_rect", "line", "fill_circle", "circle", "image" }) do
         A[k] = g[k] or noop
     end
@@ -38,12 +63,94 @@ local function bind_api()
     A.rounded_rect = g.rounded_rect or function(x, y, w, h, _, _, t, c) A.outline_rect(x, y, w, h, t, c) end
     A.oval = g.oval or function(x, y, rx, ry, t, c) A.circle(x, y, math.max(rx, ry), t, c) end
     A.fill_quad = g.fill_quad or noop
+    A.surface_size = g.surface_size or function() return 1920, 1080 end
+    A.new_font = function(family, px, bold) return g.Font.new(family, px, bold) end
 end
 
--- 仅在 d2d 绘制回调中查询原生渲染器；设备重置期间保留最后有效的物理尺寸。
+-- ImGui: colours are ABGR (d2d and Theme are ARGB); points are {x, y} tables (a list of plain
+-- numbers is accepted without error but draws nothing - ArmorVariantManager's Rise port)
+local DL = nil            -- background draw list of the current ImGui frame
+local function col(c)
+    c = floor(c or 0) % 0x100000000
+    return (c & 0xFF00FF00) | ((c >> 16) & 0xFF) | ((c & 0xFF) << 16)
+end
+
+-- dynamic font size (ImGui 1.92); older REFramework draws everything at its default size
+local function push_px(px) return imgui.push_font_size ~= nil and pcall(imgui.push_font_size, px + 0.0) end
+
+local font_mt = { __index = {} }
+function font_mt.__index:measure(s)
+    local sized = push_px(self.px)
+    local ok, v = pcall(imgui.calc_text_size, s)
+    if sized then imgui.pop_font_size() end
+    if not ok or not v then return 0, 0 end
+    return v.x + (self.bold and 1 or 0), v.y
+end
+
+local function bind_imgui()
+    A.text = function(f, s, x, y, c)
+        if not DL then return end
+        local sized = push_px(f.px)
+        c = col(c)
+        pcall(DL.add_text, DL, { x, y }, c, s)
+        if f.bold then pcall(DL.add_text, DL, { x + 0.8, y }, c, s) end   -- no bold face: overstrike
+        if sized then imgui.pop_font_size() end
+    end
+    A.fill_rect = function(x, y, w, h, c)
+        if DL then DL:add_rect_filled({ x, y }, { x + w, y + h }, col(c), 0.0, 0) end
+    end
+    A.fill_rounded_rect = function(x, y, w, h, rx, _, c)
+        if DL then DL:add_rect_filled({ x, y }, { x + w, y + h }, col(c), rx + 0.0, 0) end
+    end
+    A.outline_rect = function(x, y, w, h, t, c)
+        if DL then DL:add_rect({ x, y }, { x + w, y + h }, col(c), 0.0, 0, t + 0.0) end
+    end
+    A.rounded_rect = function(x, y, w, h, rx, _, t, c)
+        if DL then DL:add_rect({ x, y }, { x + w, y + h }, col(c), rx + 0.0, 0, t + 0.0) end
+    end
+    A.line = function(x1, y1, x2, y2, t, c)
+        if DL then DL:add_line({ x1, y1 }, { x2, y2 }, col(c), t + 0.0) end
+    end
+    A.fill_circle = function(x, y, r, c)
+        if DL then DL:add_circle_filled({ x, y }, r + 0.0, col(c), 0) end
+    end
+    A.circle = function(x, y, r, t, c)
+        if DL then DL:add_circle({ x, y }, r + 0.0, col(c), 0, t + 0.0) end
+    end
+    A.oval = function(x, y, rx, ry, t, c)
+        if DL then DL:add_ellipse({ x, y }, { rx, ry }, col(c), 0.0, 0, t + 0.0) end
+    end
+    A.fill_quad = function(x1, y1, x2, y2, x3, y3, x4, y4, c)
+        if DL then DL:add_quad_filled({ x1, y1 }, { x2, y2 }, { x3, y3 }, { x4, y4 }, col(c)) end
+    end
+    A.image = noop
+    A.surface_size = function()
+        local v = imgui.get_display_size()
+        return v.x, v.y
+    end
+    A.new_font = function(_, px, bold) return setmetatable({ px = px, bold = bold == true }, font_mt) end
+end
+
+local function bind_api()
+    local src = D.backend == "imgui" and "imgui" or d2d
+    if src == A_src then return end
+    A_src = src
+    if src == "imgui" then bind_imgui() elseif type(src) == "table" then bind_d2d(src) end
+end
+
+-- switch backends (fonts, text sizes and images belong to one backend)
+function D.set_backend(name)
+    if name == D.backend then return end
+    D.backend = name
+    fonts, measure_cache, measure_count, images = {}, {}, 0, {}
+    A_src = nil
+    DL = nil
+end
+
+-- 仅在当前后端的绘制回调中查询尺寸；设备重置期间保留最后有效的物理尺寸。
 -- 普通帧、输入 hook 和布局查询只读缓存，不能访问可能已释放的 d2d 资源。
 local function refresh_surface()
-    local get_size = type(d2d) == "table" and d2d.surface_size
+    local get_size = A.surface_size
     if type(get_size) ~= "function" then return true end
     local ok, w, h = pcall(get_size)
     if not ok or type(w) ~= "number" or type(h) ~= "number"
@@ -54,8 +161,12 @@ end
 
 -- 由 Panel.draw 调用；尺寸暂不可用时返回 false，让本次绘制停止并在下次回调重试。
 function D.reset_frame(scale)
-    if not refresh_surface() then return false end
     bind_api()
+    if not refresh_surface() then return false end
+    if D.backend == "imgui" then
+        local ok, dl = pcall(imgui.get_background_draw_list)
+        DL = ok and dl or nil
+    end
     if scale ~= D.S then
         D.S = scale
         fonts, measure_cache, measure_count = {}, {}, 0
@@ -72,7 +183,7 @@ function D.font(size, bold, mono)
     local f = fonts[key]
     if f == nil then
         local px = max(6, floor(size * D.S + 0.5))
-        local ok, made = pcall(d2d.Font.new, mono and T.font.mono or T.font.family, px, bold == true)
+        local ok, made = pcall(A.new_font, mono and T.font.mono or T.font.family, px, bold == true)
         f = (ok and made) or false
         fonts[key] = f
     end
@@ -229,8 +340,9 @@ function D.icon_tri(cx, cy, s, down, color)
 end
 
 -- ---------------------------------------------------------------- images
--- path relative to reframework/images; false when missing
+-- path relative to reframework/images; nil when missing or on a backend without images
 function D.image_res(path)
+    if not D.images() then return nil end
     local img = images[path]
     if img == nil then
         local ok, made = pcall(d2d.Image.new, path)

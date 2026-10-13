@@ -239,6 +239,8 @@ end
 
 function Page.draw(ctx, x, y, w)
     ctx.state.zone = ctx.state.zone or "mouth"
+    -- the face art is decoration (the zone pills select regions too): left out without images (ImGui)
+    if not D.images() then return draw_controls(ctx, x, y, w) end
     if w >= 600 then
         local fw = min(300, max(220, w * 0.36))
         local h1 = draw_face(ctx, x, y, fw)

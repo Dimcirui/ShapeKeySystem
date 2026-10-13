@@ -21,7 +21,8 @@ local function setting(ctx, k, v) ctx.call("set_setting", { key = k, value = v }
 
 local function settings_card(ctx, x, y, w)
     local se = ctx.st.settings
-    local h = 332
+    local no_img = not D.images()
+    local h = 364 - (no_img and 32 or 0)
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
@@ -46,7 +47,18 @@ local function settings_card(ctx, x, y, w)
             setting(ctx, "ui_scale", ctx.state.pending_scale); ctx.state.pending_scale = nil
         end
     end)
-    row("面部图样式", function(sx, sw)
+    row("绘制方式", function(sx, sw)
+        local labels = { "自动", "reframework-d2d", "ImGui（REFramework 自带）" }
+        local cur = 1
+        for i, k in ipairs(D.BACKENDS) do if k == se.ui_backend then cur = i end end
+        -- the closed select shows what is actually drawing (auto, or a wanted backend that is missing)
+        local now = D.backend == "imgui" and "ImGui" or "d2d"
+        if cur == 1 then labels[1] = "自动：" .. now
+        elseif D.BACKENDS[cur] ~= D.backend then labels[cur] = labels[cur] .. "（缺失，用 " .. now .. "）" end
+        local ch, i = W.select("ui_backend", sx, cy, min(260, sw), 28, labels, cur)
+        if ch then setting(ctx, "ui_backend", D.BACKENDS[i]) end
+    end)
+    if not no_img then row("面部图样式", function(sx, sw)
         local list, labels, cur = Faces.list(), {}, nil
         local active = Faces.get(se.face_style)
         for i, f in ipairs(list) do
@@ -55,7 +67,7 @@ local function settings_card(ctx, x, y, w)
         end
         local ch, i = W.select("face_style", sx, cy, min(200, sw), 28, labels, cur, { placeholder = "（无）" })
         if ch and list[i] then setting(ctx, "face_style", list[i].id) end
-    end)
+    end) end
     row("捏脸滑块上限", function(sx, sw)
         local ch, v = W.slider("sculpt_max", sx, cy, min(320, sw), 28, se.sculpt_max or 1, 1, 5, { step = 0.1, fmt = "%.1f" })
         if ch then setting(ctx, "sculpt_max", v) end

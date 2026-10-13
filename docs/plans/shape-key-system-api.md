@@ -157,7 +157,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ```
 
 ### 3.8 `state.settings`
-`hotkey`、`ui_scale`、`language`、`scene_search_always`、`periodic_scan_sec`、`write_epsilon`、`window = {x, y, w, h}`。修改后立即持久化。
+`hotkey`、`ui_scale`、`language`、`scene_search_always`、`periodic_scan_sec`、`write_epsilon`、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`。修改后立即持久化。
 
 ### 3.9 `state.debug`
 | 字段 | 类型 | 说明 |
