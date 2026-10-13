@@ -138,8 +138,57 @@ end
 function S.joints(face, list)
     local out = {}
     for _, n in ipairs(list) do
-        local j = M_JBN:call(face, string.format("fcParam_%03d", n))
-        if j then out[#out + 1] = n; out[#out + 1] = j end
+        if n <= 200 then
+            local j = M_JBN:call(face, string.format("fcParam_%03d", n))
+            if j then out[#out + 1] = n; out[#out + 1] = j end
+        end
+    end
+    return out
+end
+
+-- v (array) rotated by unit quaternion q ({x, y, z, w}); inverse = rotate by the conjugate
+function S.qrot(q, x, y, z, inverse)
+    local qx, qy, qz, qw = q.x, q.y, q.z, q.w
+    if inverse then qx, qy, qz = -qx, -qy, -qz end
+    local tx, ty, tz = 2 * (qy * z - qz * y), 2 * (qz * x - qx * z), 2 * (qx * y - qy * x)
+    return x + qw * tx + (qy * tz - qz * ty), y + qw * ty + (qz * tx - qx * tz), z + qw * tz + (qx * ty - qy * tx)
+end
+
+-- A bone's rest position in the head's frame: its base (bind) local pose composed up the parent
+-- chain to the Head joint. nil when the chain cannot be walked (no parent getter, no Head above).
+local function rest_in_head(j)
+    local M_PARENT, M_BLPOS, M_BLROT, M_BLSCL, M_JNAME = W.M_PARENT, W.M_BLPOS, W.M_BLROT, W.M_BLSCL, W.M_JNAME
+    if not (M_PARENT and M_BLPOS and M_BLROT and M_JNAME) then return nil end
+    local x, y, z = 0, 0, 0
+    local node = j
+    for _ = 1, 32 do
+        if not node then return nil end
+        if M_JNAME:call(node) == "Head" then return { x, y, z } end
+        local p, q = M_BLPOS:call(node), M_BLROT:call(node)
+        local s = M_BLSCL and M_BLSCL:call(node)
+        if not p or not q then return nil end
+        if s then x, y, z = x * s.x, y * s.y, z * s.z end
+        x, y, z = S.qrot(q, x, y, z)
+        x, y, z = x + p.x, y + p.y, z + p.z
+        node = M_PARENT:call(node)
+    end
+    return nil
+end
+
+-- Bone signal reads of a face for a list of bone signals ({param, bone, axis, sign, full,
+-- deadzone}). Returns { head = Head joint, list = { {id, j, rest, axis, sign, full, deadzone} } };
+-- a bone the face lacks is left out, so its signal stays 0. rest = nil: taken from the first read.
+function S.bone_reads(face, sigs)
+    local head = (#sigs > 0) and M_JBN:call(face, "Head") or nil
+    local out = { head = head, list = {} }
+    if not head then return out end
+    for _, sig in ipairs(sigs) do
+        local j = M_JBN:call(face, sig.bone)
+        if j then
+            local ok, rest = pcall(rest_in_head, j)
+            out.list[#out.list + 1] = { id = sig.param, j = j, rest = ok and rest or nil, axis = sig.axis,
+                                        sign = sig.sign, full = sig.full, deadzone = sig.deadzone or 0, name = sig.bone }
+        end
     end
     return out
 end

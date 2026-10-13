@@ -21,6 +21,53 @@ EYE_Q = { w = 0.9962, x = 0, y = 0.0872, z = 0 }   -- ~10 deg yaw
 face_joints["L_EyeJ_LOD02"] = joint(function() return 0 end, function() return EYE_Q end)
 face_joints["R_EyeJ_LOD02"] = joint(function() return 0 end, function() return EYE_Q end)
 
+-- Face bones for bone signals: a Head joint and face bones with a rest pose (base local
+-- transforms, parent links). Tests move a bone with BONE_OFF[name] = {x, y, z}: its offset from
+-- rest in the head's frame (metres; +x = the face's left, +y = up, +z = forward), and the head
+-- with HEAD.pos / HEAD.rot (world). C_Chin_LOD00 hangs under a jaw bone tilted 30 degrees, so a
+-- rest pose is only right if it is composed through the parent chain.
+local function qrot(q, v)   -- rotate v = {x, y, z} by unit quaternion q
+    local x, y, z = v[1], v[2], v[3]
+    local tx, ty, tz = 2 * (q.y * z - q.z * y), 2 * (q.z * x - q.x * z), 2 * (q.x * y - q.y * x)
+    return { x + q.w * tx + (q.y * tz - q.z * ty), y + q.w * ty + (q.z * tx - q.x * tz), z + q.w * tz + (q.x * ty - q.y * tx) }
+end
+HEAD = { pos = { x = 0, y = 1.5, z = 0 }, rot = { x = 0, y = 0, z = 0, w = 1 } }
+BONE_OFF = {}
+local ONE = { x = 1, y = 1, z = 1 }
+local IDENT = { x = 0, y = 0, z = 0, w = 1 }
+local head_j = { _name = "Head" }
+head_j.get_Name = function(self) return self._name end
+head_j.get_Position = function() return HEAD.pos end
+head_j.get_Rotation = function() return HEAD.rot end
+face_joints["Head"] = head_j
+local function mk_bone(name, parent, base_pos, base_rot, rest_hs)
+    local b = { _name = name }
+    b.get_Name = function(self) return self._name end
+    b.get_Parent = function() return parent end
+    b.get_BaseLocalPosition = function() return { x = base_pos[1], y = base_pos[2], z = base_pos[3] } end
+    b.get_BaseLocalRotation = function() return base_rot or IDENT end
+    b.get_BaseLocalScale = function() return ONE end
+    b.get_Position = function()
+        local o = BONE_OFF[name] or { 0, 0, 0 }
+        local w = qrot(HEAD.rot, { rest_hs[1] + o[1], rest_hs[2] + o[2], rest_hs[3] + o[3] })
+        return { x = HEAD.pos.x + w[1], y = HEAD.pos.y + w[2], z = HEAD.pos.z + w[3] }
+    end
+    face_joints[name] = b
+    return b
+end
+local JAW_ROT = { x = 0.258819, y = 0, z = 0, w = 0.965926 }       -- 30 degrees about X
+local jaw = mk_bone("C_Jaw_LOD02", head_j, { 0, -0.03, 0.04 }, JAW_ROT, { 0, -0.03, 0.04 })
+local chin_local = { 0, -0.05, 0.03 }
+local chin_rest = qrot(JAW_ROT, chin_local)
+mk_bone("C_Chin_LOD00", jaw, chin_local, IDENT, { chin_rest[1], chin_rest[2] - 0.03, chin_rest[3] + 0.04 })
+for _, s in ipairs({ "L", "R" }) do
+    local x = (s == "L") and 0.025 or -0.025
+    for name, p in pairs({ cornerLip_LOD02 = { x, -0.05, 0.08 }, BetweenEyeBrow_LOD01 = { x * 0.4, 0.04, 0.09 },
+                           EyeBrow_A_LOD01 = { x * 1.4, 0.05, 0.085 }, malarFat_B_LOD01 = { x * 1.6, 0.0, 0.07 } }) do
+        mk_bone(s .. "_" .. name, head_j, p, IDENT, p)
+    end
+end
+
 CHANNELS = { "blendShape1.EyeBlinkLeft", "blendShape1.JawOpen", "blendShape1_LOD1.JawOpen_LOD1",
              "blendShape1.LookInLeft", "blendShape1.Other", "blendShape1.Mouth_Smile_Left",
              "blendShape1.browInnerUp", "blendShape1.mouthPucker", "blendShape1.EyeLookInLeft",

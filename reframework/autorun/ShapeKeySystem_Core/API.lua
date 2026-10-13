@@ -222,7 +222,17 @@ local function drop_rigs(reason, rescan_after)
     end
 end
 
--- fcParam joints / eye use per rig, limited to the channels its meshes actually have
+-- bone signals among a list of signal ids (Profile.BONE_BASE and up)
+local function bone_sigs(ids)
+    local out = {}
+    for _, p in ipairs(ids) do
+        local sig = p >= Profile.BONE_BASE and Profile.signals.by_param[p]
+        if sig then out[#out + 1] = sig end
+    end
+    return out
+end
+
+-- fcParam joints / bone signals / eye use per rig, limited to the channels its meshes actually have
 local function refresh_rig_params()
     local prog = C.prog
     if not prog then return end
@@ -231,6 +241,7 @@ local function refresh_rig_params()
         for _, t in ipairs(rig.targets) do for k = 1, t.count do slots[t.slots[k]] = true end end
         local params, eyes = Profile.needs(prog, slots)
         rig.params = Scene.joints(rig.face, params)
+        rig.bones = Scene.bone_reads(rig.face, bone_sigs(params))
         rig.use_eyes = eyes
         if rig.primary then
             local union, seen = {}, {}
@@ -238,8 +249,9 @@ local function refresh_rig_params()
                 for _, p in ipairs(list) do if not seen[p] then seen[p] = true; union[#union + 1] = p end end
             end
             rig.dict_params = Scene.joints(rig.face, union)
+            rig.dict_bones = Scene.bone_reads(rig.face, bone_sigs(union))
         end
-        rig.n_reads = #rig.params / 2 + (eyes and 2 or 0)
+        rig.n_reads = #rig.params / 2 + #rig.bones.list + (eyes and 2 or 0)
     end
 end
 
@@ -390,7 +402,7 @@ local function build_mapping_state()
     local m = state.mapping
     local sigs = {}
     for i, s in ipairs(Profile.signals.list) do
-        sigs[i] = { slot = s.slot, name = s.name, param = s.param, guessed = s.guessed, note = s.note, note_en = s.note_en }
+        sigs[i] = { slot = s.slot, name = s.name, param = s.param, bone = s.bone, guessed = s.guessed, note = s.note, note_en = s.note_en }
     end
     m.signals = sigs
     local nodes, edited = {}, {}

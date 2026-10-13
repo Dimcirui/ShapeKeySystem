@@ -38,7 +38,31 @@ local function quat_to_yaw_pitch(q)
     return -deg(asin(s)), -pitch
 end
 
--- Read fcParams into P (normalised by full) and eye angles into rig.angles.
+-- Bone signals (Profile.BONE_BASE ids): each bone's position in the head's frame against its rest
+-- pose, along the signal's axis, times sign, over full, past the deadzone, never below 0.
+-- bones = Scene.bone_reads result; a bone without a rest pose takes its first reading as rest.
+local M_POS, M_ROT = W.M_POS, W.M_ROT
+local function read_bones(bones, P)
+    local head = bones.head
+    if not head or #bones.list == 0 then return end
+    local hp, hq = M_POS:call(head), M_ROT:call(head)
+    if not hp or not hq then return end
+    local qx, qy, qz, qw = -hq.x, -hq.y, -hq.z, hq.w
+    for _, b in ipairs(bones.list) do
+        local p = M_POS:call(b.j)
+        if p then
+            local x, y, z = p.x - hp.x, p.y - hp.y, p.z - hp.z
+            local tx, ty, tz = 2 * (qy * z - qz * y), 2 * (qz * x - qx * z), 2 * (qx * y - qy * x)
+            local v = { x + qw * tx + (qy * tz - qz * ty), y + qw * ty + (qz * tx - qx * tz), z + qw * tz + (qx * ty - qy * tx) }
+            if not b.rest then b.rest = v end
+            local val = b.sign * (v[b.axis] - b.rest[b.axis]) / b.full
+            if b.deadzone > 0 then val = (val - b.deadzone) / (1 - b.deadzone) end
+            P[b.id] = val > 0 and val or 0
+        end
+    end
+end
+
+-- Read fcParams into P (normalised by full), bone signals into P and eye angles into rig.angles.
 -- eyes = state.eyes (neutral / invert); read_eyes = profile has eye nodes.
 function X.read(rig, P, inv_full, use_dict, eyes, read_eyes)
     local params = use_dict and rig.dict_params or rig.params
@@ -46,6 +70,8 @@ function X.read(rig, P, inv_full, use_dict, eyes, read_eyes)
         local p = M_LPOS:call(params[k + 1])
         P[params[k]] = p and p.z * inv_full or 0
     end
+    local bones = use_dict and rig.dict_bones or rig.bones
+    if bones then read_bones(bones, P) end
     if not read_eyes then return end
     local ang = rig.angles
     local iy = eyes.invert.yaw and -1 or 1

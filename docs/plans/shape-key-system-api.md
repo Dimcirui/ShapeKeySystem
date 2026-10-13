@@ -545,3 +545,18 @@ end)
   4. **不翻译**：形态键 / 通道名、信号名、配置 id、文件名和路径、命令名、错误码和命令返回的错误说明（本来就是英文）、`source_text` 公式、日志和状态栏的诊断信息、用户自己起的名字。
 - **数据的英文**：`tools/i18n/data_en.py` 是配置名、说明和通道说明的译文（逐句的词表加几条句式），`python -I tools/i18n/add_en.py` 把 `*_en` 字段写进 builtin 的配置和 `signals.json`（只加字段，不动中文和排版）。改了中文说明后再跑一次，没有译文的句子会直接报出来。`tools/vrc_profiles/gen.py` 生成配置时也直接写英文。
 - **排版**：英文比中文长，按钮行按实际宽度排：放不下时先缩短下拉框，再换到第二行；标签列按最长的标签加宽。中文的布局不变。`python run.py --shots` 另外输出 `tests/shots/en_*.png`。
+
+## 16. 骨骼信号（2026-10-13）
+
+- **为什么**：游戏里的动作表情（emote：开心、战吼、仙人掌转圈等）只动面部骨骼，不动 fcParam（kevin 在游戏里用探针实测，2026-10-13），所以只读 fcParam 的配置在做动作时脸不动，只剩眨眼和视线。过场里 fcParam 照常有值。
+- **定义**：`signals.json` 的条目可以写 `bone`（`Player_Face` 下的骨骼名）、`axis`（`x` / `y` / `z`，头部坐标系：+x 角色自己的左边，+y 上，+z 前）、`sign`、`full_mm`（满值时的位移，毫米）、`deadzone`（0..1，过了死区再拉伸回 0..1）。内部编号从 `Profile.BONE_BASE`（1000）起，配置里照样写语义名，例如 `{"s": "jawDrop"}`。
+- **读法**：每帧把骨骼的世界位置换到 `Head` 骨骼的坐标系，减去静止位置，取指定轴 × sign ÷ full，过死区，小于 0 取 0。所以头怎么动、怎么转都不影响信号。静止位置是骨骼的 base local pose 沿父链一路合成到 `Head`；读不到时用第一次读到的位置。和 fcParam 一样，只读当前配置用得到的骨骼，`scene.rigs[i].reads` 也把它们算进去。调试页的信号列表显示骨骼名。
+- **内置 15 个**（按 2026-10-13 第 5 轮探针校准；括号里是动作时实测的位移）：
+  - `jawDrop`：`C_Chin_LOD00` y 向下，满值 25mm（22–27mm）
+  - `mouthCornerUp.L/R`、`mouthCornerDown.L/R`：`L/R_cornerLip_LOD02` y 向上满值 10mm（8–11mm）、向下满值 12mm（8–13mm）
+  - `mouthCornerOut.L/R`：同一骨骼 x 向外，满值 9mm（8–10mm）
+  - `browInnerDown.L/R`：`L/R_BetweenEyeBrow_LOD01` y 向下，满值 7mm（6–7mm）
+  - `browRaise.L/R`、`browLower.L/R`：`L/R_EyeBrow_A_LOD01` y 向上满值 8mm、向下满值 6mm
+  - `cheekRaise.L/R`：`L/R_malarFat_B_LOD01` y 向上，满值 9mm（9–10mm）
+- **配置**：`tools/vrc_profiles/gen.py` 生成的 11 个 VRChat 配置（airi、chocolat、kaguya、karin、kipfel、mafuyu、manuka、maya、moko、nitco、sairou）里，眉（上、下、皱眉）、下睑上提、张嘴、嘴角（上、下、向外）这几类键取 `max(原信号, 骨骼信号)`，对应关系在 `gen.py` 的 `BONE` 里，通道说明末尾也写了。手写的配置（ARKit、MMD、Shinano、EKU、Milltina）没有改。
+- **还要在游戏里确认**：静止位置是否就是游戏待机时的位置。打开调试页看信号列表，待机时骨骼信号应该接近 0。

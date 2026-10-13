@@ -219,6 +219,8 @@ PATTERNS = [
      lambda m: "Very small deformation (mouth corner {} about {} mm)".format(
          {"向内": "in by", "上移": "up by", "下移": "down by"}[m.group(1)], m.group(2))),
     (re.compile(r"^(.+?)：眉头上提、眉尾下垂$"), lambda m: f"{m.group(1)}: inner brow up, outer brow down"),
+    (re.compile(r"^游戏动作表情由面部骨骼驱动：同时读骨骼信号 (.+)，取较大者$"),
+     lambda m: f"Gameplay emotes move the face bones: also reads the bone signal {m.group(1)}, the larger wins"),
 ]
 
 

@@ -92,6 +92,7 @@ G.MMD_NAMES = to_lua(json.load(open(os.path.join(HERE, "mmd_names.json"), encodi
 G.VRC_FACES = to_lua(json.load(open(os.path.join(HERE, "vrc_faces.json"), encoding="utf-8")))
 L.execute(open(os.path.join(HERE, "tests_mmd.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_i18n.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_bones.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))

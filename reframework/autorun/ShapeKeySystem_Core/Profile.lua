@@ -24,19 +24,36 @@ local NODE_KEYS = { "s", "p", "ref", "const", "eye", "sum", "mul", "max", "min",
 local NODE_MODS = { "k", "curve", "full_deg", "axis", "sign" }
 local OPS = { sum = true, mul = true, max = true, min = true, sub = true }
 
-P.signals = { list = {}, by_name = {}, full = 0.01 }
+P.signals = { list = {}, by_name = {}, by_param = {}, full = 0.01 }
 P.registry = {}   -- id -> { id, name, source, path, data }
 P.list = {}       -- sorted list of registry entries (for the UI)
 
+-- Bone signals (signals.json entries with "bone" instead of "param"): a face bone's offset from
+-- its rest pose in the head's frame, along one axis (+x = the face's left, +y = up, +z =
+-- forward), times sign, over full_mm (with an optional deadzone), never below 0. Gameplay
+-- emotes move the face bones, not the fcParam joints (kevin's in-game probes, 2026-10-13).
+-- Each gets an id past the fcParam range so profiles use it by name like any signal.
+P.BONE_BASE = 1000
+local AXES = { x = 1, y = 2, z = 3 }
+
 function P.load_signals()
     local data = U.load_json(U.path("builtin", "signals.json")) or {}
-    local s = { list = {}, by_name = {}, full = tonumber(data.full) or 0.01 }
+    local s = { list = {}, by_name = {}, by_param = {}, full = tonumber(data.full) or 0.01 }
     for i, e in ipairs(data.signals or {}) do
+        local sig
         if type(e.name) == "string" and tonumber(e.param) then
-            local sig = { slot = i, name = e.name, param = math.floor(tonumber(e.param)),
-                          guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
+            sig = { slot = i, name = e.name, param = math.floor(tonumber(e.param)),
+                    guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
+        elseif type(e.name) == "string" and type(e.bone) == "string" and AXES[e.axis] and tonumber(e.full_mm) then
+            sig = { slot = i, name = e.name, param = P.BONE_BASE + i, bone = e.bone, axis = AXES[e.axis],
+                    sign = (tonumber(e.sign) or 1) < 0 and -1 or 1, full = tonumber(e.full_mm) / 1000,
+                    deadzone = U.clamp(tonumber(e.deadzone) or 0, 0, 0.95),
+                    guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
+        end
+        if sig then
             s.list[#s.list + 1] = sig
             s.by_name[e.name] = sig
+            s.by_param[sig.param] = sig
         end
     end
     P.signals = s

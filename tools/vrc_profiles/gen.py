@@ -66,6 +66,30 @@ def joint_node(slot):
     return {"sum": [{"s": base + ".L", "k": 0.5}, {"s": base + ".R", "k": 0.5}]}
 
 
+# slot -> bone signal (builtin/signals.json). Gameplay emotes move the face's bones, not the
+# fcParams (in-game probes, 2026-10-13), so these keys take the larger of the two.
+BONE = {
+    "brow_outer": "browRaise", "brow_down": "browLower", "brow_bring": "browInnerDown",
+    "lower_up": "cheekRaise", "jaw": "jawDrop", "smile": "mouthCornerUp", "frown": "mouthCornerDown",
+    "stretch": "mouthCornerOut",
+}
+BONE_NOTE = "游戏动作表情由面部骨骼驱动：同时读骨骼信号 {}，取较大者"
+
+
+def with_bone(slot, node, side=None):
+    """(node, note sentence) -> node maxed with the slot's bone signal, or (node, None)"""
+    b = BONE.get(slot)
+    if not b:
+        return node, None
+    if slot == "jaw":
+        bone, names = {"s": b}, b
+    elif side:
+        bone, names = {"s": b + "." + side}, b + "." + side
+    else:
+        bone, names = {"sum": [{"s": b + ".L", "k": 0.5}, {"s": b + ".R", "k": 0.5}]}, f"{b}.L / {b}.R"
+    return {"max": [node, bone]}, BONE_NOTE.format(names)
+
+
 def gaze_node(slot, eye=None):
     axis, sign = SLOTS[slot][1]
     if eye:
@@ -103,16 +127,17 @@ def build(spec, probes):
             alt_l = val[2] if len(val) > 2 else None
             alt_r = val[3] if len(val) > 3 else None
             for side, name, alt in (("L", l, alt_l), ("R", r, alt_r)):
-                node = gaze_node(slot, side) if is_gaze else side_node(slot, side)
-                entries.append((name, alt, node, desc + ("" if is_gaze else f"（{'左' if side == 'L' else '右'}侧）")))
+                node, bone_note = (gaze_node(slot, side), None) if is_gaze else with_bone(slot, side_node(slot, side), side)
+                entries.append((name, alt, node, bone_note,
+                                desc + ("" if is_gaze else f"（{'左' if side == 'L' else '右'}侧）")))
         else:
             name, alt = (val, None) if isinstance(val, str) else (val[0], val[1])
-            node = gaze_node(slot) if is_gaze else joint_node(slot)
+            node, bone_note = (gaze_node(slot), None) if is_gaze else with_bone(slot, joint_node(slot))
             joint_desc = desc
             if not is_gaze and slot not in ("jaw",) and not SLOTS[slot][1].startswith("mouthMove"):
                 joint_desc += "；左右合一的键，左右信号各取一半"
-            entries.append((name, alt, node, joint_desc))
-        for name, alt, node, d in entries:
+            entries.append((name, alt, node, bone_note, joint_desc))
+        for name, alt, node, bone_note, d in entries:
             tag, m = measure(probes, name)
             note = d
             if m:
@@ -123,6 +148,8 @@ def build(spec, probes):
                 note += "。" + GAZE_NOTE
             if extra:
                 note += "。" + extra
+            if bone_note:
+                note += "。" + bone_note
             ch = {"name": name, "group": group}
             if alt:
                 ch["any"] = list(alt)

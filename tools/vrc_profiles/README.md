@@ -15,7 +15,9 @@ with every mapping checked against what the key actually does in Blender.
    the midline (brow: sad = inner z+, angry = inner z−; mouth: smile = outer z+, wide = outer o+).
 4. **Map**: one entry per profile in `specs.py` (slot -> key names; `any` fallbacks for family
    members that spell keys differently). `gen.py` turns it into profiles with the same signal
-   templates as `eku.json` / `milltina.json` and measurement notes.
+   templates as `eku.json` / `milltina.json` and measurement notes. Slots in `gen.py`'s `BONE`
+   (brows, lower lid, jaw, mouth corners) also read the face-bone signal of the same motion and
+   take the larger of the two, because gameplay emotes move the face bones, not the fcParams.
 5. **Check**: `python -I check.py <profile.json> <tag>...` flags keys whose measured side or
    direction contradicts their signal. `tests/tests_mmd.lua` checks that each face in
    `tests/vrc_faces.json` is auto-matched to its own profile.
