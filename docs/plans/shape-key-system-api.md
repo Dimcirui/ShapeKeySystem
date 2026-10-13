@@ -460,7 +460,7 @@ end
 | `api.set(owner, name, value, opts?)` | `ok, err, msg` | `owner`：插件名（1~64 字符）；`opts.ttl`：租约秒数 |
 | `api.release(owner, name)` | `ok` | 归还一个键；只能归还自己持有的 |
 | `api.release_all(owner)` | `ok` | 归还自己持有的全部键 |
-| `api.get(name)` | `value, controller` | 当前（或即将写入的）值；`controller` 为 `"external:<owner>"` / `"expression"` / `"sculpt"`，不认识的键返回 nil |
+| `api.get(name)` | `value, controller` | 当前（或即将写入的）值；`controller` 为 `"external:<owner>"` / `"facial"`（整脸表情，第 17 节）/ `"expression"` / `"sculpt"`，不认识的键返回 nil |
 | `api.channels()` | list | 身上所有形态键（按名字合并）：`{name, parts, value, controller, expression}` |
 | `api.on("scan", fn)` | id | 每次扫描（换装、重新扫描）后调用 `fn()` |
 | `api.off(id)` | — | 移除监听 |
@@ -567,3 +567,12 @@ end)
 - **笑声张嘴**（第 7 轮探针，记录 SKS 实际写出的值）：开心 2 里笑容确实写出来了（口角上げ 约 0.9、い 约 0.5，后来改为え），但三次“哈”下巴只下移 6–8mm，落在 `jawDrop` 的死区里，张嘴主要靠下唇。新增 `lowerLipDrop`（`C_loLip_LOD02` 下移，满值 12mm，死区 0.2，待机漂移 ≤2mm 不触发），和 `jawDrop` 一起进张嘴键：笑声时あ 约 0.3–0.4。`gen.py` 的 `BONE` 可以给一个槽位配多个骨骼信号。
 - **骨骼信号封顶 1**：超出标定的满值时保持 1，不再让由它算出来的键（例如 え 的曲线）超过选定的量。
 - 用游戏录到的数据回放（待机、仙人掌转圈、开心 1、开心 2、战吼）：待机时所有位移信号是 0.00；四个动作表情里 `eyeClose` 达到 0.87–0.97。
+
+## 17. 整脸表情（2026-10-13）
+
+- **为什么**：VRChat 模型常带作者做好的整脸表情，Maya 的脸（网格里叫 Body）在 `===Facial===` 下有 `1`–`10` 十个键，每个同时动眼、嘴、眉，还带脸红、泪等叠层（实测每个动 1100–3900 个顶点）。kevin 要在游戏里手动调出它们：用滑块，放在单独一页，调高时动作驱动的表情淡出（2026-10-13）。
+- **哪些键**：捏脸层合并后的键名是纯数字（`1`、`2`…，正整数）的，就是整脸表情键，按数字排序。不需要写进表情配置；身上没有这类键时页面显示提示。这些键不再出现在捏脸页。
+- **数值**：每个键 0..1，按键名存进 settings.json 的 `facial`（`{"1": 0.5}`）。身上部件没有的键，值保留但不起作用。
+- **合成**：整脸表情键由捏脸层写入，和其他表情驱动的键一样映射到捏脸值上：`s + (1 - s) × v`。条件表情或面部互动也写到同一个键时，取两者较大的。`level` = 身上整脸表情键里最大的值。`level` 大于 0 时，其他所有表情权重（fcParam / 骨骼信号、条件表情片段、面部互动）都乘以 `1 - level`，视线组（`group = "gaze"`）除外：调到 1 时整脸表情完全取代动作表情，视线照常。外部插件仍然优先（外部插件 > 整脸表情 > 其他）。
+- **命令**：`set_facial {name, value}`（值会截到 0..1；不是身上的整脸表情键时返回 `E_NOT_FOUND`，不是数字时返回 `E_BAD_ARGS`）、`clear_facial {}`（全部归零，返回 `{done}`）。**状态**：`state.facial = {rev, keys = {{name, value}}, level}`。`api.get(name)` 对整脸表情键返回滑块值，`controller` 为 `"facial"`。
+- **实现**：`Core/Facial.lua`（键的识别、数值、淡出），`API.lua`（`drive` 里在条件表情和互动之后、外部插件之前淡出；`rebuild_sculpt` 时刷新身上的键），`Sculpt.lua`（`value_for`），`UI/PageFacial.lua`（基础组「整脸表情」页：说明、动作表情保留的百分比、全部归零、每个键一个滑块；被外部插件控制的键显示"由 … 控制"和「收回」）。测试：`tests/tests_facial.lua`。

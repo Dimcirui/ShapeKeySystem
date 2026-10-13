@@ -18,6 +18,7 @@ local Ext     = require("ShapeKeySystem_Core.External")
 local Cnd     = require("ShapeKeySystem_Core.Conditions")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch   = require("ShapeKeySystem_Core.Touch")
+local Facial  = require("ShapeKeySystem_Core.Facial")
 local I18n    = require("ShapeKeySystem_Core.I18n")
 
 local Version = require("ShapeKeySystem_Core.Version")
@@ -42,6 +43,8 @@ local DEFAULTS = {
     conditions = "",
     -- face navigator art on the basic page: data/ShapeKeySystem/faces/<id>.json
     face_style = "chibi",
+    -- facial preset sliders (Facial.lua): numbered key name -> 0..1
+    facial = {},
     window = { x = 120, y = 120, w = 920, h = 640 },
     profile = "arkit",
     -- M1: expression gains live here until per-part bindings exist (M2)
@@ -123,6 +126,8 @@ local state = {
     conditions = { rev = 0, sets = {}, current = nil, defs = {}, binding_name = nil },
     -- face-navigator interactions: zones = { forehead = bool, cheek = bool, eye = bool, mouth = bool }
     touch = { rev = 0, zones = {} },
+    -- facial presets (Facial.lua): keys = {{name, value}} in number order; level = the highest value
+    facial = { rev = 0, keys = {}, level = 0 },
     debug = { rev = 0, perf = { read = 0, compute = 0, write = 0, scan = 0, total = 0, writes = 0, skipped = 0 },
               log = {}, status = "" },
 }
@@ -510,10 +515,20 @@ local function build_presets_state()
     bump("presets")
 end
 
+local function build_facial_state()
+    local fs = state.facial
+    local keys = {}
+    for i, n in ipairs(Facial.list) do keys[i] = { name = n, value = Facial.value(n) } end
+    fs.keys, fs.level = keys, Facial.level
+    bump("facial")
+end
+
 local function build_sculpt_state()
     local sc = state.sculpt
     local keys, groups, gi = {}, {}, {}
-    for i, k in ipairs(Sculpt.K.keys) do
+    for _, k in ipairs(Sculpt.K.keys) do
+      if not Facial.present[k.name] then   -- facial preset keys have their own page
+        local i = #keys + 1
         local o = {}
         for p, v in pairs(k.overrides) do o[p] = v end
         keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), value = k.value,
@@ -526,6 +541,7 @@ local function build_sculpt_state()
             gi[k.group] = g; groups[#groups + 1] = g
         end
         g.key_indices[#g.key_indices + 1] = i
+      end
     end
     sc.keys, sc.groups = keys, groups
     sc.edit_mode, sc.ab_preview = C.edit_mode, C.preview
@@ -703,6 +719,10 @@ local function rebuild_sculpt()
         end
     end
     Sculpt.rebuild(C.instances or C.parts, owned, sculpt_presets_of)
+    local names = {}
+    for i, k in ipairs(Sculpt.K.keys) do names[i] = k.name end
+    Facial.set_present(names)
+    build_facial_state()
     link_base_keys()
     C.update_touch_map()
     -- the preset shown as "current": the one loaded by hand (until the worn parts change), else
@@ -969,13 +989,16 @@ local function drive(rig, primary)
     local out, ext_skip = rig.W, nil
     local cond_on = rig.primary and C.cond_live and CondExpr.any()
     local touch_on = Touch.any()
-    if cond_on or touch_on or Ext.any() then
+    -- a facial preset fades the driven face (gaze excepted), after the clips, before other plugins
+    local facial_on = Facial.any()
+    if cond_on or touch_on or facial_on or Ext.any() then
         out = rig.O or {}
         rig.O = out
         local Wt = rig.W
         for s = 1, prog.n do out[s] = Wt[s] end
         if cond_on then CondExpr.apply(prog, C.resolve_slot, out) end
         if touch_on then Touch.apply(prog, C.resolve_slot, out) end
+        if facial_on then Facial.fade(prog, out) end
         if Ext.any() then ext_skip = Ext.apply(prog, C.resolve_slot, out) end
     end
     local t2 = clock()
@@ -1540,6 +1563,28 @@ function cmds.external_release(a)
     return true, nil, nil, { released = n }
 end
 
+-- facial presets (Facial.lua): {name, value 0..1} for a numbered key of the worn parts
+function cmds.set_facial(a)
+    local v = tonumber(a.value)
+    if not v or v ~= v then return false, "E_BAD_ARGS", "value must be a number" end
+    if not Facial.present[a.name] then
+        return false, "E_NOT_FOUND", "not a facial preset key of the worn parts: " .. tostring(a.name)
+    end
+    if Facial.set(a.name, v) then
+        Sculpt.mark_dirty(); save_soon()
+        build_facial_state()
+    end
+    return true
+end
+
+-- every facial slider to 0
+function cmds.clear_facial()
+    local done = Facial.clear()
+    if done then Sculpt.mark_dirty(); save_soon() end
+    build_facial_state()
+    return true, nil, nil, { done = done }
+end
+
 function cmds.sculpt_undo()
     -- nothing to undo is not an error: report it as a no-op
     if not Sculpt.undo() then return true, nil, nil, { done = false } end
@@ -1810,6 +1855,8 @@ function SKS.init()
         save_soon()
     end
     cfg.sculpt_max = Sculpt.set_max(cfg.sculpt_max)
+    if type(cfg.facial) ~= "table" then cfg.facial = {} end
+    Facial.bind(cfg.facial)
     Names.load_aliases()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
@@ -2137,11 +2184,13 @@ function PUB.release_all(owner)
 end
 
 -- value written (or about to be written) for a key, and who controls it:
--- returns value, controller ("external:<owner>" | "expression" | "sculpt") or nil when unknown
+-- returns value, controller ("external:<owner>" | "facial" | "expression" | "sculpt") or nil when unknown
 function PUB.get(name)
     if type(name) ~= "string" then return nil end
     local xv, owner = Ext.get(name)
     if xv ~= nil then return xv, "external:" .. owner end
+    local fv = Facial.for_key(name)
+    if fv ~= nil then return fv, "facial" end
     local s = C.resolve_slot(name)
     if s and live.weight[s] ~= nil and #C.rigs > 0 then return live.weight[s], "expression" end
     local k = Sculpt.K.by_name[name]

@@ -111,6 +111,7 @@ add({
 add({
     ["page.basic"]           = { "表情", "Expression" },
     ["page.sculpt"]          = { "捏脸", "Sculpt" },
+    ["page.facial"]          = { "整脸表情", "Face presets" },
     ["page.expr"]            = { "表情详情", "Channels" },
     ["page.cond"]            = { "条件表情", "Conditions" },
     ["page.debug"]           = { "设置与调试", "Settings" },
@@ -254,6 +255,16 @@ add({
     ["sculpt.scan_hint"]     = { "点「扫描装备」读取身上部件的形态键。", "Click \"Scan outfit\" to read the shape keys of the worn parts." },
     ["sculpt.count"]         = { "%d 项", "%d" },
     ["sculpt.no_match"]      = { "没有匹配的形态键。", "No matching shape keys." },
+})
+
+-- facial presets (PageFacial.lua)
+add({
+    ["facial.hint"]          = { "形态键名为数字的整脸表情（如 Maya 的 1–10）。",
+                                 "Whole-face expressions on numbered shape keys (like Maya's 1–10)." },
+    ["facial.keep"]          = { "动作驱动的表情保留 %d%%，视线照常。", "Emote-driven face kept at %d%%; gaze unaffected." },
+    ["facial.all_off"]       = { "全部归零", "All off" },
+    ["facial.none"]          = { "身上部件没有数字命名的形态键（1、2、3…）。",
+                                 "The worn parts have no numbered shape keys (1, 2, 3…)." },
 })
 
 -- bindings and config files (PagePresets.lua, shown under settings & debug)

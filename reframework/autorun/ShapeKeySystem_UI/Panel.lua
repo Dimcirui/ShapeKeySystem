@@ -20,6 +20,7 @@ local SKS
 local PAGES = {
     { key = "basic",   mod = "ShapeKeySystem_UI.PageBasic" },
     { key = "sculpt",  mod = "ShapeKeySystem_UI.PageSculpt" },
+    { key = "facial",  mod = "ShapeKeySystem_UI.PageFacial" },
     { key = "expr",    mod = "ShapeKeySystem_UI.PageExpression", adv = true },
     { key = "cond",    mod = "ShapeKeySystem_UI.PageConditions", adv = true },
     { key = "debug",   mod = "ShapeKeySystem_UI.PageDebug",    adv = true },

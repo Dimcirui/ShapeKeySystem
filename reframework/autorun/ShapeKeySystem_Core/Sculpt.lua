@@ -12,6 +12,7 @@ local G = require("ShapeKeySystem_Core.Guard")
 local Ext = require("ShapeKeySystem_Core.External")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch = require("ShapeKeySystem_Core.Touch")
+local Facial = require("ShapeKeySystem_Core.Facial")
 
 local S = {}
 
@@ -377,10 +378,19 @@ local function value_for(key, part, preview)
     if xv ~= nil then return xv end
     -- conditional clips, then the face-navigator interactions (Touch.lua), form an expression
     -- value e for this key (0 when nothing plays), remapped onto the sculpt value like every
-    -- expression-driven key: s + (1 - s) * e
+    -- expression-driven key: s + (1 - s) * e. A facial preset key (Facial.lua) takes its slider
+    -- when that is higher; on every other key e fades while a facial preset is up.
     local base = base_value(key, part, preview)
-    if not CondExpr.any() and not Touch.any() then return base end
-    return S.mix(base, Touch.for_key(key.name, CondExpr.for_key(key.name, 0)))
+    local fv = Facial.for_key(key.name)
+    local playing = CondExpr.any() or Touch.any()
+    if fv == nil and not playing then return base end
+    local e = playing and Touch.for_key(key.name, CondExpr.for_key(key.name, 0)) or 0
+    if fv ~= nil then
+        if fv > e then e = fv end
+    else
+        e = e * Facial.keep()
+    end
+    return S.mix(base, e)
 end
 
 -- returns writes, error string (mesh lost readiness)
