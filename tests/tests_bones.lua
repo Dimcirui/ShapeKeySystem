@@ -57,7 +57,7 @@ for k in pairs(FC) do FC[k] = nil end
 for i = 1, #CHANNELS do CHANNELS[i] = nil end
 for i, n in ipairs({ "あ", "口角上げL", "口角上げR", "口角下げ", "口_横幅1", "怒り", "眉_上", "眉_下",
                      "下まつ毛_上_L", "下まつ毛_上_R", "ウィンク２", "ｳｨﾝｸ２右", "びっくり_L", "びっくり_R",
-                     "ウィンク", "ウィンク右", "い" }) do CHANNELS[i] = n end
+                     "ウィンク", "ウィンク右", "え", "い" }) do CHANNELS[i] = n end
 for k in pairs(WEIGHTS) do WEIGHTS[k] = nil end
 idle_face()
 SKS.call("set_profile", { id = "maya" }); SKS.call("rescan"); ticks(75)
@@ -157,14 +157,15 @@ check(w("あ") < 1e-6, "idle lip drift (2 mm) -> mouth stays shut")
 pose("C_loLip_LOD02", { 0, -0.020, 0 }); ticks(3)
 check(near(w("あ"), 1), string.format("big opening, lower lip 20 mm -> あ %.3f", w("あ")))
 idle_face(); ticks(3)
--- the widest smile opens into a grin: い at half once both corners are near fully outward
+-- the widest smile opens a little: え at half once both corners are near fully outward (kevin
+-- picked え over い, 2026-10-13: the い grin with the doubled smile keys looked unnatural)
 pose("L_cornerLip_LOD02", { 0.009, 0, 0 }); pose("R_cornerLip_LOD02", { -0.009, 0, 0 }); ticks(3)
-check(near(w("い"), 0.5), string.format("corners fully outward (9 mm) -> い %.3f (want 0.5)", w("い")))
+check(near(w("え"), 0.5) and w("い") < 1e-6, string.format("corners fully outward (9 mm) -> え %.3f (want 0.5), い %.3f", w("え"), w("い")))
 pose("L_cornerLip_LOD02", { 0.005, 0, 0 }); pose("R_cornerLip_LOD02", { -0.005, 0, 0 }); ticks(3)
-check(w("い") < 1e-6 and w("口_横幅1") > 0.2, string.format("corners 5 mm outward -> 口_横幅1 %.3f but no い", w("口_横幅1")))
--- past calibration (happy 2: corners 9.5 mm out) a bone signal stays at 1, so い stops at 0.5
+check(w("え") < 1e-6 and w("口_横幅1") > 0.2, string.format("corners 5 mm outward -> 口_横幅1 %.3f but no え", w("口_横幅1")))
+-- past calibration (happy 2: corners 9.5 mm out) a bone signal stays at 1, so え stops at 0.5
 pose("L_cornerLip_LOD02", { 0.012, 0, 0 }); pose("R_cornerLip_LOD02", { -0.012, 0, 0 }); ticks(3)
-check(near(w("い"), 0.5), string.format("corners 12 mm outward -> い %.3f (bone signals cap at 1)", w("い")))
+check(near(w("え"), 0.5), string.format("corners 12 mm outward -> え %.3f (bone signals cap at 1)", w("え")))
 idle_face(); ticks(3)
 FC[1] = 0.006; LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 10; ticks(3)
 check(near(w("ウィンク２"), math.max(0.6, expect("eyeClose.L", 10))),

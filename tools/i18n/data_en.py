@@ -212,8 +212,10 @@ FRAG = {
         "Fades as a blink closes the eye: stacked with the blink key, her lashes sink into the face",
     "笑眼（^^）：下眼睑上提 × 同侧嘴角上扬，开心 1 多在 0.3–0.5、开心 2 约 0.75；战吼眯眼时没有笑，不会触发":
         "Smiling eyes (^^): lower lid lift × that side's mouth corner up, mostly 0.3-0.5 in happy 1 and about 0.75 in happy 2; the battle cry squint has no smile, so it does not fire",
-    "嘴角几乎完全向外时张开成露齿笑：左右嘴角向外的平均值过 0.6 后线性到 0.5（开心 2）":
-        "Opens into a toothy grin once the corners are almost fully outward: the left / right outward average past 0.6, linear up to 0.5 (happy 2)",
+    "嘴角几乎完全向外时嘴稍张开（え）：左右嘴角向外的平均值过 0.6 后线性到 0.5（开心 2）":
+        "The mouth opens a little (え) once the corners are almost fully outward: the left / right outward average past 0.6, linear up to 0.5 (happy 2)",
+    "kevin 选了え代替い：い露齿，配合加倍的笑容键显得不自然":
+        "kevin picked え over い: い shows the teeth and looked unnatural with the doubled smile keys",
 }
 
 # sentence patterns: (regex on the Chinese sentence, function(match) -> English)

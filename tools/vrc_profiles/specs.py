@@ -1,7 +1,7 @@
 LR = lambda a, b="": (a + "_L" + b, a + "_R" + b)
 EXTRA_NOTES = {
     "smile_eye": "笑眼（^^）：下眼睑上提 × 同侧嘴角上扬，开心 1 多在 0.3–0.5、开心 2 约 0.75；战吼眯眼时没有笑，不会触发。眨眼时按闭眼程度减弱：和闭眼键叠加会让睫毛陷进脸里",
-    "grin": "嘴角几乎完全向外时张开成露齿笑：左右嘴角向外的平均值过 0.6 后线性到 0.5（开心 2）",
+    "grin": "嘴角几乎完全向外时嘴稍张开（え）：左右嘴角向外的平均值过 0.6 后线性到 0.5（开心 2）。kevin 选了え代替い：い露齿，配合加倍的笑容键显得不自然",
 }
 
 SPECS = [
@@ -172,14 +172,14 @@ SPECS = [
    "squint": "用おっとり（外侧上睑下垂）近似；ジト目_L 测得外侧上睑反而上移，没有使用",
    "brow_inner": "眉_斜め1：眉头上提、眉尾下垂",
    "brow_outer": "整条眉毛上移"},
-  # kevin picked these from renders (2026-10-13): her ^^ smile-close keys for smiling eyes, and い
-  # as a grin once the smile is at its widest (happy 2)
+  # kevin picked these (2026-10-13): her ^^ smile-close keys for smiling eyes, and え as the mouth
+  # opening a little once the smile is at its widest (happy 2; い first, then え instead)
   "extra": [
    {"name": "ウィンク", "group": "eye", "mul": [{"s": "lowerLidRaise.L"}, {"s": "mouthCornerUp.L"}, {"sub": [{"const": 1}, {"max": [{"s": "blink.L"}, {"s": "eyeClose.L"}]}]}],
     "note": EXTRA_NOTES["smile_eye"]},
    {"name": "ウィンク右", "group": "eye", "mul": [{"s": "lowerLidRaise.R"}, {"s": "mouthCornerUp.R"}, {"sub": [{"const": 1}, {"max": [{"s": "blink.R"}, {"s": "eyeClose.R"}]}]}],
     "note": EXTRA_NOTES["smile_eye"]},
-   {"name": "い", "group": "mouth", "sum": [{"s": "mouthCornerOut.L", "k": 0.5}, {"s": "mouthCornerOut.R", "k": 0.5}],
+   {"name": "え", "group": "mouth", "sum": [{"s": "mouthCornerOut.L", "k": 0.5}, {"s": "mouthCornerOut.R", "k": 0.5}],
     "curve": {"deadzone": 0.6, "gain": 0.5}, "note": EXTRA_NOTES["grin"]}]},
 
  {"id": "moko", "name": "Moko",
