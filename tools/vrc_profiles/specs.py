@@ -1,6 +1,6 @@
 LR = lambda a, b="": (a + "_L" + b, a + "_R" + b)
 EXTRA_NOTES = {
-    "smile_eye": "笑眼（^^）：下眼睑上提 × 同侧嘴角上扬，开心 1 多在 0.3–0.5、开心 2 约 0.75；战吼眯眼时没有笑，不会触发",
+    "smile_eye": "笑眼（^^）：下眼睑上提 × 同侧嘴角上扬，开心 1 多在 0.3–0.5、开心 2 约 0.75；战吼眯眼时没有笑，不会触发。眨眼时按闭眼程度减弱：和闭眼键叠加会让睫毛陷进脸里",
     "grin": "嘴角几乎完全向外时张开成露齿笑：左右嘴角向外的平均值过 0.6 后线性到 0.5（开心 2）",
 }
 
@@ -175,9 +175,9 @@ SPECS = [
   # kevin picked these from renders (2026-10-13): her ^^ smile-close keys for smiling eyes, and い
   # as a grin once the smile is at its widest (happy 2)
   "extra": [
-   {"name": "ウィンク", "group": "eye", "mul": [{"s": "lowerLidRaise.L"}, {"s": "mouthCornerUp.L"}],
+   {"name": "ウィンク", "group": "eye", "mul": [{"s": "lowerLidRaise.L"}, {"s": "mouthCornerUp.L"}, {"sub": [{"const": 1}, {"max": [{"s": "blink.L"}, {"s": "eyeClose.L"}]}]}],
     "note": EXTRA_NOTES["smile_eye"]},
-   {"name": "ウィンク右", "group": "eye", "mul": [{"s": "lowerLidRaise.R"}, {"s": "mouthCornerUp.R"}],
+   {"name": "ウィンク右", "group": "eye", "mul": [{"s": "lowerLidRaise.R"}, {"s": "mouthCornerUp.R"}, {"sub": [{"const": 1}, {"max": [{"s": "blink.R"}, {"s": "eyeClose.R"}]}]}],
     "note": EXTRA_NOTES["smile_eye"]},
    {"name": "い", "group": "mouth", "sum": [{"s": "mouthCornerOut.L", "k": 0.5}, {"s": "mouthCornerOut.R", "k": 0.5}],
     "curve": {"deadzone": 0.6, "gain": 0.5}, "note": EXTRA_NOTES["grin"]}]},

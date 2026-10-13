@@ -208,6 +208,8 @@ FRAG = {
     "ほほ上げ：脸颊和下眼睑一起上提": "ほほ上げ: cheeks and lower lids rise together",
     "すぼめ：嘴角向内收拢": "すぼめ: mouth corners draw inward",
     "张嘴 × 嘟嘴": "Mouth open × pucker",
+    "眨眼时按闭眼程度减弱：和闭眼键叠加会让睫毛陷进脸里":
+        "Fades as a blink closes the eye: stacked with the blink key, her lashes sink into the face",
     "笑眼（^^）：下眼睑上提 × 同侧嘴角上扬，开心 1 多在 0.3–0.5、开心 2 约 0.75；战吼眯眼时没有笑，不会触发":
         "Smiling eyes (^^): lower lid lift × that side's mouth corner up, mostly 0.3-0.5 in happy 1 and about 0.75 in happy 2; the battle cry squint has no smile, so it does not fire",
     "嘴角几乎完全向外时张开成露齿笑：左右嘴角向外的平均值过 0.6 后线性到 0.5（开心 2）":

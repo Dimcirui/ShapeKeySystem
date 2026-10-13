@@ -137,6 +137,16 @@ check(near(w("ウィンク"), want) and w("ウィンク") > 0.3 and w("ウィン
 idle_face(); LID_DEG.L_LoEyeLidJ_LOD02 = IDLE_LO - 4.4; ticks(3)
 check(w("ウィンク") < 1e-6, "lower lid up without a smile (battle cry squint) -> no ^^ eyes")
 idle_face()
+-- a blink during the ^^ (happy 2): the ^^ fades as the eye closes, or both keys stack and her
+-- lashes sink into the face (kevin, 2026-10-13: ^^ 0.75 + blink 1.0 hides the lashes)
+LID_DEG.L_LoEyeLidJ_LOD02 = IDLE_LO - 4.4; pose("L_cornerLip_LOD02", { 0, 0.008, 0 })
+LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 30; ticks(3)
+check(near(w("ウィンク２"), 1) and w("ウィンク") < 1e-6,
+      string.format("^^ eyes + a full blink -> ウィンク２ %.3f, ウィンク %.3f (no stacking)", w("ウィンク２"), w("ウィンク")))
+LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 15; ticks(3)
+local half = expect("lowerLidRaise.L", 4.4) * expect("mouthCornerUp.L", 0.008) * (1 - expect("eyeClose.L", 15))
+check(near(w("ウィンク"), half), string.format("half blink -> ウィンク %.3f (want %.3f, ^^ x (1 - close))", w("ウィンク"), half))
+idle_face()
 -- the widest smile opens into a grin: い at half once both corners are near fully outward
 pose("L_cornerLip_LOD02", { 0.009, 0, 0 }); pose("R_cornerLip_LOD02", { -0.009, 0, 0 }); ticks(3)
 check(near(w("い"), 0.5), string.format("corners fully outward (9 mm) -> い %.3f (want 0.5)", w("い")))
