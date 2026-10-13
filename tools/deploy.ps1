@@ -14,6 +14,7 @@ $ErrorActionPreference = "Stop"
 
 $repo = Join-Path (Split-Path -Parent $PSScriptRoot) "reframework"
 $game = $env:SKS_GAME_REFRAMEWORK
+# 要根据实际安装位置修改，不过是开发用所以问题不大
 if (-not $game) { $game = "C:\Steam\steamapps\common\MonsterHunterWilds\reframework" }
 if (-not (Test-Path $game)) { throw "game reframework folder not found: $game" }
 
