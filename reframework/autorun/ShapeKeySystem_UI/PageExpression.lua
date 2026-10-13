@@ -74,7 +74,7 @@ local function top_bars(ctx, x, y, w)
     -- gains / gaze follow the outfit: with a binding they are saved into it, otherwise they are
     -- the global settings (saved automatically)
     if tu and tu.source == "binding" then
-        local c3, b3 = W.button("保存调整", bx, by, nil, 28, { kind = tu.dirty and "primary" or nil, disabled = not tu.dirty })
+        local c3, b3 = W.button("保存到当前套装", bx, by, nil, 28, { kind = tu.dirty and "primary" or nil, disabled = not tu.dirty })
         if c3 then call("save_tuning") end
         W.tooltip("把强度、增益和视线设置保存到当前绑定", bx, by, b3, 28)
         bx = bx + b3 + 10

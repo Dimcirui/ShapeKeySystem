@@ -432,7 +432,7 @@ function E.toolbar(ctx, x, y, w)
         W.start_text(s, "name_form", { title = "保存表情映射配置", text = profile.name .. " 自定义",
             on_submit = function(name) if ctx.call("save_profile", { as_name = name }) then s.mapping_draft = nil end end })
     end
-    if W.button("保存映射", x + 134, cy + 8, 100, 28, { kind = m.dirty and "primary" or nil }) then
+    if W.button("保存配置", x + 134, cy + 8, 100, 28, { kind = m.dirty and "primary" or nil }) then
         if s.mapping_draft then ctx.toast("warn", "请先应用或取消当前映射草稿，再保存配置")
         elseif profile.source == "user" then ctx.call("save_profile", {}) else save_as() end
     end
