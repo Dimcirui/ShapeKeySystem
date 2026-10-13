@@ -46,7 +46,9 @@ function P.load_all()
     for _, src in ipairs(SOURCES) do
         for _, f in ipairs(U.list_json(src .. "\\profiles")) do
             local data = U.load_json(f.path)
-            if data and data.schema == "sks.profile/1" and type(data.channels) == "table" then
+            -- REFramework 将空 Lua 表写成 JSON null；读回时恢复空通道列表，兼容已创建的空配置。
+            if data and data.schema == "sks.profile/1" and (type(data.channels) == "table" or data.channels == nil) then
+                data.channels = data.channels or {}
                 local id = type(data.id) == "string" and data.id or f.base
                 reg[id] = { id = id, name = data.name or id, source = src, path = f.path,
                             extends = data.extends, data = data }
