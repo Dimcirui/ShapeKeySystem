@@ -4,6 +4,7 @@ reframework/data/ShapeKeySystem/user/
 reframework/data/ShapeKeySystem/mods/
 reframework/data/ShapeKeySystem/trail.log
 reframework/data/ShapeKeySystem/hash_probe.txt
+reframework/data/ShapeKeySystem/Runtime/
 
 # third-party runtime (install separately)
 reframework/autorun/reframework-d2d.lua

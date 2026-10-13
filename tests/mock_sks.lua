@@ -190,6 +190,55 @@ d2d = {
     surface_size = function() return 1920, 1080 end,
 }
 
+-- REFramework ImGui draw list (Draw.lua "imgui" backend): text lands in DRAWS like d2d text;
+-- points must be {x, y} pairs and colours integers, anything else is noted in IMGUI_ERR
+IMGUI_ERR = {}
+local font_px = {}
+imgui.push_font_size = function(px) font_px[#font_px + 1] = px end
+imgui.pop_font_size = function() font_px[#font_px] = nil end
+imgui.calc_text_size = function(s)
+    local px = font_px[#font_px] or 18
+    local w, h = font_mt.__index.measure({ size = px, family = "Microsoft YaHei UI" }, s)
+    return { x = w, y = h }
+end
+imgui.get_display_size = function() return { x = 1920, y = 1080 } end
+-- style stacks must balance (the prompt's field window pushes and pops them every frame)
+IMGUI_STACK = { var = 0, color = 0, width = 0, window = 0 }
+imgui.push_style_var = function() IMGUI_STACK.var = IMGUI_STACK.var + 1 end
+imgui.pop_style_var = function(n) IMGUI_STACK.var = IMGUI_STACK.var - (n or 1) end
+imgui.push_style_color = function() IMGUI_STACK.color = IMGUI_STACK.color + 1 end
+imgui.pop_style_color = function(n) IMGUI_STACK.color = IMGUI_STACK.color - (n or 1) end
+imgui.push_item_width = function() IMGUI_STACK.width = IMGUI_STACK.width + 1 end
+imgui.pop_item_width = function() IMGUI_STACK.width = IMGUI_STACK.width - 1 end
+PROMPT_RECT = nil   -- pos / size of the last prompt window
+imgui.set_next_window_pos = function(v) PROMPT_RECT = { x = v.x, y = v.y } end
+imgui.set_next_window_size = function(v) if PROMPT_RECT then PROMPT_RECT.w, PROMPT_RECT.h = v.x, v.y end end
+Vector4f = { new = function(x, y, z, w) return { x = x, y = y, z = z, w = w } end }
+CLIPBOARD = ""
+imgui.get_clipboard = function() return CLIPBOARD end
+local function ipt(...)
+    for i = 1, select("#", ...) do
+        local p = select(i, ...)
+        if type(p) ~= "table" or #p ~= 2 or type(p[1]) ~= "number" or type(p[2]) ~= "number" then
+            IMGUI_ERR[#IMGUI_ERR + 1] = "point " .. tostring(p)
+        end
+    end
+end
+local function icol(c)
+    if math.type(c) ~= "integer" or c < 0 or c > 0xFFFFFFFF then IMGUI_ERR[#IMGUI_ERR + 1] = "colour " .. tostring(c) end
+end
+local IMGUI_DL = {
+    add_text = function(_, p, c, s) ipt(p); icol(c); DRAWS[#DRAWS + 1] = { s = s, x = p[1], y = p[2], c = c } end,
+    add_rect_filled = function(_, a, b, c) ipt(a, b); icol(c) end,
+    add_rect = function(_, a, b, c) ipt(a, b); icol(c) end,
+    add_line = function(_, a, b, c) ipt(a, b); icol(c) end,
+    add_circle_filled = function(_, p, _, c) ipt(p); icol(c) end,
+    add_circle = function(_, p, _, c) ipt(p); icol(c) end,
+    add_ellipse = function(_, p, r, c) ipt(p, r); icol(c) end,
+    add_quad_filled = function(_, a, b, c3, d, c) ipt(a, b, c3, d); icol(c) end,
+}
+imgui.get_background_draw_list = function() return IMGUI_DL end
+
 -- command recorder for offline screenshots (render_ui.py)
 CMDS = {}
 local function rec(...) CMDS[#CMDS + 1] = table.pack(...) end
