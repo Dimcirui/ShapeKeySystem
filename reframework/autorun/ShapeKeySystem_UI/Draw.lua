@@ -360,7 +360,7 @@ end
 
 -- ---------------------------------------------------------------- clip / deferred
 function D.push_clip(x, y, w, h)
-    clip_stack[#clip_stack + 1] = clip
+    clip_stack[#clip_stack + 1] = clip or false
     local c = { x, y, x + w, y + h }
     if clip then
         c[1], c[2] = max(c[1], clip[1]), max(c[2], clip[2])
@@ -370,7 +370,7 @@ function D.push_clip(x, y, w, h)
 end
 
 function D.pop_clip()
-    clip = clip_stack[#clip_stack]
+    clip = clip_stack[#clip_stack] or nil
     clip_stack[#clip_stack] = nil
 end
 

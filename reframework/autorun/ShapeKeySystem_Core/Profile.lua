@@ -111,6 +111,17 @@ local function fmt_k(k) return (k == 1) and "" or string.format("×%g", k) end
 local function compile_node(node, env, depth)
     if type(node) ~= "table" then error("node must be an object") end
     if depth > 16 then error("node tree too deep") end
+    -- 一个节点只能有一个运算类型；有限数值避免 NaN/无穷传入游戏的形态键权重。
+    local count = 0
+    for _, key in ipairs(NODE_KEYS) do if node[key] ~= nil then count = count + 1 end end
+    if count ~= 1 then error("每个节点必须且只能选择一种输入或混合操作") end
+    for _, key in ipairs({ "k", "const", "p", "full_deg", "sign" }) do
+        if node[key] ~= nil then
+            local n = tonumber(node[key])
+            if not n or n ~= n or n == math.huge or n == -math.huge then error(key .. " 必须是有限数值") end
+        end
+    end
+    if node.full_deg ~= nil and tonumber(node.full_deg) <= 0 then error("满权重角度必须大于 0") end
     local fn, text
     if node.s ~= nil then
         local sig = env.signals.by_name[node.s]
@@ -126,7 +137,7 @@ local function compile_node(node, env, depth)
         p = math.floor(p)
         env.params[p] = true
         fn = function(ctx) return ctx.P[p] or 0 end
-        text = string.format("fc%03d", p)
+        text = string.format("fcParam_%03d", p)
     elseif node.ref ~= nil then
         local slot = env.slot_of[node.ref]
         if not slot then error("ref to unknown channel: " .. tostring(node.ref)) end
@@ -173,10 +184,10 @@ local function compile_node(node, env, depth)
             text = "(" .. table.concat(texts, ") × (") .. ")"
         elseif op == "max" then
             fn = function(ctx) local s = fns[1](ctx); for i = 2, n do local v = fns[i](ctx); if v > s then s = v end end; return s end
-            text = "max(" .. table.concat(texts, ", ") .. ")"
+            text = "取最大值(" .. table.concat(texts, ", ") .. ")"
         elseif op == "min" then
             fn = function(ctx) local s = fns[1](ctx); for i = 2, n do local v = fns[i](ctx); if v < s then s = v end end; return s end
-            text = "min(" .. table.concat(texts, ", ") .. ")"
+            text = "取最小值(" .. table.concat(texts, ", ") .. ")"
         else
             local a, b = fns[1], fns[2]
             fn = function(ctx) return a(ctx) - b(ctx) end
@@ -192,6 +203,12 @@ local function compile_node(node, env, depth)
     end
     local c = node.curve
     if type(c) == "table" then
+        for _, key in ipairs({ "deadzone", "gamma", "gain" }) do
+            if c[key] ~= nil then
+                local n = tonumber(c[key])
+                if not n or n ~= n or n == math.huge or n == -math.huge then error("曲线 " .. key .. " 必须是有限数值") end
+            end
+        end
         local dz = U.clamp(tonumber(c.deadzone) or 0, 0, 0.95)
         local gamma = tonumber(c.gamma) or 1
         local gain = tonumber(c.gain) or 1
@@ -204,7 +221,7 @@ local function compile_node(node, env, depth)
             if gamma ~= 1 then v = v ^ gamma end
             return v * gain
         end
-        text = "curve(" .. text .. ")"
+        text = "响应曲线(" .. text .. ")"
     end
     return fn, text
 end

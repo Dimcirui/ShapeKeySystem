@@ -191,7 +191,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ### 5.2 表情
 | 命令 | 参数 | 作用 | 持久化 |
 |---|---|---|---|
-| `set_profile` | `{id}` | 切换表情配置 | 不自动写父预设，需要 `write_binding` |
+| `set_profile` | `{id, discard?}` | 切换表情配置；映射未保存时返回 `E_UNSAVED`，显式 `discard=true` 可丢弃修改 | 不自动写父预设，需要 `write_binding` |
 | `preview_profile` | `{id?}` | 只读浏览一个未生效的配置：编译后和当前装备的网格通道名匹配，结果放在 `state.expression.preview = {id, name, source, channels, groups, present, total}`；不传 id、或 id 就是当前配置时清除。换装重扫后自动重建，`set_profile` 切到它时自动清除。表情详情页下拉选中即调用 | `E_NOT_FOUND` |
 | `set_master_gain` | `{value}` | 0~2 | 父预设 `gains` |
 | `set_gaze_gain` | `{value}` | 0~2 | 同上 |
@@ -210,8 +210,14 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | 命令 | 参数 | 作用 | 持久化 |
 |---|---|---|---|
 | `edit_node` | `{name, node}` | 替换某个通道的节点树；先校验，校验不通过返回 `E_NODE_INVALID` | — |
+| `set_mapping` | `{entry, create?}` | 提交完整映射（节点 + name/group/note/any/unless 等元数据）；`create=true` 新建，否则替换已有同名映射。编译通过后更新索引、清空旧 slot 并安排 tick 重扫；重名/别名匹配冲突返回 `E_EXISTS` | — |
+| `remove_mapping` | `{name}` | 删除映射；仍被节点引用时返回 `E_NODE_INVALID`，运行配置保持原样 | — |
+| `revert_mappings` | `{}` | 将节点、元数据和已删除通道整体恢复至加载/上次保存时的版本 | — |
 | `revert_node` | `{name}` | 恢复为配置文件里的原值 | — |
-| `save_profile` | `{as_name?}` | 保存到 `user/profiles/`；不填 `as_name` 时覆盖当前配置（内置和 mod 配置不能覆盖，会返回 `E_READONLY`） | user/profiles |
+| `create_profile` | `{name}` | 新建空白用户表情配置并选中；拒绝重名和未保存映射，空配置不会被自动推荐替换 | user/profiles |
+| `save_profile` | `{as_name?}` | 保存节点、映射结构及元数据到 `user/profiles/`，建立新的干净基线；不填 `as_name` 时覆盖当前用户配置，内置/mod 返回 `E_READONLY`；另存名与其他配置重名返回 `E_EXISTS` | user/profiles |
+
+映射编辑器共用 `MappingEditor.lua`，两种绘制后端使用相同页面和节点树。`state.mapping.entries[name]` 为完整映射快照，`nodes[name]` 为纯节点，`edited[name]` 标记新增/改动映射，`dirty` 也涵盖删除，`profile_id` 用于识别草稿所属配置。运行修改通过后才换入；所有网格写入仍仅发生在 tick。`set_profile` 在映射未保存时返回 `E_UNSAVED`，显式 `discard=true` 可放弃修改。
 
 ### 5.4 捏脸
 | 命令 | 参数 | 作用 | 持久化 |
@@ -243,6 +249,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `E_READONLY` | 试图修改内置或 mod 自带文件 |
 | `E_FBS_OWNED` | 该通道由 FBS 管理，本插件不写入 |
 | `E_NODE_INVALID` | 节点树校验失败（例如循环引用、引用了不存在的通道） |
+| `E_UNSAVED` | 映射存在未保存修改，需保存或恢复后再切换配置 |
 | `E_SCHEMA` | JSON 格式或 schema 版本不支持 |
 | `E_IO` | 文件读写失败 |
 | `E_NOT_SCANNED` | 捏脸操作前还没有扫描 |

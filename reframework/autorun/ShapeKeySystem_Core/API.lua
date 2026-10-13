@@ -134,7 +134,7 @@ SKS.state, SKS.live = state, live
 
 -- ---------------------------------------------------------------- internal
 local C = {
-    prog = nil, resolved = nil, edits = {}, index = {},
+    prog = nil, resolved = nil, original_resolved = nil, edits = {}, index = {},
     gains = {}, forced = {},
     rigs = {}, parts = {}, sig = "", cov_key = nil,
     frame = 0, scan_at = { 1 }, next_periodic = 0, gc_open = false,
@@ -386,14 +386,20 @@ local function build_mapping_state()
         sigs[i] = { slot = s.slot, name = s.name, param = s.param, guessed = s.guessed, note = s.note }
     end
     m.signals = sigs
-    local nodes, edited = {}, {}
+    local nodes, edited, entries, originals = {}, {}, {}, {}
+    for _, e in ipairs(C.original_resolved and C.original_resolved.channels or {}) do originals[e.name] = e end
     if C.prog then
-        for _, c in ipairs(C.prog.channels) do
+        local data = Profile.to_json(C.resolved, C.edits, C.prog.id, C.prog.name)
+        for i, c in ipairs(C.prog.channels) do
             nodes[c.name] = U.copy(c.node)
-            if c.edited then edited[c.name] = true end
+            entries[c.name] = U.copy(data.channels[i])
+            if U.signature(entries[c.name]) ~= U.signature(originals[c.name]) then edited[c.name] = true end
         end
     end
-    m.nodes, m.edited = nodes, edited
+    m.nodes, m.edited, m.entries = nodes, edited, entries
+    m.dirty = next(edited) ~= nil
+    for name in pairs(originals) do if not entries[name] then m.dirty = true end end
+    m.profile_id = C.prog and C.prog.id or nil
     bump("mapping")
 end
 
@@ -688,7 +694,7 @@ local function apply_profile(id, keep_targets)
     local prog, code2, msg2 = Profile.compile(resolved, {})
     if not prog then return false, code2, msg2 end
     if not keep_targets then queue_zero_all() end
-    C.resolved, C.prog, C.edits = resolved, prog, {}
+    C.resolved, C.original_resolved, C.prog, C.edits = U.copy(resolved), U.copy(resolved), prog, {}
     local names = {}
     for i, c in ipairs(prog.channels) do names[i] = c.name end
     C.index = Names.build_index(names, resolved.aliases, resolved.channels)
@@ -717,6 +723,8 @@ local function recompile(edits)
     local prog, code, msg = Profile.compile(C.resolved, edits)
     if not prog then return false, code, msg end
     C.prog, C.edits = prog, edits
+    -- 节点由自动信号改为手动时，旧 V 值不能继续驱动网格；变更只在下一次 tick 写入。
+    for _, rig in ipairs(C.rigs) do rig.V, rig.W = {}, {} end
     refresh_rig_params()   -- an edited node may read other fcParams
     recompute_gains()
     build_expression_state(); build_mapping_state()
@@ -830,7 +838,7 @@ local function do_scan()
     -- the current profile drives nothing on these parts but another one would: switch. Only
     -- without a parent preset that names a profile.
     local cov = state.expression.coverage
-    if not want and #res.rigs == 0 and cov and cov.recommended and cov.recommended ~= C.prog.id and (cov.recommended_hits or 0) >= 3 then
+    if not want and C.prog.n > 0 and not state.mapping.dirty and #res.rigs == 0 and cov and cov.recommended and cov.recommended ~= C.prog.id and (cov.recommended_hits or 0) >= 3 then
         local from = C.prog.name
         if apply_profile(cov.recommended, false) then
             cfg.profile = cov.recommended; save_soon()
@@ -1259,6 +1267,7 @@ end
 
 function cmds.set_profile(a)
     if not Profile.registry[a.id] then return false, "E_NOT_FOUND", "profile not found: " .. tostring(a.id) end
+    if state.mapping.dirty and not a.discard then return false, "E_UNSAVED", "映射尚未保存，请先保存或恢复配置" end
     local ok, code, msg = apply_profile(a.id, false)
     if not ok then return false, code, msg end
     cfg.profile = a.id; save_soon()
@@ -1361,6 +1370,66 @@ function cmds.calibrate_eye_neutral()
 end
 
 -- mapping
+-- 结构变更先完整编译，成功才替换运行配置；旧写入目标仅在 tick 清零并重新扫描。
+local function replace_mapping(resolved)
+    local prog, code, msg = Profile.compile(resolved, {})
+    if not prog then return false, code, msg end
+    queue_zero_all()
+    C.resolved, C.prog, C.edits = resolved, prog, {}
+    local names = {}
+    for i, c in ipairs(prog.channels) do names[i] = c.name end
+    C.index = Names.build_index(names, resolved.aliases, resolved.channels)
+    C.rigs, C.mesh_name_of, C.forced, C.cov_key = {}, {}, {}, nil
+    live.weight = {}
+    recompute_gains()
+    build_expression_state(); build_mapping_state()
+    request_rescan(1)
+    return true
+end
+
+-- 页面提交一个完整映射；保留未编辑的元数据，不改变磁盘上的内置或 mod 配置。
+function cmds.set_mapping(a)
+    if not C.resolved then return false, "E_NOT_FOUND", "no profile" end
+    local e = a.entry
+    if type(e) ~= "table" or type(e.name) ~= "string" or e.name:match("^%s*$") then
+        return false, "E_BAD_ARGS", "形态键名称不能为空"
+    end
+    local group_ok = false
+    for _, g in ipairs(X.GROUPS) do if g.key == e.group then group_ok = true end end
+    local slot = slot_of(e.name)
+    if slot and C.prog.channels[slot].group == e.group then group_ok = true end
+    if not group_ok then return false, "E_BAD_ARGS", "未知的面部类型" end
+    if a.create and slot_of(e.name) then return false, "E_EXISTS", "该形态键已有映射，请展开编辑" end
+    if a.create and Names.match(C.index, e.name) then return false, "E_EXISTS", "该网格名称已匹配另一条映射，请编辑已有映射" end
+    if not a.create and not slot_of(e.name) then return false, "E_NOT_FOUND", "unknown channel" end
+    local data = Profile.to_json(C.resolved, C.edits, C.prog.id, C.prog.name)
+    local candidate = U.copy(C.resolved)
+    candidate.channels = data.channels
+    for i, other in ipairs(candidate.channels) do
+        if other.name ~= e.name and U.norm(other.name) == U.norm(e.name) then
+            return false, "E_EXISTS", "存在名称匹配冲突：" .. other.name
+        end
+        if other.name == e.name then candidate.channels[i] = U.copy(e) end
+    end
+    if a.create then candidate.channels[#candidate.channels + 1] = U.copy(e) end
+    return replace_mapping(candidate)
+end
+
+-- 删除会编译校验引用关系；仍被其他映射引用时拒绝，运行中的配置保持原样。
+function cmds.remove_mapping(a)
+    if not slot_of(a.name) then return false, "E_NOT_FOUND", "unknown channel" end
+    local candidate = U.copy(C.resolved)
+    candidate.channels = Profile.to_json(C.resolved, C.edits, C.prog.id, C.prog.name).channels
+    for i, e in ipairs(candidate.channels) do if e.name == a.name then table.remove(candidate.channels, i); break end end
+    return replace_mapping(candidate)
+end
+
+-- 恢复整个配置到加载时的版本，包含被删除的通道；不读写任何玩家文件。
+function cmds.revert_mappings()
+    if not C.original_resolved then return false, "E_NOT_FOUND", "no profile" end
+    return replace_mapping(U.copy(C.original_resolved))
+end
+
 function cmds.edit_node(a)
     if not slot_of(a.name) then return false, "E_NOT_FOUND", "unknown channel: " .. tostring(a.name) end
     if type(a.node) ~= "table" then return false, "E_BAD_ARGS", "node must be a table" end
@@ -1372,8 +1441,33 @@ end
 function cmds.revert_node(a)
     if not slot_of(a.name) then return false, "E_NOT_FOUND", "unknown channel: " .. tostring(a.name) end
     local edits = U.copy(C.edits)
-    edits[a.name] = nil
+    local original
+    for _, e in ipairs(C.original_resolved.channels) do if e.name == a.name then original = e; break end end
+    edits[a.name] = original and Profile.node_of(original) or {}
     return recompile(edits)
+end
+
+-- 创建独立的空白用户配置；先校验重名和未保存修改，旧网格权重仅在 tick 清零。
+function cmds.create_profile(a)
+    if state.mapping.dirty then return false, "E_UNSAVED", "映射尚未保存，请先保存或恢复配置" end
+    if type(a.name) ~= "string" then return false, "E_BAD_ARGS", "配置名称不能为空" end
+    local id = U.safe_id(a.name)
+    if id == "" or id == "." or id == ".." or id:match("[%.%s]$") then
+        return false, "E_BAD_ARGS", "配置名称不能为空或以点结尾"
+    end
+    if Profile.registry[id] then return false, "E_EXISTS", "配置名称已存在，请使用新的名称" end
+    local data = { schema = "sks.profile/1", id = id, name = a.name, aliases = {}, channels = {} }
+    if not U.save_json(U.path("user", "profiles", id .. ".json"), data) then
+        return false, "E_IO", "write failed"
+    end
+    Profile.load_all()
+    build_presets_state()
+    local ok, code, msg = apply_profile(id, false)
+    if not ok then return false, code, msg end
+    cfg.profile = id; save_soon()
+    C.profile_manual = { id = id, hit = C.binding and C.binding.hit or nil }
+    notice("info", "已新建表情配置：" .. a.name)
+    return true, nil, nil, { id = id }
 end
 
 function cmds.save_profile(a)
@@ -1388,8 +1482,14 @@ function cmds.save_profile(a)
         if prog.source ~= "user" then return false, "E_READONLY", "builtin / mod profiles cannot be overwritten" end
         id, name = prog.id, prog.name
     end
+    if id == "." or id == ".." or id:match("[%.%s]$") then return false, "E_BAD_ARGS", "配置名称不能以点或空白结尾" end
+    local existing = Profile.registry[id]
+    if existing and (existing.source ~= "user" or id ~= prog.id) then
+        return false, "E_EXISTS", "配置名称已存在，请使用新的名称"
+    end
     local data = Profile.to_json(C.resolved, C.edits, id, name)
-    if not U.save_json(U.path("user", "profiles", id .. ".json"), data) then
+    local path = existing and existing.source == "user" and existing.path or U.path("user", "profiles", id .. ".json")
+    if not U.save_json(path, data) then
         return false, "E_IO", "write failed"
     end
     Profile.load_all()
@@ -1397,6 +1497,7 @@ function cmds.save_profile(a)
     local ok, code, msg = apply_profile(id, true)
     if not ok then return false, code, msg end
     cfg.profile = id; save_soon()
+    C.profile_manual = { id = id, hit = C.binding and C.binding.hit or nil }
     notice("info", "已保存表情配置：" .. name)
     return true, nil, nil, { id = id }
 end

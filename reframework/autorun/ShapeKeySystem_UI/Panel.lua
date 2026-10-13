@@ -54,7 +54,7 @@ local function goto_page(key)
     local previous = ui.page_state[ui.page]
     if previous then previous.name_form, previous.clip_form = nil, nil end
     ui.page = key
-    W.open_select = nil
+    W.open_select, W.open_search = nil, nil
     TextInput.clear()
 end
 
@@ -207,7 +207,7 @@ function Panel.set_open(on)
     if on == Panel.open then return end
     Panel.open = on
     I.reset()
-    W.open_select = nil
+    W.open_select, W.open_search = nil, nil
     if not on then
         TextInput.clear()
         for _, state in pairs(ui.page_state) do state.name_form, state.clip_form = nil, nil end
