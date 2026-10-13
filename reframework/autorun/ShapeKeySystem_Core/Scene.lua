@@ -25,11 +25,38 @@ function S.master_root()
     return ok and tr or nil
 end
 
+-- The children a scan depends on: faces (Player_Face*) and armour parts (ch02 / ch03, as
+-- read_parts picks them). Other children come and go during play (emote props, effects);
+-- counting them dropped and re-armed the rigs every few frames, so the face froze through
+-- emotes and talking (kevin, 2026-10-13).
+local function scanned_child(name)
+    return name:find("Player_Face", 1, true) == 1 or name:find("ch02", 1, true) ~= nil
+        or name:find("ch03", 1, true) ~= nil
+end
+
 function S.children_signature(root)
     if not root then return "" end
     local parts, c = {}, root:call("get_Child")
-    while c do parts[#parts + 1] = S.go_name(c); c = c:call("get_Next") end
+    while c do
+        local name = S.go_name(c)
+        if scanned_child(name) then parts[#parts + 1] = name end
+        c = c:call("get_Next")
+    end
     return table.concat(parts, "|")
+end
+
+-- "+added -removed" between two signatures, for the trail.
+function S.signature_diff(old, new)
+    local function set(sig)
+        local t = {}
+        for n in (sig or ""):gmatch("[^|]+") do t[n] = (t[n] or 0) + 1 end
+        return t
+    end
+    local a, b, out = set(old), set(new), {}
+    for n, k in pairs(b) do if (a[n] or 0) < k then out[#out + 1] = "+" .. n end end
+    for n, k in pairs(a) do if (b[n] or 0) < k then out[#out + 1] = "-" .. n end end
+    table.sort(out)
+    return table.concat(out, " ")
 end
 
 local function find_faces(root, scene_search)

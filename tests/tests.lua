@@ -419,6 +419,36 @@ DEMO.busy = true; ticks(1)
 check(st.debug.status:find("paused") ~= nil, "switch off: cutscenes pause again")
 DEMO.busy = false; ticks(130)
 
+-- Objects the game hangs on the hunter for a moment (emote props, effects) are not a change of
+-- parts: the face keeps being driven through them. kevin 2026-10-13: emotes and talking froze
+-- Maya's face; trail.log showed "released rigs: hunter parts changed" every 15 frames meanwhile.
+do
+    local npc = ARMOR.get_Next()
+    local prop = { _name = "Ef_Gesture_000" }
+    prop.get_GameObject = function(self) return { call = function(_, m)
+        if m == "get_Name" then return self._name end
+        if m == "get_Transform" then return self end
+    end } end
+    prop.get_Next = function() return npc end
+    prop.call = function(self, m, ...)
+        if m == "get_GameObject" then return self:get_GameObject() end
+        return self[m](self, ...)
+    end
+    local followed = 0
+    for i = 1, 9 do
+        ARMOR.get_Next = (i % 2 == 1) and function() return prop end or function() return npc end
+        FC[1] = 0.001 * i
+        ticks(10)
+        if math.abs((WEIGHTS[s_close] or 0) - 0.1 * i) < 1e-6 then followed = followed + 1 end
+    end
+    check(followed == 9, "a child that comes and goes (emote prop): the face follows the signal at every step (" .. followed .. "/9)")
+    ARMOR.get_Next = function() return npc end
+    ticks(10)
+    local Scene = require("ShapeKeySystem_Core.Scene")
+    check(Scene.signature_diff("Player_Face|ch03_024_0012", "Player_Face|ch03_024_0013") == "+ch03_024_0013 -ch03_024_0012",
+          "the trail names the parts that came and went")
+end
+
 local Probe = require("ShapeKeySystem_Core.Probe")
 MM3 = Probe.murmur3("eyeBlinkLeft")
 ticks(70)

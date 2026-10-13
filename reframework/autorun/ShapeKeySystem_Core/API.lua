@@ -1135,8 +1135,9 @@ function SKS.tick()
         C.pending_zero = {}
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
-    if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.master_root()) ~= C.sig then
-        drop_rigs("hunter parts changed", Guard.SETTLE_FRAMES)
+    local now_sig = (f % 5 == 0 and #C.rigs > 0) and Scene.children_signature(Scene.master_root()) or nil
+    if now_sig and now_sig ~= C.sig then
+        drop_rigs("hunter parts changed (" .. Scene.signature_diff(C.sig, now_sig) .. ")", Guard.SETTLE_FRAMES)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
         drop_rigs("preview hunter changed", Guard.SETTLE_FRAMES)
     elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.master_root()) ~= C.sig then
