@@ -141,15 +141,19 @@ check(st1 ~= nil, "state 1 header drawn")
 if st1 then MOUSE.x, MOUSE.y = st1.x - 8, st1.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 check(Panel.ui.page_state.cond.closed[1] == true, "15: a state collapses")
 Panel.ui.page_state.cond.closed = { true, true }; frame()
--- 9: typing in the new-dialog does not submit; Enter does
+-- 9: 页面内新建组合，选字 Enter 不提交；明确点击确定才创建。
 local nb = find("新建组合")
 check(nb ~= nil, "new combination button drawn")
 if nb then click(nb) end
-PROMPT_TEXT = "s"; frame(); frame()
+INPUT_EDITS.conditions_clip = "s"; frame(); frame()
 check(st.conditions.current.data.clips["s"] == nil, "9: typing one character does not submit the dialog")
-PROMPT_TEXT = "smile"; frame()
+INPUT_EDITS.conditions_clip = "smile"; frame()
 KEYS[0x0D] = true; frame(); KEYS[0x0D] = false; frame(); frame()
-check(st.conditions.current.data.clips["smile"] ~= nil, "9: Enter submits")
+check(st.conditions.current.data.clips["smile"] == nil, "9: IME Enter does not submit")
+local confirm = exact("确定")
+if confirm then click(confirm) end
+frame(); frame()
+check(st.conditions.current.data.clips["smile"] ~= nil, "9: confirm button creates the combination")
 -- 12: adding a key to a fresh combination shows at once
 frame()
 local add = find("添加形态键")

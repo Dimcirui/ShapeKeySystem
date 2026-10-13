@@ -83,10 +83,7 @@ local function top_bars(ctx, x, y, w)
 
     W.panel_box(x, cy, w, 44)
     local fw = min(180, w * 0.25)
-    if W.text_box(x + 10, cy + 8, fw, 28, s.filter, "筛选通道…") then
-        ctx.prompt({ title = "筛选通道", text = s.filter or "", live = true,
-                     on_change = function(t) s.filter = t end, on_submit = function(t) s.filter = t end })
-    end
+    W.text_box("expression_filter", x + 10, cy + 8, fw, 28, s.filter, "筛选通道…", function(t) s.filter = t end)
     local c1, v1, w1 = W.toggle(pv and "只看网格里有的" or "只看活跃", x + 22 + fw, cy + 8, s.only_active == true)
     if c1 then s.only_active = v1 end
     local sx = x + 40 + fw + w1

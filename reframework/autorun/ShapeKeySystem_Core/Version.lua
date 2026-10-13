@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.1.0"
+V.number = "1.1.1"
 V.author = "谛听 Dimcirui"
 
 V.history = {
+    { version = "1.1.1", notes = "修复渲染重置时面板报错" },
     { version = "1.1.0", notes = "新增 VRChat 素体表情配置" },
     { version = "1.0.0", notes = "首个版本" },
 }

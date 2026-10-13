@@ -227,25 +227,16 @@ ArmorVariantManager（MIT 许可）的做法：
 本插件的方案：
 1. 依赖 **reframework-d2d** 绘制，用 imgui 读取鼠标状态。
 2. 组件层自己写一个精简版（窗口、按钮、滑块、列表、下拉、开关、标签页）。AVM 的组件可以参考或改写，但要保留它的 MIT 版权声明。
-3. **文本输入**（给预设命名）有两种做法，待定：
-   - 方案 a：可选依赖 AVM 的 UI bridge DLL。用户装了 AVM 就能用原生输入法。
-   - 方案 b：命名时临时弹出一个 imgui 小窗口（REFramework 自带的 imgui 支持文本输入）。
-   - 先做 b，以后再接 a。（2026-10-13：已按三档实现，见 7.1.1。）
+3. **文本输入**：页面内标准 ImGui InputText，输入法依赖 REF-IME 最新 Release；不再依赖 AVM UI DLL 或游戏输入弹窗。
 4. **屏蔽输入**：面板打开时，鼠标点击不能传给游戏。先用最简单的办法，在面板区域内吞掉点击；需要时再参考 AVM 的 `InputBlocker`。
 
 ### 7.1.1 文字输入与打包（2026-10-13 定）
 
-实测结论（荒野，详细记录见 `addons/WildsChineseInput/README.md`）：
-- REFramework 的 ImGui 输入框打不了中文：游戏窗口是 ANSI 窗口，ImGui 收到的输入法文字会变成 `??`；REFramework 的 Lua 也没有 `SetKeyboardFocusHere` 绑定，ImGui 输入框只能点一下才能打字。
-- 引擎的 `via.hid.TextInput` 能读到完整的输入法数据，但自己调 `beginInput` 打不开输入法。
-- 游戏自己的输入框（`startFormFlow(NAME_EQUIP_SET)`）可以正常打中文，结果用 hook `textInputDecided` 拿到，不会真的改名。`openImeDialog` 会让游戏的输入法（包括聊天框）坏到重启为止，不用。
-
-所以文字输入分三档，都从 `Prompt` 进入，页面代码不用改：
-1. 荒野 + 差分管理器的 UI DLL：原生输入法（`NativeText.lua`），输入框的文字、拼写下划线和光标由面板自己画。
-2. 荒野、没有 DLL：ImGui 输入框打英文，「中文」按钮弹出游戏的输入框（`GameText.lua`）。
-3. 其他游戏：ImGui 输入框（英文 + 「粘贴」）。
-
-打包：主包保持纯 Lua，任何游戏可装；DLL 只放在可选组件 `addons/WildsChineseInput/` 里（REFramework 会自动加载 `plugins/` 下的所有 DLL，Lua 管不了；这个 DLL 在崛起上会崩溃）。DLL 与差分管理器的发布版本保持一致，装在相同路径，两边都装时只留一份。
+- 输入法依赖 [REF-IME 最新 Release](https://github.com/Monkeysama/REF-IME/releases/latest)，当前为 v1.0.0；通用 REF 插件支持各 RE 游戏，具体 REF ABI 要求见上游说明。SKS 游戏功能仍按其实际适配范围运行。
+- 搜索直接在原输入框编辑；配置命名、新建组合在对应操作栏下展开编辑行。确认和取消由按钮完成，Enter/Esc 留给输入法选字。
+- `TextInput.lua` 登记布局矩形，按 UI 缩放换算物理像素，仅在 `re.on_frame` 调用 ImGui。窗口和控件 ID 固定，不逐帧抢焦点；切页、面板关闭、裁剪和渲染器重置时清理输入位置。
+- 已移除旧 `Prompt`、`NativeText`、`GameText` 和荒野专用 DLL 组件。保留与 AVM 的输入屏蔽/光标兼容，不删除玩家安装的 AVM DLL。
+- 主包保持纯 Lua。`tools/install-ref-ime.ps1` 下载上游最新 Release，仅安装 `reframework/plugins/REF-IME.dll`，支持指定其他游戏目录；安装原生 DLL 前必须退出目标游戏。
 
 ### 7.2 布局
 
@@ -299,10 +290,10 @@ ArmorVariantManager（MIT 许可）的做法：
 1. **M1 拆模块**（2026-10-08 代码完成，离线模拟测试 41 项通过，待游戏内验证；实现说明见接口文档第 9 节）：把 `ArkitFaceDriver.lua` 拆成 Core 的几个模块；映射表外置成 `profiles/ARKit.json`；加入不区分大小写的匹配和别名表；补上 `jaw*`、`mouthPucker` 的映射。
 2. **M2 图层和捏脸**：实现 Layers 和懒加载捏脸、哨兵检测、捏脸预设和绑定预设。暂时先用 imgui 界面。
 3. **M3 独立面板**（2026-10-09 第一版代码完成，离线测试通过，待游戏内验证）：d2d 组件库，表情、捏脸、眼睛、预设、调试这几个页面。实现见 `reframework/autorun/ShapeKeySystem_UI/`：
-   - `Draw`（d2d 封装：逻辑坐标 × 界面缩放、手动裁剪、字体按需创建、文字测量缓存、图标用图形画）、`Input`（每帧采样点击排队，供 d2d 按更新率取用；悬浮层挡点击）、`Widgets`（按钮、开关、滑块、下拉、折叠标题、文本框、滚动区）、`InputBlocker`（改写自 AVM，MIT 声明保留在文件头）、`Prompt`（所有文本输入的唯一入口，现在是 imgui 小窗）、`Panel`（窗口拖动 / 改大小、左侧导航、提示条、状态栏、自绘光标、热键）、`Page*.lua`（PageBasic、PageSculpt、PageExpression、PageEyes、PagePresets、PageDebug；REFramework 的 require 只认 autorun 下一层目录，不能再分子目录）。
+   - `Draw`（两种绘制后端、坐标缩放、裁剪）、`Input`（每帧采样点击排队）、`Widgets`（自绘控件和页面内命名表单）、`InputBlocker`（改写自 AVM，MIT 声明保留）、`TextInput`（页面内标准 ImGui 输入，仅在 re.on_frame 创建控件）、`Panel`（窗口布局、热键）、`Page*.lua`（页面实现；REFramework 的 require 只认 autorun 下一层目录）。
    - 面部图（2026-10-10 改成可换样式）：每种样式 = `data/ShapeKeySystem/faces/<id>.json`（name、size、各部位点击椭圆、images 前缀）+ `images/ShapeKeySystem/faces/<id>/face_lines.png` 和 `face_<brow|eye|cheek|mouth>_<idle|hover|sel|glow>.png`；`ShapeKeySystem_UI/Faces.lua` 在加载脚本时扫描，设置项 `face_style`（默认 chibi，未知值回落到 chibi），在「设置与调试」里切换。内置 chibi（Q 版大头）和 portrait（正常比例）。配色规则：未选中部位和线稿同色，hover 提亮，选中金色带光晕，glow 是中性白光晕且选中部位不叠。d2d 图片不能染色，所以四层都预先生成。生成工具 `tools/face_gen/make_face.py <style.json> <线稿> <reframework 目录>`（style.json 用框/多边形圈出各部位，示例 chibi.json、portrait.json）。
    - 依赖 reframework-d2d（暂用本机 RE Requiem 里 2026-02 的版本）；没有 d2d 时只有 imgui 调试面板。
-   - ~~下一步（用户 2026-10-09 决定）：像 AVM 一样自带一份 d2d 构建，加原生中文输入法，替换 `Prompt` 的后端。~~ 已改（2026-10-10 / 10-13）：绘制用官方 d2d 或 ImGui；中文输入借用差分管理器原版 UI DLL，作为荒野专用的可选组件，见 7.1.1。
+   - 绘制用官方 d2d 或 ImGui；输入法依赖 REF-IME 最新 Release，使用页面内控件，见 7.1.1。
 4. **M4 映射编辑器和 MMD 配置**：节点编辑界面，`mul`/`ref`/`curve` 的支持，MMD 配置，角色专属配置的模板。
 5. **M5 收尾**：文本输入接 AVM bridge（可选）、多语言、文档、发布打包。
 

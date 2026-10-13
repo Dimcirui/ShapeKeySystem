@@ -52,6 +52,7 @@ re.on_frame(function()
     local ok, err = pcall(Panel.frame)
     if not ok then SKS.log("panel frame error: %s", tostring(err)) end
     draw_panel("imgui")
+    Panel.draw_inputs()
     DebugUI.end_frame(Panel.ui_open())
 end)
 re.on_script_reset(function()

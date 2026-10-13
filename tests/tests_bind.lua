@@ -39,11 +39,10 @@ local Sc = require("ShapeKeySystem_Core.Sculpt")
 local k1 = st.sculpt.keys[1]
 SKS.call("set_sculpt_key", { name = k1.name, value = (k1.value > 0.5) and 0.1 or 0.9 }); frame()
 check(st.sculpt.dirty, "edited -> dirty")
-PROMPT_OPEN = nil
 local sv
 for _, d in ipairs(DRAWS) do if d.s == "保存" then sv = d end end
 if sv then click(sv) end
-check(PROMPT_OPEN == nil and not st.sculpt.dirty, "保存 on your own preset: saved in place, no name prompt")
+check(not Panel.ui.page_state.sculpt.name_form and not st.sculpt.dirty, "保存 on your own preset: saved in place, no name form")
 -- a different preset selected -> 绑定到 button
 SKS.call("save_sculpt", { name = "Other" }); frame(); frame()
 local bt

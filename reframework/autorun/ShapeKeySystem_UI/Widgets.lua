@@ -5,6 +5,7 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
+local TextInput = require("ShapeKeySystem_UI.TextInput")
 
 local W = {}
 local C = T.c
@@ -274,15 +275,41 @@ function W.header(label, x, y, w, open, stat)
     return I.click(x, y, w, h), h
 end
 
--- ---------------------------------------------------------------- text box (opens a prompt)
-function W.text_box(x, y, w, h, value, placeholder)
+-- 原位置输入框：自绘边框与占位文字，标准 ImGui InputText 负责文字、选择、剪贴板和 IME。
+function W.text_box(id, x, y, w, h, value, placeholder, on_change)
     h = h or T.m.row_h
     local hover = I.hit(x, y, w, h)
     D.rrect(x, y, w, h, 3, C.ink)
     D.outline(x, y, w, h, 3, 1, hover and C.muted or C.line)
-    if value and value ~= "" then D.text_mid(value, x + 8, y, h, C.text, body(), w - 16)
-    else D.text_mid(placeholder or "", x + 8, y, h, C.faint, body(), w - 16) end
-    return I.click(x, y, w, h)
+    local registered = TextInput.register(id, x, y, w, h, value, on_change)
+    if not registered and value and value ~= "" then D.text_mid(value, x + 8, y, h, C.text, body(), w - 16)
+    elseif (not value or value == "") and TextInput.active ~= id then
+        D.text_mid(placeholder or "", x + 8, y, h, C.faint, body(), w - 16)
+    end
+    I.click(x, y, w, h) -- 只消费自绘控件的点击队列；ImGui 仍独立收到鼠标事件。
+end
+
+-- 命名表单由所属页面保存草稿；布局在操作栏下展开，不建立弹窗或全屏输入遮罩。
+function W.start_text(state, key, req)
+    req.text = req.text or ""
+    state[key] = req
+end
+function W.text_form(state, key, id, x, y, w)
+    local r = state[key]
+    if not r then return 0 end
+    local h = r.extra and 102 or 70
+    W.panel_box(x, y, w, h)
+    D.text_mid(r.title or "名称", x + 10, y + 4, 24, C.muted, small(), w - 20)
+    W.text_box(id, x + 10, y + 32, w - 190, 28, r.text, "点击输入名称…", function(t) r.text = t end)
+    local yes = W.button("确定", x + w - 164, y + 32, 70, 28, { kind = "primary", disabled = r.text == "" })
+    local no = W.button("取消", x + w - 82, y + 32, 70, 28)
+    if r.extra then
+        local changed, v = W.toggle(r.extra.label, x + 10, y + 68, r.extra.value == true)
+        if changed then r.extra.value = v end
+    end
+    if yes or no then state[key] = nil; TextInput.remove(id) end
+    if yes and r.on_submit then r.on_submit(r.text, r.extra and r.extra.value) end
+    return h + 8
 end
 
 -- ---------------------------------------------------------------- scroll area

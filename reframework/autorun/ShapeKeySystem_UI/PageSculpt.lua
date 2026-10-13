@@ -56,7 +56,9 @@ local function toolbar(ctx, x, y, w)
     local sel_w = min(260, w * 0.3)
     local chp, ip = W.select("sculpt_preset", x + lw, cy + 8, sel_w, 28, labels, cur,
         { placeholder = #pr > 0 and "（未选择）" or "（还没有配置）" })
-    if chp and pr[ip] then call("load_sculpt", { name = pr[ip].name, folder = pr[ip].folder }) end
+    if chp and pr[ip] then
+        if call("load_sculpt", { name = pr[ip].name, folder = pr[ip].folder }) then s.name_form = nil end
+    end
     local bx = x + lw + sel_w + 10
     local preset = sc.preset
     local own = preset and preset.source == "user"
@@ -64,7 +66,7 @@ local function toolbar(ctx, x, y, w)
     local dw = W.default_button(ctx, bx, cy + 8, "sculpt", preset and preset.name, bnd and bnd.sculpt)
     if dw > 0 then bx = bx + dw + 16 end
     local function save_as(title)
-        ctx.prompt({ title = title, text = preset and preset.name or "",
+        W.start_text(s, "name_form", { title = title, text = preset and preset.name or "",
             extra = { label = "存为通用配置（不属于这套装备）", value = false },
             on_submit = function(name, general)
                 if name ~= "" and call("save_sculpt", { name = name, general = general }) then ctx.toast("info", "已保存：" .. name) end
@@ -90,6 +92,7 @@ local function toolbar(ctx, x, y, w)
         bx = bx + b3 + 6
     end
     cy = cy + 52
+    cy = cy + W.text_form(s, "name_form", "sculpt_name", x, cy, w)
     local pd = st.presets.pending_delete
     if pd and pd.kind == "sculpt" then
         D.rrect(x, cy, w, 36, 3, C.ink); D.outline(x, cy, w, 36, 3, 1, C.warn)
@@ -110,10 +113,7 @@ local function toolbar(ctx, x, y, w)
     local wrap = left_w + right_w > w - 20
     W.panel_box(x, cy, w, wrap and 82 or 44)
     local bx = x + 10
-    if W.text_box(bx, cy + 8, sw, 28, s.filter, "搜索形态键…") then
-        ctx.prompt({ title = "搜索形态键", text = s.filter or "", live = true,
-                     on_change = function(t) s.filter = t end, on_submit = function(t) s.filter = t end })
-    end
+    W.text_box("sculpt_filter", bx, cy + 8, sw, 28, s.filter, "搜索形态键…", function(t) s.filter = t end)
     bx = bx + sw + 12
     local c1, v1, w1 = W.toggle("只看已修改", bx, cy + 8, s.only_modified == true)
     if c1 then s.only_modified = v1 end
