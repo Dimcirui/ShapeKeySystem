@@ -820,13 +820,25 @@ local function do_scan()
         want = nil
     end
     state.expression.binding_source = want and b.hit or nil
+    -- 未保存的映射修改优先：换装或绑定不切换配置，提示一次，保存或恢复后下次扫描再切换。
+    local switch = (want and want ~= C.prog.id) or
+        (not want and C.profile_from_binding and C.prog.id ~= cfg.profile and Profile.registry[cfg.profile])
+    if switch and state.mapping.dirty then
+        if not C.unsaved_switch_noticed then
+            C.unsaved_switch_noticed = true
+            notice("warn", "映射修改未保存，暂不切换到绑定的表情配置：先保存或恢复配置")
+        end
+        want = nil
+    elseif not state.mapping.dirty then
+        C.unsaved_switch_noticed = nil
+    end
     if want and want ~= C.prog.id then
         if apply_profile(want, false) then
             C.profile_from_binding = true
             log("profile %s from %s", want, b.hit)
             return
         end
-    elseif not want and C.profile_from_binding and C.prog.id ~= cfg.profile and Profile.registry[cfg.profile] then
+    elseif not want and not state.mapping.dirty and C.profile_from_binding and C.prog.id ~= cfg.profile and Profile.registry[cfg.profile] then
         C.profile_from_binding = false
         if apply_profile(cfg.profile, false) then return end
     end

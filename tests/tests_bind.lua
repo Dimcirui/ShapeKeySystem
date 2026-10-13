@@ -55,6 +55,21 @@ check(st.presets.binding.sculpt == "Other" and find("Other") and find("· 默认
 SKS.call("set_setting", { key = "advanced", value = true })
 Panel.ui.page = "expr"; frame()
 check(not find("页面出错"), "expression page draws")
+-- unsaved mapping edits are not thrown away by a binding that names another profile
+local cur = st.expression.profile.id
+local other = cur == "mmd" and "arkit" or "mmd"
+local first = st.expression.channels[1].canonical
+check(SKS.call("edit_node", { name = first, node = { const = 0.25 } }) and st.mapping.dirty, "mapping edited: dirty")
+check(SKS.call("bind_config", { kind = "expression", name = other }), "bind_config expression")
+SKS.call("rescan"); ticks(5)
+local warned = false
+for _, n in ipairs(st.runtime.notices or {}) do if n.text:find("映射修改未保存", 1, true) then warned = true end end
+check(st.expression.profile.id == cur and st.mapping.dirty and warned, "dirty mapping: binding does not switch the profile, warns")
+check(SKS.call("revert_mappings", {}) and not st.mapping.dirty, "revert_mappings clears dirty")
+SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == other, "after revert the binding switches the profile")
+SKS.call("bind_config", { kind = "expression", name = cur }); SKS.call("rescan"); ticks(5)
+
 -- 设置与调试 holds the old presets page
 Panel.ui.page = "debug"; Panel.ui.page_state.debug.files_open = true; Panel.ui.win.h = 1060; frame()
 check(not find("页面出错"), "debug page with the binding / files section draws")
