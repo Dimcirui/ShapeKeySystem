@@ -1,7 +1,7 @@
 {
   "schema": "sks.profile/1",
   "id": "manuka",
-  "name": "Manuka 系（studio jingo：Manuka / Kumaly / Rindo / Selestia）",
+  "name": "Manuka / Kumaly / Rindo / Selestia",
   "description": "studio jingo 的 Manuka、Kumaly、Rindo、Selestia 共用的原生形态键（eye_close_L、eye_jito_L、brow_anger_L、mouth_smile_L 等）。成员之间个别键的形变不同，已在通道说明里注明；标了 guessed 的需要游戏实测。",
   "aliases": [],
   "channels": [

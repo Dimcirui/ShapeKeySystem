@@ -1,7 +1,7 @@
 LR = lambda a, b="": (a + "_L" + b, a + "_R" + b)
 
 SPECS = [
- {"id": "manuka", "name": "Manuka 系（studio jingo：Manuka / Kumaly / Rindo / Selestia）",
+ {"id": "manuka", "name": "Manuka / Kumaly / Rindo / Selestia",
   "description": "studio jingo 的 Manuka、Kumaly、Rindo、Selestia 共用的原生形态键（eye_close_L、eye_jito_L、brow_anger_L、mouth_smile_L 等）。成员之间个别键的形变不同，已在通道说明里注明；标了 guessed 的需要游戏实测。",
   "probes": ["kumaly", "manuka", "rindo", "selestia"],
   "slots": {
@@ -26,7 +26,7 @@ SPECS = [
    "mouth_right": "仅 Kumaly 有；是歪嘴口型（嘴角扭曲、收拢），不是纯平移",
    "funnel": "u 口型带张嘴"}},
 
- {"id": "chocolat", "name": "Chocolat 系（こまど：Chocolat / Plum / Lime）",
+ {"id": "chocolat", "name": "Chocolat / Plum / Lime",
   "description": "こまど的 Chocolat、Plum、Lime 共用的原生形态键（eye_blink_1_L、jitome_1_L、mouth_smile_1_L、eyebrow_angry_1_L 等），Lime 的不同拼写（eye_brink_1_L、A / U）作为备选名。标了 guessed 的需要游戏实测。",
   "probes": ["plum", "chocolat", "lime"],
   "slots": {
