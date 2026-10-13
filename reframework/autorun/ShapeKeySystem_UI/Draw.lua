@@ -19,6 +19,7 @@ local fonts = {}
 local measure_cache, measure_count = {}, 0
 local images = {}
 local deferred = {}
+local surface_w, surface_h = 1920, 1080
 
 function D.available() return type(d2d) == "table" and d2d.fill_rect ~= nil end
 
@@ -37,10 +38,23 @@ local function bind_api()
     A.rounded_rect = g.rounded_rect or function(x, y, w, h, _, _, t, c) A.outline_rect(x, y, w, h, t, c) end
     A.oval = g.oval or function(x, y, rx, ry, t, c) A.circle(x, y, math.max(rx, ry), t, c) end
     A.fill_quad = g.fill_quad or noop
-    A.surface_size = g.surface_size or function() return 1920, 1080 end
 end
 
+-- 仅在 d2d 绘制回调中查询原生渲染器；设备重置期间保留最后有效的物理尺寸。
+-- 普通帧、输入 hook 和布局查询只读缓存，不能访问可能已释放的 d2d 资源。
+local function refresh_surface()
+    local get_size = type(d2d) == "table" and d2d.surface_size
+    if type(get_size) ~= "function" then return true end
+    local ok, w, h = pcall(get_size)
+    if not ok or type(w) ~= "number" or type(h) ~= "number"
+        or not (w > 0 and w < math.huge and h > 0 and h < math.huge) then return false end
+    surface_w, surface_h = w, h
+    return true
+end
+
+-- 由 Panel.draw 调用；尺寸暂不可用时返回 false，让本次绘制停止并在下次回调重试。
 function D.reset_frame(scale)
+    if not refresh_surface() then return false end
     bind_api()
     if scale ~= D.S then
         D.S = scale
@@ -48,6 +62,7 @@ function D.reset_frame(scale)
     end
     clip_stack, clip = {}, nil
     deferred = {}
+    return true
 end
 
 -- ---------------------------------------------------------------- fonts / text
@@ -260,10 +275,8 @@ function D.flush_deferred()
     clip = saved
 end
 
-function D.surface_size()
-    local ok, w, h = pcall(d2d.surface_size)
-    if ok and w and h then return w / D.S, h / D.S end
-    return 1920 / D.S, 1080 / D.S
-end
+-- 输入使用物理像素；布局按 UI 缩放转换成逻辑坐标。两者都不调用原生 API。
+function D.surface_pixels() return surface_w, surface_h end
+function D.surface_size() return surface_w / D.S, surface_h / D.S end
 
 return D

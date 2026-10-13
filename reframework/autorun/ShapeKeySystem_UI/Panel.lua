@@ -229,9 +229,7 @@ function Panel.frame()
     end
     if Panel.open then
         I.capture()
-        local sw, sh = 1920, 1080
-        pcall(function() sw, sh = d2d.surface_size() end)
-        Blocker.surface = function() return sw, sh end
+        local sw, sh = D.surface_pixels()
         local ok, e = pcall(P.draw, sw, sh)
         if not ok then P.close(); toast("error", "输入框：" .. tostring(e)) end
     end
@@ -243,7 +241,7 @@ function Panel.ui_open() return Panel.open, Panel.open and ui.want_signals end
 function Panel.draw()
     if not Panel.open then return end
     local st, live = SKS.state, SKS.live
-    D.reset_frame(max(0.5, min(3, tonumber(st.settings.ui_scale) or 1)))
+    if not D.reset_frame(max(0.5, min(3, tonumber(st.settings.ui_scale) or 1))) then return end
     I.begin_frame()
     local win = window()
     clamp_window(win)
@@ -313,6 +311,10 @@ function Panel.draw()
     draw_cursor()
 end
 
-function Panel.attach(sks) SKS = sks end
+-- 绑定后端和只读尺寸缓存；输入 hook 不持有或访问 d2d 渲染器。
+function Panel.attach(sks)
+    SKS = sks
+    Blocker.surface = D.surface_pixels
+end
 
 return Panel
