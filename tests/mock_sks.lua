@@ -79,12 +79,14 @@ local function qmul(a, b)
 end
 local LID_BASE = { x = 0, y = 0.258819, z = 0, w = 0.965926 }      -- 30 degrees about Y
 for _, s in ipairs({ "L", "R" }) do
-    local name = s .. "_UpEyeLidJ_LOD02"
-    local p = { (s == "L") and 0.03 or -0.03, 0.03, 0.08 }
-    local b = mk_bone(name, head_j, p, LID_BASE, p)
-    b.get_LocalRotation = function()
-        local h = math.rad(LID_DEG[name] or 0) / 2
-        return qmul(LID_BASE, { x = math.sin(h), y = 0, z = 0, w = math.cos(h) })
+    for _, lid in ipairs({ "UpEyeLidJ_LOD02", "LoEyeLidJ_LOD02" }) do
+        local name = s .. "_" .. lid
+        local p = { (s == "L") and 0.03 or -0.03, (lid:sub(1, 2) == "Up") and 0.03 or 0.02, 0.08 }
+        local b = mk_bone(name, head_j, p, LID_BASE, p)
+        b.get_LocalRotation = function()
+            local h = math.rad(LID_DEG[name] or 0) / 2
+            return qmul(LID_BASE, { x = math.sin(h), y = 0, z = 0, w = math.cos(h) })
+        end
     end
 end
 

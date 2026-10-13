@@ -5,7 +5,8 @@ Slot spec values:
   ("L", "R", ["altL"], ["altR"])   split keys with 'any' fallbacks (best first)
   "name" or ("name", ["alt"])      one combined key: left/right signals averaged
 Gaze slots take ("L", "R") for per-eye keys or "name" for a both-eyes key.
-Optional per-slot overrides in NOTE[slot] / GUESS[slot].
+Optional per-slot overrides in NOTE[slot] / GUESS[slot]; spec["extra"] adds whole channels
+(name, group, node, note) after the slots.
 English (name_en, description_en, note_en) comes from tools/i18n/data_en.py; a note sentence it
 does not know stops the run (add it there).
 """
@@ -68,11 +69,11 @@ def joint_node(slot):
 
 # slot -> bone signal (builtin/signals.json). Gameplay emotes move the face's bones, not the
 # fcParams (in-game probes, 2026-10-13), so these keys take the larger of the two. Emote blinks
-# close the eyes with the upper-lid bones while the blink fcParams stay 0.
+# close (and widen) the eyes with the upper-lid bones while the eye fcParams stay 0.
 BONE = {
     "brow_outer": "browRaise", "brow_down": "browLower", "brow_bring": "browInnerDown",
-    "blink": "eyeClose", "lower_up": "cheekRaise", "jaw": "jawDrop", "smile": "mouthCornerUp",
-    "frown": "mouthCornerDown", "stretch": "mouthCornerOut",
+    "blink": "eyeClose", "wide": "eyeWiden", "lower_up": "cheekRaise", "jaw": "jawDrop",
+    "smile": "mouthCornerUp", "frown": "mouthCornerDown", "stretch": "mouthCornerOut",
 }
 BONE_NOTE = "游戏动作表情由面部骨骼驱动：同时读骨骼信号 {}，取较大者"
 
@@ -162,6 +163,11 @@ def build(spec, probes):
             ch["note"] = note
             ch["note_en"] = note_en(note)
             chans.append(ch)
+    # spec["extra"]: channels outside the slot templates, written as given (node and note)
+    for ex in spec.get("extra", ()):
+        ch = dict(ex)
+        ch["note_en"] = note_en(ch["note"])
+        chans.append(ch)
     return chans
 
 

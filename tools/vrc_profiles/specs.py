@@ -1,4 +1,8 @@
 LR = lambda a, b="": (a + "_L" + b, a + "_R" + b)
+EXTRA_NOTES = {
+    "smile_eye": "笑眼（^^）：下眼睑上提 × 同侧嘴角上扬，开心 1 多在 0.3–0.5、开心 2 约 0.75；战吼眯眼时没有笑，不会触发",
+    "grin": "嘴角几乎完全向外时张开成露齿笑：左右嘴角向外的平均值过 0.6 后线性到 0.5（开心 2）",
+}
 
 SPECS = [
  {"id": "manuka", "name": "Manuka 系（studio jingo：Manuka / Kumaly / Rindo / Selestia）",
@@ -167,7 +171,16 @@ SPECS = [
    "blink": "MMD 式单眼闭眼键：ウィンク２ 是角色左眼、ｳｨﾝｸ２右 是右眼（Blender 已确认）",
    "squint": "用おっとり（外侧上睑下垂）近似；ジト目_L 测得外侧上睑反而上移，没有使用",
    "brow_inner": "眉_斜め1：眉头上提、眉尾下垂",
-   "brow_outer": "整条眉毛上移"}},
+   "brow_outer": "整条眉毛上移"},
+  # kevin picked these from renders (2026-10-13): her ^^ smile-close keys for smiling eyes, and い
+  # as a grin once the smile is at its widest (happy 2)
+  "extra": [
+   {"name": "ウィンク", "group": "eye", "mul": [{"s": "lowerLidRaise.L"}, {"s": "mouthCornerUp.L"}],
+    "note": EXTRA_NOTES["smile_eye"]},
+   {"name": "ウィンク右", "group": "eye", "mul": [{"s": "lowerLidRaise.R"}, {"s": "mouthCornerUp.R"}],
+    "note": EXTRA_NOTES["smile_eye"]},
+   {"name": "い", "group": "mouth", "sum": [{"s": "mouthCornerOut.L", "k": 0.5}, {"s": "mouthCornerOut.R", "k": 0.5}],
+    "curve": {"deadzone": 0.6, "gain": 0.5}, "note": EXTRA_NOTES["grin"]}]},
 
  {"id": "moko", "name": "Moko",
   "description": "Moko 原生形态键（eye_wink2_L、eye_scornful_L、mouth_raise_L、eyebrow_negative_L、pupil_up 等）。标了 guessed 的需要游戏实测。",

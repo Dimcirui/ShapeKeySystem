@@ -34,11 +34,12 @@ local IDLE_MM = {
     L_EyeBrow_A_LOD01 = { 0, -3.3, 0 }, R_EyeBrow_A_LOD01 = { 0, -3.5, 0 },
     L_malarFat_B_LOD01 = { 0, 1.3, 0 }, R_malarFat_B_LOD01 = { 0, 1.1, 0 },
 }
-local IDLE_LID = -0.8
+local IDLE_LID, IDLE_LO = -0.8, -5.9
 local function idle_face()
     for k in pairs(BONE_OFF) do BONE_OFF[k] = nil end
     for b, o in pairs(IDLE_MM) do BONE_OFF[b] = { o[1] / 1000, o[2] / 1000, o[3] / 1000 } end
     LID_DEG.L_UpEyeLidJ_LOD02, LID_DEG.R_UpEyeLidJ_LOD02 = IDLE_LID, IDLE_LID
+    LID_DEG.L_LoEyeLidJ_LOD02, LID_DEG.R_LoEyeLidJ_LOD02 = IDLE_LO, IDLE_LO
 end
 -- move a bone by d = {x, y, z} metres from its idle position
 local function pose(bone, d)
@@ -55,7 +56,8 @@ check(by["eyeClose.L"] and by["eyeClose.L"].bone == "L_UpEyeLidJ_LOD02" and by["
 for k in pairs(FC) do FC[k] = nil end
 for i = 1, #CHANNELS do CHANNELS[i] = nil end
 for i, n in ipairs({ "あ", "口角上げL", "口角上げR", "口角下げ", "口_横幅1", "怒り", "眉_上", "眉_下",
-                     "下まつ毛_上_L", "下まつ毛_上_R", "ウィンク２", "ｳｨﾝｸ２右" }) do CHANNELS[i] = n end
+                     "下まつ毛_上_L", "下まつ毛_上_R", "ウィンク２", "ｳｨﾝｸ２右", "びっくり_L", "びっくり_R",
+                     "ウィンク", "ウィンク右", "い" }) do CHANNELS[i] = n end
 for k in pairs(WEIGHTS) do WEIGHTS[k] = nil end
 idle_face()
 SKS.call("set_profile", { id = "maya" }); SKS.call("rescan"); ticks(75)
@@ -107,19 +109,40 @@ check(near(w("下まつ毛_上_L"), expect("cheekRaise.L", 0.007)) and w("下ま
       string.format("left cheek 7 mm up -> 下まつ毛_上_L %.3f", w("下まつ毛_上_L")))
 idle_face(); ticks(3)
 
--- eyelids: emotes close the lids with the lid bones while the blink fcParams stay 0
-LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 38; ticks(3)
+-- eyelids: emotes close the lids with the lid bones while the blink fcParams stay 0. Maya's
+-- blink key still shows a slit at 0.8, and the vanilla lids look shut by ~30 deg: full at 30.
+LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 30; ticks(3)
 check(near(w("ウィンク２"), 1) and w("ｳｨﾝｸ２右") < 1e-6,
-      string.format("left upper lid turned 38 deg past idle -> ウィンク２ %.3f, ｳｨﾝｸ２右 %.3f", w("ウィンク２"), w("ｳｨﾝｸ２右")))
-LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 19; ticks(3)
-check(near(w("ウィンク２"), expect("eyeClose.L", 19)), string.format("half closed (19 deg) -> ウィンク２ %.3f (want %.3f)",
-      w("ウィンク２"), expect("eyeClose.L", 19)))
-LID_DEG.L_UpEyeLidJ_LOD02 = -13.8; ticks(3)
-check(w("ウィンク２") < 1e-6, "lid opened wide (-13.8 deg) -> no close")
-LID_DEG.R_UpEyeLidJ_LOD02 = IDLE_LID + 30; ticks(3)
-check(near(w("ｳｨﾝｸ２右"), expect("eyeClose.R", 30)) and w("ウィンク２") < 1e-6,
-      string.format("right lid 30 deg -> ｳｨﾝｸ２右 %.3f, ウィンク２ stays 0", w("ｳｨﾝｸ２右")))
+      string.format("left upper lid turned 30 deg past idle -> ウィンク２ %.3f, ｳｨﾝｸ２右 %.3f", w("ウィンク２"), w("ｳｨﾝｸ２右")))
+LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 15; ticks(3)
+check(near(w("ウィンク２"), expect("eyeClose.L", 15)), string.format("half closed (15 deg) -> ウィンク２ %.3f (want %.3f)",
+      w("ウィンク２"), expect("eyeClose.L", 15)))
+LID_DEG.R_UpEyeLidJ_LOD02 = IDLE_LID + 25; ticks(3)
+check(near(w("ｳｨﾝｸ２右"), expect("eyeClose.R", 25)), string.format("right lid 25 deg -> ｳｨﾝｸ２右 %.3f", w("ｳｨﾝｸ２右")))
 idle_face()
+-- wide eyes (cactus spin: -13.8 deg for ~4 s; battle cry: -6.5 deg) -> her びっくり keys
+LID_DEG.L_UpEyeLidJ_LOD02 = -13.8; LID_DEG.R_UpEyeLidJ_LOD02 = -13.8; ticks(3)
+check(near(w("びっくり_L"), 1) and near(w("びっくり_R"), 1) and w("ウィンク２") < 1e-6,
+      string.format("lids opened wide (-13.8 deg, cactus) -> びっくり_L %.3f, _R %.3f, no close", w("びっくり_L"), w("びっくり_R")))
+LID_DEG.L_UpEyeLidJ_LOD02 = -6.5; ticks(3)
+check(near(w("びっくり_L"), expect("eyeWiden.L", 5.7)), string.format("battle cry glare (-6.5 deg) -> びっくり_L %.3f (want %.3f)",
+      w("びっくり_L"), expect("eyeWiden.L", 5.7)))
+idle_face(); ticks(3)
+check(w("びっくり_L") < 1e-6 and w("ウィンク２") < 1e-6, "lids back at idle -> neither wide nor closed")
+-- smiling eyes (happy 1): lower lids lift ~4.4 deg while the mouth smiles -> her ^^ keys
+LID_DEG.L_LoEyeLidJ_LOD02 = IDLE_LO - 4.4; pose("L_cornerLip_LOD02", { 0, 0.008, 0 }); ticks(3)
+local want = expect("lowerLidRaise.L", 4.4) * expect("mouthCornerUp.L", 0.008)
+check(near(w("ウィンク"), want) and w("ウィンク") > 0.3 and w("ウィンク右") < 1e-6,
+      string.format("left lower lid up + smile -> ウィンク %.3f (want %.3f), ウィンク右 %.3f", w("ウィンク"), want, w("ウィンク右")))
+idle_face(); LID_DEG.L_LoEyeLidJ_LOD02 = IDLE_LO - 4.4; ticks(3)
+check(w("ウィンク") < 1e-6, "lower lid up without a smile (battle cry squint) -> no ^^ eyes")
+idle_face()
+-- the widest smile opens into a grin: い at half once both corners are near fully outward
+pose("L_cornerLip_LOD02", { 0.009, 0, 0 }); pose("R_cornerLip_LOD02", { -0.009, 0, 0 }); ticks(3)
+check(near(w("い"), 0.5), string.format("corners fully outward (9 mm) -> い %.3f (want 0.5)", w("い")))
+pose("L_cornerLip_LOD02", { 0.005, 0, 0 }); pose("R_cornerLip_LOD02", { -0.005, 0, 0 }); ticks(3)
+check(w("い") < 1e-6 and w("口_横幅1") > 0.2, string.format("corners 5 mm outward -> 口_横幅1 %.3f but no い", w("口_横幅1")))
+idle_face(); ticks(3)
 FC[1] = 0.006; LID_DEG.L_UpEyeLidJ_LOD02 = IDLE_LID + 10; ticks(3)
 check(near(w("ウィンク２"), math.max(0.6, expect("eyeClose.L", 10))),
       string.format("an idle blink drives both (fcParam 0.6, lid 10 deg) -> ウィンク２ %.3f, the larger", w("ウィンク２")))
@@ -139,7 +162,8 @@ for k in pairs(LID_DEG) do LID_DEG[k] = nil end
 -- also reads the bone signal of the same motion, same side (the emote face)
 local BONE_OF = { browOuterUp = "browRaise", browDown = "browLower", browBring = "browInnerDown",
                   cheekSquint = "cheekRaise", jawOpen = "jawDrop", smile = "mouthCornerUp",
-                  frown = "mouthCornerDown", stretch = "mouthCornerOut", blink = "eyeClose" }
+                  frown = "mouthCornerDown", stretch = "mouthCornerOut", blink = "eyeClose",
+                  eyeWide = "eyeWiden" }
 local GENERATED = { "airi", "chocolat", "kaguya", "karin", "kipfel", "mafuyu", "manuka", "maya", "moko",
                     "nitco", "sairou" }
 local function reads(node, acc)
