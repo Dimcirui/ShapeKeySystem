@@ -41,7 +41,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `enabled` | bool | 总开关 |
 | `ui_open` | bool | 面板是否打开 |
 | `advanced` | bool | 界面是否显示进阶栏目（只影响界面，持久化到设置） |
-| `notices` | list of `{id, level, text, time}` | 给界面显示的提示，例如"已保存"、"预设与网格不匹配"。`level` 取值：`info` / `warn` / `error` |
+| `notices` | list of `{id, level, key, args, text, time}` | 给界面显示的提示，例如"已保存"、"预设与网格不匹配"。`level` 取值：`info` / `warn` / `error`。`key` + `args` 是消息 id 和参数，`text` 是按当前语言渲染好的文本（第 15 节） |
 
 ### 3.2 `state.scene`
 | 字段 | 类型 | 说明 |
@@ -422,7 +422,7 @@ reframework/data/ShapeKeySystem/mods/profiles/<作者前缀.名字>.json        
 
 - FBS 管理通道的检测方法（第 6 节）：已暂缓，第一版不做。
 - 撤销是否扩展到表情增益和映射编辑（目前只覆盖捏脸）。
-- 多语言文本由界面层负责还是后端返回 key：建议后端只返回 key 和参数，界面负责翻译。
+- ~~多语言文本由界面层负责还是后端返回 key：建议后端只返回 key 和参数，界面负责翻译。~~ 已定，见第 15 节。
 
 ## 11. 给其他插件的公开接口 `ShapeKeySystemAPI`（2026-10-10，v1.0）
 
@@ -526,3 +526,22 @@ end)
 - **装备名**：`builtin/armor_names.json`（418 个模型编号，由 Modding-Toolkit 的 `assets/mhws/armor_sets/mhws_armor_sets.json` 生成）。显示优先级：绑定文件里的 `name` > 原版装备名 > 模型编号。
 - **页面调整**：「预设」页从导航移除，内容放进「设置与调试」底部可折叠的"绑定与配置文件"区，给排查问题用。查找过程里，整套共用的绑定不再重复列出。「视线」页并进了表情详情底部的「视线设置」区。
 - **捏脸**：新增 `reset_sculpt_all`（重置）、`zero_sculpt_all`（归零），各算一步撤销。新增「隐藏非预设通道」（`SculptKey.in_preset`），「A/B 对比」改名为「对比初始」。
+
+## 15. 界面语言（2026-10-13）：中文 / English
+
+- **设置**：`language` 取 `"zh"`（默认）或 `"en"`。`set_setting {key = "language", value}` 立即生效并写进 settings.json，其他值返回 `E_BAD_ARGS`。面板「设置与调试 → 语言 / Language」和 imgui 调试窗口的「设置」里都能切换。
+- **实现**：`ShapeKeySystem_Core/I18n.lua`。`L.t(id, ...)` 取当前语言的消息文本（参数走 `string.format`）；`L.field(obj, "name")` 在英文时取 `name_en`，没有就退回 `name`；`L.pick(v)` 处理 `{zh, en}` 对和 `{k = id, args}`。缺英文时显示中文；未知 id 显示 id 本身并记进 `L.missing`。
+- **分工**（第 10 节的结论：后端给 key 和参数，界面负责翻译）：
+  1. **界面和 imgui 文字**：全部在 I18n.lua 的消息表里（id → {中文, 英文}），界面文件、`DebugUI.lua`、`API.lua` 里不再有中文字面量（`tests/tests_i18n.lua` 检查）。imgui 控件的标签带固定的 `##id`，切换语言不会丢展开状态。
+  2. **后端提示**：`notice(level, key, args)`，状态见 3.1。切换语言时 `text` 重新渲染。参数可以是 `{zh, en}` 对（配置名、装备名）或 `{k = id}`（嵌套一条消息）。界面用 `L.notice_text(n)` 显示。面板自己的 toast 同理：`ctx.toast(level, {k = id, args})` 会随语言重绘，也可以直接传字符串。
+  3. **跟数据放在一起的显示名**：中文字段旁边加 `_en` 字段，状态里两个都给，界面用 `L.field` 选。
+     - `Expression.lua` 的 `REGIONS` / `GROUPS`：`name_en` → `expression.regions[i].name_en`、`groups[i].name_en`
+     - `Conditions.lua`：条件 `label_en`，枚举选项 `label_en`（武器名 `C.WEAPONS_EN`）→ `conditions.defs[i].label_en`
+     - 表情配置 JSON：`name_en`、`description_en`，通道 `note_en` → `presets.expression[i].name_en`、`expression.profile.name_en`、`expression.preview.name_en`、`channels[i].note_en`、`presets.binding.expression_en`
+     - `signals.json`：`note_en`（只给含中文的说明）→ `mapping.signals[i].note_en`
+     - `armor_names.json` 本来就有 `zh` / `en`（Modding-Toolkit 的官方英文名）→ `presets.bind.display_en`
+     - 面部图样式 `faces/*.json`：`name_en`；`Version.lua`：`author_en`、`history[i].notes_en`
+     - 父预设查找链的错误：`binding.chain[i].error_key`（消息 id），`error` 仍是当前语言的文本
+  4. **不翻译**：形态键 / 通道名、信号名、配置 id、文件名和路径、命令名、错误码和命令返回的错误说明（本来就是英文）、`source_text` 公式、日志和状态栏的诊断信息、用户自己起的名字。
+- **数据的英文**：`tools/i18n/data_en.py` 是配置名、说明和通道说明的译文（逐句的词表加几条句式），`python -I tools/i18n/add_en.py` 把 `*_en` 字段写进 builtin 的配置和 `signals.json`（只加字段，不动中文和排版）。改了中文说明后再跑一次，没有译文的句子会直接报出来。`tools/vrc_profiles/gen.py` 生成配置时也直接写英文。
+- **排版**：英文比中文长，按钮行按实际宽度排：放不下时先缩短下拉框，再换到第二行；标签列按最长的标签加宽。中文的布局不变。`python run.py --shots` 另外输出 `tests/shots/en_*.png`。

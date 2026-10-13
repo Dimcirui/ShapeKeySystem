@@ -4,6 +4,9 @@
 
 作者：谛听 Dimcirui。版本见 `reframework/autorun/ShapeKeySystem_Core/Version.lua`。
 
+界面语言：中文（默认）/ English，在「设置与调试 → 语言 / Language」切换（需要先打开右上角的「进阶」）。
+English UI: turn on 进阶 (Advanced, top right), open 设置与调试 (Settings), set 语言 / Language to English.
+
 ## 目录
 
 | 路径 | 内容 |
@@ -17,6 +20,7 @@
 | `tests/` | 离线测试（Python lupa 跑 Lua 5.4 + REFramework mock） |
 | `tools/deploy.ps1` | repo 和游戏目录之间同步 |
 | `tools/face_gen/` | 面部导航图生成器 |
+| `tools/i18n/` | 内置数据的英文（配置名、通道说明、信号说明），`add_en.py` 写入 `*_en` 字段 |
 | `toys/SKS_Mocap/` | 个人玩具：iFacialMocap → ARKit 形态键（不属于 SKS，不随 SKS 发布） |
 | `docs/plans/` | 设计文档和 UI ↔ 后端接口约定 |
 

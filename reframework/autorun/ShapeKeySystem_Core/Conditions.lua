@@ -1,8 +1,9 @@
 -- ShapeKeySystem: game-state conditions for the conditional expression layer (CondExpr.lua).
 --
 -- Design taken from the user's RE4 MOD Variant Manager (Conditions/Registry.lua):
---   def = { id (stored in configs, never rename), kind = "bool" | "number" | "enum", label,
---           get(V) -> value | nil, options = {{value, label}} for enums }
+--   def = { id (stored in configs, never rename), kind = "bool" | "number" | "enum", label, label_en,
+--           get(V) -> value | nil, options = {{value, label, label_en}} for enums }
+--   label is Chinese (the default UI language), label_en English; I18n.field picks by language.
 --   nil means "cannot read" and counts as NOT satisfied (never as false).
 --   cond = { type, op, value, band }   rule = { conditions, logic = "AND" | "OR", hold }
 --   An empty rule never matches; an unknown condition id evaluates false (retired ids degrade).
@@ -15,10 +16,15 @@
 -- get_WeaponType(), get_WeaponHandling() (cHunterWpNNHandling). Per-weapon getters from
 -- ArmorVariantManager's Conditions/ (MIT); bools from the 2026-05 visibility controller probes.
 
+local I18n = require("ShapeKeySystem_Core.I18n")
+
 local C = {}
 
 C.WEAPONS = { [0] = "大剑", "片手剑", "双刀", "太刀", "大锤", "狩猎笛", "长枪", "铳枪", "斩斧", "盾斧",
               "操虫棍", "弓", "重弩", "轻弩" }
+C.WEAPONS_EN = { [0] = "Great Sword", "Sword & Shield", "Dual Blades", "Long Sword", "Hammer", "Hunting Horn",
+                 "Lance", "Gunlance", "Switch Axe", "Charge Blade", "Insect Glaive", "Bow", "Heavy Bowgun",
+                 "Light Bowgun" }
 
 local V = {}            -- sampled values of this update (id -> value)
 C.V = V
@@ -62,44 +68,53 @@ end
 
 -- bool getters on app.HunterCharacter, one row each (RE4 PlayerBools style)
 local HUNTER_BOOLS = {
-    { "combat",        "get_IsCombat",          "战斗中" },
-    { "combat_boss",   "get_IsCombatBoss",      "大型怪物战斗中" },
-    { "combat_angry",  "get_IsCombatAngryBoss", "怪物愤怒中" },
-    { "half_combat",   "get_IsHalfCombat",      "半战斗（警戒）" },
-    { "riding",        "get_IsPorterRiding",    "骑乘鸟车" },
-    { "climbing",      "get_IsClimbWall",       "攀爬中" },
-    { "in_tent",       "get_IsInAllTent",       "在帐篷里" },
-    { "base_camp",     "get_IsInBaseCamp",      "在营地" },
-    { "life_area",     "get_IsInLifeArea",      "在生活区域" },
-    { "hot_area",      "get_IsInHotArea",       "炎热区域" },
-    { "cold_area",     "get_IsInColdArea",      "寒冷区域" },
-    { "enemy_wave",    "get_IsInEnemyWave",     "怪物群袭中" },
+    { "combat",        "get_IsCombat",          "战斗中",         "In combat" },
+    { "combat_boss",   "get_IsCombatBoss",      "大型怪物战斗中", "Fighting a large monster" },
+    { "combat_angry",  "get_IsCombatAngryBoss", "怪物愤怒中",     "Monster enraged" },
+    { "half_combat",   "get_IsHalfCombat",      "半战斗（警戒）", "Half combat (alert)" },
+    { "riding",        "get_IsPorterRiding",    "骑乘鸟车",       "Riding the Seikret" },
+    { "climbing",      "get_IsClimbWall",       "攀爬中",         "Climbing" },
+    { "in_tent",       "get_IsInAllTent",       "在帐篷里",       "In a tent" },
+    { "base_camp",     "get_IsInBaseCamp",      "在营地",         "At a base camp" },
+    { "life_area",     "get_IsInLifeArea",      "在生活区域",     "In a living area" },
+    { "hot_area",      "get_IsInHotArea",       "炎热区域",       "Hot area" },
+    { "cold_area",     "get_IsInColdArea",      "寒冷区域",       "Cold area" },
+    { "enemy_wave",    "get_IsInEnemyWave",     "怪物群袭中",     "In a monster swarm" },
 }
 
-def({ id = "weapon_on", kind = "bool", label = "拔刀" })
-def({ id = "enemy_aware", kind = "bool", label = "被怪物察觉" })
-for _, b in ipairs(HUNTER_BOOLS) do def({ id = b[1], kind = "bool", label = b[3] }) end
-def({ id = "dead", kind = "bool", label = "倒地（力尽）" })
-def({ id = "hp_pct", kind = "number", label = "血量 %", min = 0, max = 100 })
-def({ id = "red_hp_pct", kind = "number", label = "红血 %", min = 0, max = 100 })
-def({ id = "stamina_pct", kind = "number", label = "耐力 %", min = 0, max = 100 })
-def({ id = "hp_decreased", kind = "bool", label = "受伤（掉血的那一帧，配合保持时间）" })
-def({ id = "hp_increased", kind = "bool", label = "回血（回血的那一帧，配合保持时间）" })
+def({ id = "weapon_on", kind = "bool", label = "拔刀", label_en = "Weapon drawn" })
+def({ id = "enemy_aware", kind = "bool", label = "被怪物察觉", label_en = "Spotted by a monster" })
+for _, b in ipairs(HUNTER_BOOLS) do def({ id = b[1], kind = "bool", label = b[3], label_en = b[4] }) end
+def({ id = "dead", kind = "bool", label = "倒地（力尽）", label_en = "Fainted (carted)" })
+def({ id = "hp_pct", kind = "number", label = "血量 %", label_en = "Health %", min = 0, max = 100 })
+def({ id = "red_hp_pct", kind = "number", label = "红血 %", label_en = "Red health %", min = 0, max = 100 })
+def({ id = "stamina_pct", kind = "number", label = "耐力 %", label_en = "Stamina %", min = 0, max = 100 })
+def({ id = "hp_decreased", kind = "bool", label = "受伤（掉血的那一帧，配合保持时间）",
+      label_en = "Hit (1 frame, use a hold time)" })
+def({ id = "hp_increased", kind = "bool", label = "回血（回血的那一帧，配合保持时间）",
+      label_en = "Healed (1 frame, use a hold time)" })
 local weapon_options = {}
-for i = 0, #C.WEAPONS do weapon_options[#weapon_options + 1] = { value = i, label = C.WEAPONS[i] } end
-def({ id = "weapon_type", kind = "enum", label = "武器类型", options = weapon_options })
-def({ id = "weapon_form", kind = "enum", label = "武器形态", options = {
-    { value = "normal", label = "普通" },
-    { value = "db_kijin", label = "双刀 · 鬼人化" }, { value = "db_enhanced", label = "双刀 · 鬼人强化" },
-    { value = "sa_axe", label = "斩斧 · 斧" }, { value = "sa_axe_enhanced", label = "斩斧 · 斧强化" },
-    { value = "sa_sword", label = "斩斧 · 剑" }, { value = "sa_sword_awakened", label = "斩斧 · 剑觉醒" },
-    { value = "cb_sword", label = "盾斧 · 剑" }, { value = "cb_axe", label = "盾斧 · 斧" },
-    { value = "cb_shield", label = "盾斧 · 盾强化" }, { value = "cb_triple", label = "盾斧 · 三重强化" },
-    { value = "ig_red", label = "操虫棍 · 红灯" }, { value = "ig_white", label = "操虫棍 · 白灯" },
-    { value = "ig_orange", label = "操虫棍 · 橙灯" }, { value = "ig_triple", label = "操虫棍 · 三灯" },
+for i = 0, #C.WEAPONS do weapon_options[#weapon_options + 1] = { value = i, label = C.WEAPONS[i], label_en = C.WEAPONS_EN[i] } end
+def({ id = "weapon_type", kind = "enum", label = "武器类型", label_en = "Weapon type", options = weapon_options })
+def({ id = "weapon_form", kind = "enum", label = "武器形态", label_en = "Weapon form", options = {
+    { value = "normal", label = "普通", label_en = "Normal" },
+    { value = "db_kijin", label = "双刀 · 鬼人化", label_en = "Dual Blades · Demon Mode" },
+    { value = "db_enhanced", label = "双刀 · 鬼人强化", label_en = "Dual Blades · Archdemon Mode" },
+    { value = "sa_axe", label = "斩斧 · 斧", label_en = "Switch Axe · Axe" },
+    { value = "sa_axe_enhanced", label = "斩斧 · 斧强化", label_en = "Switch Axe · Power Axe" },
+    { value = "sa_sword", label = "斩斧 · 剑", label_en = "Switch Axe · Sword" },
+    { value = "sa_sword_awakened", label = "斩斧 · 剑觉醒", label_en = "Switch Axe · Amped Sword" },
+    { value = "cb_sword", label = "盾斧 · 剑", label_en = "Charge Blade · Sword" },
+    { value = "cb_axe", label = "盾斧 · 斧", label_en = "Charge Blade · Axe" },
+    { value = "cb_shield", label = "盾斧 · 盾强化", label_en = "Charge Blade · Shield charged" },
+    { value = "cb_triple", label = "盾斧 · 三重强化", label_en = "Charge Blade · Triple charged" },
+    { value = "ig_red", label = "操虫棍 · 红灯", label_en = "Insect Glaive · Red extract" },
+    { value = "ig_white", label = "操虫棍 · 白灯", label_en = "Insect Glaive · White extract" },
+    { value = "ig_orange", label = "操虫棍 · 橙灯", label_en = "Insect Glaive · Orange extract" },
+    { value = "ig_triple", label = "操虫棍 · 三灯", label_en = "Insect Glaive · Triple extract" },
 } })
-def({ id = "spirit_level", kind = "number", label = "太刀气刃等级", min = 0, max = 4 })
-def({ id = "charge_level", kind = "number", label = "蓄力等级", min = 0, max = 4 })
+def({ id = "spirit_level", kind = "number", label = "太刀气刃等级", label_en = "Long Sword Spirit level", min = 0, max = 4 })
+def({ id = "charge_level", kind = "number", label = "蓄力等级", label_en = "Charge level", min = 0, max = 4 })
 
 C.NUM_OPS = { "<=", "<", ">=", ">", "==" }
 C.ENUM_OPS = { "==", "~=" }
@@ -245,15 +260,15 @@ function C.eval_rule(rule)
     return all
 end
 
--- display text of a value
+-- display text of a value, in the interface language
 function C.value_text(id, v)
     local d = defs[id]
     if v == nil then return "—" end
     if d and d.kind == "enum" then
-        for _, o in ipairs(d.options) do if o.value == v then return o.label end end
+        for _, o in ipairs(d.options) do if o.value == v then return I18n.field(o, "label") end end
     end
     if type(v) == "number" then return string.format("%.1f", v) end
-    if type(v) == "boolean" then return v and "是" or "否" end
+    if type(v) == "boolean" then return v and I18n.t("cond.value_yes") or I18n.t("cond.value_no") end
     return tostring(v)
 end
 

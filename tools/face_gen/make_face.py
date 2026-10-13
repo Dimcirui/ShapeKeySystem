@@ -3,7 +3,7 @@
     python make_face.py <style.json> <source image> <reframework dir>
 
 style.json:
-  { "id": "chibi", "name": "Q 版大头", "size": 600,
+  { "id": "chibi", "name": "Q 版大头", "name_en": "Chibi", "size": 600,
     "zones": { "<zone>": { "boxes": [[x0,y0,x1,y1], ...],      # whole strokes fully inside a box
                            "polys": [[[x,y], ...], ...],        # ink inside a polygon (strokes joined
                            "min_px": 300 } } }                  #   to hair / outline), blobs >= min_px
@@ -11,7 +11,7 @@ style.json:
   overlaps, so list eye last.
 
 Writes reframework/images/ShapeKeySystem/faces/<id>/face_*.png and
-reframework/data/ShapeKeySystem/faces/<id>.json (name, size, hit ellipses in output pixels).
+reframework/data/ShapeKeySystem/faces/<id>.json (name, name_en, size, hit ellipses in output pixels).
 lines = everything outside the zones (cream); per zone: idle (cream, same as the lines), hover
 (brighter, faint white halo), sel (gold + gold halo), glow (neutral halo for live activity)."""
 import sys, json, os
@@ -129,6 +129,7 @@ for key, m in zones.items():
         (ax, ay), (bx, by) = P(sl[1].start, sl[0].start), P(sl[1].stop, sl[0].stop)
         ells.append([round((ax + bx) / 2, 1), round((ay + by) / 2, 1), round((bx - ax) / 2 + 4, 1), round((by - ay) / 2 + 4, 1)])
     hit[key] = sorted(ells)
-manifest = {"name": cfg["name"], "size": [SIZE, SIZE], "images": f"ShapeKeySystem/faces/{cfg['id']}/", "zones": hit}
+manifest = {"name": cfg["name"], **({"name_en": cfg["name_en"]} if cfg.get("name_en") else {}),
+            "size": [SIZE, SIZE], "images": f"ShapeKeySystem/faces/{cfg['id']}/", "zones": hit}
 json.dump(manifest, open(os.path.join(DATA_DIR, cfg["id"] + ".json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 print(json.dumps(manifest, ensure_ascii=False))

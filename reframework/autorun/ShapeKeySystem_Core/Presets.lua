@@ -20,6 +20,7 @@
 -- { "deleted": true }; tombstoned files are treated as missing.
 
 local U = require("ShapeKeySystem_Core.Util")
+local I18n = require("ShapeKeySystem_Core.I18n")
 
 local P = {}
 
@@ -129,8 +130,9 @@ function P.validate_sculpt(d)
 end
 
 -- ---------------------------------------------------------------- bindings
--- Returns { part, chain = {{path, exists, hit, level, error?}}, hit = shown path?, source?, data?,
---           base? (part ID of the file, or "default"), level?, folder? }
+-- Returns { part, chain = {{path, exists, hit, level, error?, error_key?}}, hit = shown path?, source?,
+--           data?, base? (part ID of the file, or "default"), level?, folder? }
+-- error_key: an I18n message id for errors the panel shows translated (error = its text now)
 -- level: "global" / "own" / "model" / "default".
 -- only_source = "mods": the chain a mod alone defines (the defaults for reset / A-B preview).
 -- fingerprint: the worn mesh's channel fingerprint for this part (stale check), may be nil.
@@ -157,7 +159,8 @@ function P.resolve_binding(part, only_source, fingerprint)
                 local ok, msg = P.validate_binding(data)
                 local fps = type(data.fingerprints) == "table" and data.fingerprints or nil
                 if ok and source == "mods" and fingerprint and fps and fps[part] and fps[part] ~= fingerprint then
-                    ok, msg = false, "通道指纹不符（可能是被覆盖的旧 mod 留下的），已跳过"
+                    ok, msg = false, I18n.t("binding.stale_fingerprint")
+                    entry.error_key = "binding.stale_fingerprint"
                 end
                 if ok then
                     entry.hit = true

@@ -31,6 +31,8 @@
 --     that had to wait is done by B.frame() once the other mod lets go (this also repairs a
 --     restore of a wrong saved state by the other side)
 
+local I18n = require("ShapeKeySystem_Core.I18n")
+
 local B = {
     enabled = false, installed = false, failed = {}, last_error = nil,
     wheel = 0, saved = nil, last_mode_at = 0,
@@ -269,9 +271,9 @@ end
 -- one line for the status bar: is the OS cursor pinned, how often the game fought the mode
 function B.diag()
     if not B.enabled then return "" end
-    local hook = (#B.failed == 0) and string.format("放开光标 %d 次", B.forced) or ("hook 失败：" .. B.failed[#B.failed])
-    return string.format("鼠标 %s · %s · 最近移动 %.0f,%.0f", B.pinned and "锁定(虚拟光标)" or "自由",
-        hook, B.delta[1], B.delta[2])
+    local L = I18n
+    local hook = (#B.failed == 0) and L.t("blocker.forced", B.forced) or L.t("blocker.hook_failed", B.failed[#B.failed])
+    return L.t("blocker.line", B.pinned and L.t("blocker.pinned") or L.t("blocker.free"), hook, B.delta[1], B.delta[2])
 end
 
 -- engine mouse device wheel (via.hid.MouseDevice.get_WheelDelta). Read every game frame by

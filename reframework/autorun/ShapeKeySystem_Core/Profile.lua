@@ -9,6 +9,8 @@
 --   { "const": 0.5 }
 --   { "eye": "L", "axis": "pitch", "sign": 1 }   eye angle / full_deg, clamped 0..1
 --   { "sum": [...] } { "mul": [...] } { "max": [...] } { "min": [...] } { "sub": [a, b] }
+-- Display text: the profile's name / description and a channel's note are Chinese; name_en /
+-- description_en / note_en are their English (optional, the panel falls back to Chinese).
 -- A channel entry is itself a node plus name / group / gaze_set / extension / note, and
 -- optionally any (more mesh names, best first) / unless (channels that disable it), see
 -- Names.build_index. A channel with no node keys has no game signal (manual / sculpt only).
@@ -32,7 +34,7 @@ function P.load_signals()
     for i, e in ipairs(data.signals or {}) do
         if type(e.name) == "string" and tonumber(e.param) then
             local sig = { slot = i, name = e.name, param = math.floor(tonumber(e.param)),
-                          guessed = e.guessed == true, note = e.note or "" }
+                          guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
             s.list[#s.list + 1] = sig
             s.by_name[e.name] = sig
         end
@@ -48,7 +50,7 @@ function P.load_all()
             local data = U.load_json(f.path)
             if data and data.schema == "sks.profile/1" and type(data.channels) == "table" then
                 local id = type(data.id) == "string" and data.id or f.base
-                reg[id] = { id = id, name = data.name or id, source = src, path = f.path,
+                reg[id] = { id = id, name = data.name or id, name_en = data.name_en, source = src, path = f.path,
                             extends = data.extends, data = data }
             end
         end
@@ -85,7 +87,7 @@ function P.resolve(id, seen)
         end
     end
     for _, a in ipairs(e.data.aliases or {}) do aliases[#aliases + 1] = a end
-    return { id = e.id, name = e.name, source = e.source, extends = e.extends,
+    return { id = e.id, name = e.name, name_en = e.name_en, source = e.source, extends = e.extends,
              aliases = aliases, channels = channels }
 end
 
@@ -217,7 +219,7 @@ end
 --   prog.has_eye, prog.n, prog.slot_of, prog.names
 function P.compile(resolved, edits)
     edits = edits or {}
-    local prog = { id = resolved.id, name = resolved.name, source = resolved.source,
+    local prog = { id = resolved.id, name = resolved.name, name_en = resolved.name_en, source = resolved.source,
                    extends = resolved.extends, aliases = resolved.aliases,
                    channels = {}, order = {}, params = {}, has_eye = false,
                    n = 0, slot_of = {}, names = {} }
@@ -230,7 +232,7 @@ function P.compile(resolved, edits)
         local node = edits[entry.name] or P.node_of(entry)
         local c = { slot = i, name = entry.name, group = entry.group or "extra",
                     gaze_set = entry.gaze_set, extension = entry.extension == true,
-                    note = entry.note, has_signal = false, guessed = entry.guessed == true,
+                    note = entry.note, note_en = entry.note_en, has_signal = false, guessed = entry.guessed == true,
                     source_text = "—", fn = nil, node = node, edited = edits[entry.name] ~= nil }
         if has_node(node) then
             local env = { signals = P.signals, slot_of = prog.slot_of, params = {}, deps = {},

@@ -11,6 +11,7 @@ local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Faces = require("ShapeKeySystem_UI.Faces")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -125,7 +126,7 @@ local function draw_face(ctx, x, y, w)
     local style = Faces.get(st.settings.face_style)
     if not style then
         W.panel_box(x, y, w, 80)
-        D.text("缺少面部图：reframework/data/ShapeKeySystem/faces/*.json", x + 10, y + 10, C.warn, W.small(), w - 20)
+        D.text(L.t("basic.no_faces"), x + 10, y + 10, C.warn, W.small(), w - 20)
         return 80
     end
     local s = (w - 20) / style.w
@@ -135,7 +136,7 @@ local function draw_face(ctx, x, y, w)
     local fx, fy = x + 10, y + 10
     local lines = img(style, "lines")
     if not lines then
-        D.text("缺少图片 reframework/images/" .. style.prefix .. "face_lines.png", fx, fy, C.warn, W.small(), w - 20)
+        D.text(L.t("basic.missing_image", style.prefix .. "face_lines.png"), fx, fy, C.warn, W.small(), w - 20)
     else
         D.image(lines, fx, fy, iw, ih)
     end
@@ -175,13 +176,13 @@ local function draw_controls(ctx, x, y, w)
     -- profile
     local plist, labels, cur = st.presets.expression or {}, {}, nil
     for i, p in ipairs(plist) do
-        labels[i] = p.name
+        labels[i] = L.field(p, "name")
         if ex.profile and p.id == ex.profile.id then cur = i end
     end
-    D.text_mid("表情配置", x, cy, 28, C.muted, W.small())
-    local ch, idx = W.select("basic_profile", x + 70, cy, min(260, w - 70), 28, labels, cur, { placeholder = "（无）" })
+    D.text_mid(L.t("basic.profile"), x, cy, 28, C.muted, W.small(), 66)
+    local ch, idx = W.select("basic_profile", x + 70, cy, min(260, w - 70), 28, labels, cur, { placeholder = L.t("common.none") })
     if ch and plist[idx] then call("set_profile", { id = plist[idx].id }) end
-    if ex.binding_source then W.chip("来自绑定", x + 70 + min(260, w - 70) + 10, cy + 5, C.brass) end
+    if ex.binding_source then W.chip(L.t("basic.from_binding"), x + 70 + min(260, w - 70) + 10, cy + 5, C.brass) end
     cy = cy + 40
 
     -- selected region
@@ -190,28 +191,28 @@ local function draw_controls(ctx, x, y, w)
     local card_h = 86
     W.panel_box(x, cy, w, card_h, true)
     if r then
-        local tw = W.h2(r.name, x + 14, cy + 12)
-        W.chip(string.format("实时 %.2f", live.region_activity[i] or 0), x + 26 + tw, cy + 11, C.signal)
+        local tw = W.h2(L.field(r, "name"), x + 14, cy + 12)
+        W.chip(L.t("basic.live", live.region_activity[i] or 0), x + 26 + tw, cy + 11, C.signal)
         if st.runtime.advanced then
-            local label = string.format("在表情详情中查看 %d 个通道", #r.channel_slots)
+            local label = L.t("basic.show_channels", #r.channel_slots)
             local bw = D.measure(W.small(), label) + 22
             if W.button(label, x + w - bw - 12, cy + 8, bw, 24, { kind = "ghost", font = W.small() }) then
                 ctx.goto_page("expr")
             end
         end
-        local c2, v = big_slider(ctx, "rg_" .. key, "强度", x + 14, cy + 44, w - 28, r.gain, 0, 2)
+        local c2, v = big_slider(ctx, "rg_" .. key, L.t("basic.strength"), x + 14, cy + 44, w - 28, r.gain, 0, 2)
         if c2 then call("set_region_gain", { region = key, value = v }) end
     else
-        D.text("当前表情配置没有这个部位。", x + 14, cy + 14, C.muted, W.body())
+        D.text(L.t("basic.no_region"), x + 14, cy + 14, C.muted, W.body(), w - 28)
     end
     cy = cy + card_h + 12
 
     -- overall
     W.panel_box(x, cy, w, 108, true)
-    W.h2("整体", x + 14, cy + 10)
-    local c3, v3 = big_slider(ctx, "master", "表情强度", x + 14, cy + 38, w - 28, ex.master_gain or 1, 0, 2)
+    W.h2(L.t("basic.overall"), x + 14, cy + 10)
+    local c3, v3 = big_slider(ctx, "master", L.t("basic.master"), x + 14, cy + 38, w - 28, ex.master_gain or 1, 0, 2)
     if c3 then call("set_master_gain", { value = v3 }) end
-    local c4, v4 = big_slider(ctx, "gaze", "视线强度", x + 14, cy + 70, w - 28, ex.gaze_gain or 1, 0, 2)
+    local c4, v4 = big_slider(ctx, "gaze", L.t("basic.gaze"), x + 14, cy + 70, w - 28, ex.gaze_gain or 1, 0, 2)
     if c4 then call("set_gaze_gain", { value = v4 }) end
     cy = cy + 120
 
@@ -225,11 +226,10 @@ local function draw_controls(ctx, x, y, w)
         local sel = ctx.state.zone == z.key
         D.rrect(px, py, pw, 44, 3, C.panel)
         D.outline(px, py, pw, 44, 3, 1, sel and C.brass or C.line)
-        D.text((zr and zr.name) or z.key, px + 10, py + 6, C.text, W.body())
-        if zr then
-            local g = string.format("×%.2f", zr.gain)
-            D.text(g, px + pw - 10 - D.measure(W.mono(), g), py + 8, C.muted, W.mono())
-        end
+        local g = zr and string.format("×%.2f", zr.gain)
+        local gw = g and D.measure(W.mono(), g) or 0
+        D.text((zr and L.field(zr, "name")) or z.key, px + 10, py + 6, C.text, W.body(), pw - 26 - gw)
+        if zr then D.text(g, px + pw - 10 - gw, py + 8, C.muted, W.mono()) end
         W.meter(px + 10, py + 30, pw - 20, 5, zi and live.region_activity[zi] or 0, T.c.zone[z.key])
         if I.click(px, py, pw, 44) then ctx.state.zone = z.key end
     end

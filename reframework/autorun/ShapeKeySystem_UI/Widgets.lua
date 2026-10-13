@@ -5,6 +5,7 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local W = {}
 local C = T.c
@@ -81,16 +82,29 @@ end
 --   kind: "sculpt" | "expression" | "conditions"; cur: the config selected now (name / id);
 --   bound: the config the binding names for this kind (nil = none)
 -- Returns the width used.
-function W.default_button(ctx, x, y, kind, cur, bound)
+-- the button's label, or nil when it is not shown
+local function default_label(ctx, cur, bound)
     local bi = ctx.st.presets and ctx.st.presets.bind
-    if not bi or not cur or cur == "" then return 0 end
-    local f = small()
-    if bi.active and bound and cur == bound then return 0 end   -- the dropdown already says "· 默认"
+    if not bi or not cur or cur == "" then return nil end
+    if bi.active and bound and cur == bound then return nil end   -- the dropdown already says "· 默认"
     -- only the global default applies: the button says whose default it becomes
-    local label = bi.global_default and ("设为 " .. bi.display .. " 的默认") or "设为默认"
+    return bi.global_default and L.t("bind.set_default_for", L.field(bi, "display")) or L.t("bind.set_default"), bi
+end
+
+-- width W.default_button will take (0 when hidden), for laying out a row before drawing it
+function W.default_button_width(ctx, cur, bound)
+    local label = default_label(ctx, cur, bound)
+    return label and (D.measure(small(), label) + 22) or 0
+end
+
+function W.default_button(ctx, x, y, kind, cur, bound)
+    local label, bi = default_label(ctx, cur, bound)
+    if not label then return 0 end
+    local f = small()
+    local display = L.field(bi, "display")
     local clicked, bw = W.button(label, x, y, nil, 28, { font = f })
     if clicked then ctx.call("bind_config", { kind = kind, name = cur }) end
-    W.tooltip("穿上 " .. bi.display .. " 时自动使用左边选中的配置", x, y, bw, 28)
+    W.tooltip(L.t("bind.default_tip", display), x, y, bw, 28)
     return bw
 end
 
@@ -99,8 +113,8 @@ end
 function W.default_suffix(ctx, id, bound)
     local bi = ctx.st.presets and ctx.st.presets.bind
     if not bi or not bound or id ~= bound then return "" end
-    if bi.active then return " · 默认" end
-    if bi.global_default then return " · 全局默认" end
+    if bi.active then return L.t("bind.suffix_default") end
+    if bi.global_default then return L.t("bind.suffix_global") end
     return ""
 end
 
