@@ -14,7 +14,8 @@ $ErrorActionPreference = "Stop"
 
 $repo = Join-Path (Split-Path -Parent $PSScriptRoot) "reframework"
 $game = $env:SKS_GAME_REFRAMEWORK
-if (-not $game) { $game = "E:\Program\Steam\steamapps\common\MonsterHunterWilds\reframework" }
+# 要根据实际安装位置修改，不过是开发用所以问题不大
+if (-not $game) { $game = "C:\Steam\steamapps\common\MonsterHunterWilds\reframework" }
 if (-not (Test-Path $game)) { throw "game reframework folder not found: $game" }
 
 # relative paths owned by SKS; directories are mirrored (extra files on the target side are removed)
@@ -26,7 +27,7 @@ $owned = @(
     "data\ShapeKeySystem\faces",
     "images\ShapeKeySystem"
 )
-# addons/ (e.g. WildsChineseInput, a DLL) are separate optional components: not deployed here
+# REF-IME 从上游最新 Release 独立安装，见 install-ref-ime.ps1；这里仅部署 SKS 主包。
 
 function Get-Files($root, $rel) {
     $p = Join-Path $root $rel

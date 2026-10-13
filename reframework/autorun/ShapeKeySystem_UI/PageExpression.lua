@@ -1,10 +1,11 @@
--- ShapeKeySystem panel, advanced page "表情详情": profile, region strengths, smoothing and every
--- channel grouped by face part, with its live weight, gain and a "test" (force to 1) switch.
+-- 表情详情：共用两种绘制后端，按部位显示实时权重；映射草稿由 MappingEditor 编辑和提交。
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Eyes = require("ShapeKeySystem_UI.PageEyes")   -- gaze settings, drawn as a section here
+local Mapping = require("ShapeKeySystem_UI.MappingEditor")
+local I = require("ShapeKeySystem_UI.Input")
 
 local Page = {}
 local C = T.c
@@ -19,7 +20,8 @@ local function top_bars(ctx, x, y, w)
     local st, call, s = ctx.st, ctx.call, ctx.state
     local ex = st.expression
     local cy = y
-    W.panel_box(x, cy, w, 44)
+    local bar_h = w < 800 and 78 or 44
+    W.panel_box(x, cy, w, bar_h)
     local plist, labels, cur = st.presets.expression or {}, {}, nil
     for i, p in ipairs(plist) do
         labels[i] = string.format("%s（%s）", p.name, p.source)
@@ -40,28 +42,48 @@ local function top_bars(ctx, x, y, w)
     local bx = x + 80 + sw
     if pick then
         local _, aw = W.button("应用", bx, cy + 8, nil, 28, { kind = "primary" })
-        if _ then call("set_profile", { id = plist[pick].id }); s.pick_profile = nil; call("preview_profile", {}) end
+        if _ and call("set_profile", { id = plist[pick].id }) then s.pick_profile = nil; call("preview_profile", {}) end
         local c2, cw2 = W.button("取消", bx + aw + 6, cy + 8, nil, 28, { kind = "ghost" })
         if c2 then s.pick_profile = nil; call("preview_profile", {}) end
         bx = bx + aw + cw2 + 18
     end
     local bnd = st.presets.binding
+    local by = cy + 8
+    if w < 800 then bx, by = x + 10, cy + 42 end
     if not pick then
-        local dw = W.default_button(ctx, bx, cy + 8, "expression", ex.profile and ex.profile.id, bnd and bnd.profile_id)
+        local dw = W.default_button(ctx, bx, by, "expression", ex.profile and ex.profile.id, bnd and bnd.profile_id)
         if dw > 0 then bx = bx + dw + 16 end
     end
+    local created, create_w = W.button("新建", bx, by, nil, 28)
+    if created then
+        if s.mapping_draft or st.mapping.dirty then
+            ctx.toast("warn", "请先保存或恢复映射，并应用或取消当前草稿，再新建配置")
+        else
+            W.start_text(s, "profile_form", { title = "新建表情配置", confirm_text_color = 0xFFFFFFFF, on_submit = function(name)
+                if call("create_profile", { name = name }) then
+                    s.pick_profile, s.mapping_draft, s.name_form, s.confirm_restore = nil, nil, nil, nil
+                    s.filter, s.only_active, s.collapsed = "", false, {}
+                    call("preview_profile", {})
+                    W.reset_scroll("page:expr")
+                end
+            end })
+        end
+    end
+    bx = bx + create_w + 6
     local tu = ex.tuning
     -- gains / gaze follow the outfit: with a binding they are saved into it, otherwise they are
     -- the global settings (saved automatically)
     if tu and tu.source == "binding" then
-        local c3, b3 = W.button("保存调整", bx, cy + 8, nil, 28, { kind = tu.dirty and "primary" or nil, disabled = not tu.dirty })
+        local c3, b3 = W.button("保存到当前套装", bx, by, nil, 28, { kind = tu.dirty and "primary" or nil, disabled = not tu.dirty })
         if c3 then call("save_tuning") end
-        W.tooltip("把强度、增益和视线设置保存到当前绑定", bx, cy + 8, b3, 28)
+        W.tooltip("把强度、增益和视线设置保存到当前绑定", bx, by, b3, 28)
         bx = bx + b3 + 10
     end
-    cy = cy + 50
+    cy = cy + bar_h + 6
+    cy = cy + W.text_form(s, "profile_form", "expression_profile_name", x, cy, w)
     local pv = pick and ex.preview and ex.preview.id == plist[pick].id and ex.preview or nil
     s.browsing = pv
+    if s.mapping_draft and not pv then return cy - y end
     if pv then
         W.panel_box(x, cy, w, 34, true)
         D.text_mid(string.format("正在浏览：%s（未应用）· 当前装备的网格匹配 %d / %d 个通道", pv.name, pv.present, pv.total),
@@ -83,10 +105,7 @@ local function top_bars(ctx, x, y, w)
 
     W.panel_box(x, cy, w, 44)
     local fw = min(180, w * 0.25)
-    if W.text_box(x + 10, cy + 8, fw, 28, s.filter, "筛选通道…") then
-        ctx.prompt({ title = "筛选通道", text = s.filter or "", live = true,
-                     on_change = function(t) s.filter = t end, on_submit = function(t) s.filter = t end })
-    end
+    W.text_box("expression_filter", x + 10, cy + 8, fw, 28, s.filter, "筛选通道…", function(t) s.filter = t end)
     local c1, v1, w1 = W.toggle(pv and "只看网格里有的" or "只看活跃", x + 22 + fw, cy + 8, s.only_active == true)
     if c1 then s.only_active = v1 end
     local sx = x + 40 + fw + w1
@@ -126,6 +145,11 @@ local function channel_row(ctx, c, x, y, w)
     local nw = max(170, w * 0.3)
     local fg = c.present and C.text or C.faint
     local nx = x + 8 + D.text(c.name, x + 8, y + 3, fg, W.body(), nw - 60)
+    D.icon_tri(x + 3, y + 12, 3, ctx.state.mapping_draft and ctx.state.mapping_draft.original_name == c.canonical, C.brass)
+    if I.click(x, y, nw, h) then
+        if ctx.state.mapping_draft and ctx.state.mapping_draft.original_name == c.canonical then ctx.state.mapping_draft = nil
+        else Mapping.open(ctx, c.canonical) end
+    end
     if c.guessed then W.chip("推测", nx + 6, y + 4, C.warn, 16) end
     D.text((c.source_text or "") .. (c.present and "" or "  · 网格里没有"), x + 8, y + 22, C.faint, W.small(), nw - 12)
     W.tooltip((c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, nw, h)
@@ -167,25 +191,41 @@ function Page.draw(ctx, x, y, w)
     s.collapsed = s.collapsed or {}
     local ex = st.expression
     local cy = y + top_bars(ctx, x, y, w) + 8
+    cy = cy + Mapping.toolbar(ctx, x, cy, w)
+    if s.mapping_draft and not s.browsing then
+        return cy + Mapping.draw_draft(ctx, x, cy, w) - y
+    end
+    if not s.browsing then
+        D.text("点击形态键名称展开映射配置", x + 2, cy, C.faint, W.small(), w)
+        cy = cy + 24
+    end
     local filter = (s.filter or ""):lower()
     local pv = s.browsing
     local src = pv or ex
-    for _, g in ipairs(src.groups or {}) do
+    -- 以同一份通道/分组快照完成本次绘制，避免应用或删除映射时新旧 slot 混用。
+    local channels, groups = src.channels, src.groups
+    for _, g in ipairs(groups or {}) do
         local rows = {}
         for _, slot in ipairs(g.channel_slots) do
-            local c = src.channels[slot]
+            local c = channels[slot]
             local keep = pv and (not s.only_active or c.present) or (not pv and (not s.only_active or (live.weight[slot] or 0) > 0.01))
-            if c and keep and (filter == "" or c.name:lower():find(filter, 1, true) or c.canonical:lower():find(filter, 1, true)) then
+            local editing = c and not pv and s.mapping_draft and s.mapping_draft.original_name == c.canonical
+            if c and (editing or (keep and (filter == "" or c.name:lower():find(filter, 1, true) or c.canonical:lower():find(filter, 1, true)))) then
                 rows[#rows + 1] = c
             end
         end
         if #rows > 0 then
-            local open = not s.collapsed[g.key] or filter ~= ""
+            local draft = s.mapping_draft
+            local entry = draft and draft.original_name and st.mapping.entries[draft.original_name]
+            local editing_group = entry and entry.group == g.key
+            local open = not s.collapsed[g.key] or filter ~= "" or editing_group
             local clicked, hh = W.header(g.name, x, cy, w, open, string.format("%d 个", #rows))
             if clicked then s.collapsed[g.key] = open end
             cy = cy + hh + 2
             if open then
-                for _, c in ipairs(rows) do cy = cy + (pv and preview_row or channel_row)(ctx, c, x, cy, w) end
+                for _, c in ipairs(rows) do
+                    cy = cy + (pv and preview_row or channel_row)(ctx, c, x, cy, w)
+                end
             end
         end
     end
@@ -199,5 +239,7 @@ function Page.draw(ctx, x, y, w)
     if gopen then cy = cy + Eyes.draw(ctx, x, cy, w) end
     return cy - y
 end
+
+Page.want_signals = true
 
 return Page

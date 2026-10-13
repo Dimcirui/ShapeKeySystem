@@ -1,14 +1,14 @@
 -- ShapeKeySystem panel (M3): standalone window drawn with reframework-d2d or REFramework's ImGui
 -- draw list (Draw.lua). Talks to the backend only through SKS.state / SKS.live / SKS.call
 -- (docs/plans/shape-key-system-api.md).
---   re.on_frame  -> Panel.frame()  hotkey, input sampling, text prompt, ui_open flag
+--   re.on_frame  -> Panel.frame() / draw_inputs()  hotkey, input sampling, inline ImGui fields
 --   d2d draw / re.on_frame (imgui) -> Panel.draw()   layout + widgets (only while open)
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
-local P = require("ShapeKeySystem_UI.Prompt")
+local TextInput = require("ShapeKeySystem_UI.TextInput")
 local Blocker = require("ShapeKeySystem_UI.InputBlocker")
 
 local Panel = { open = false }
@@ -51,11 +51,14 @@ local function call(cmd, args)
 end
 
 local function goto_page(key)
+    local previous = ui.page_state[ui.page]
+    if previous then previous.name_form, previous.clip_form = nil, nil end
     ui.page = key
-    W.open_select = nil
+    W.open_select, W.open_search = nil, nil
+    TextInput.clear()
 end
 
-local ctx = { call = call, toast = toast, goto_page = goto_page, prompt = P.open }
+local ctx = { call = call, toast = toast, goto_page = goto_page }
 
 local function page_state(key)
     local s = ui.page_state[key]
@@ -204,9 +207,10 @@ function Panel.set_open(on)
     if on == Panel.open then return end
     Panel.open = on
     I.reset()
-    W.open_select = nil
+    W.open_select, W.open_search = nil, nil
     if not on then
-        P.close()
+        TextInput.clear()
+        for _, state in pairs(ui.page_state) do state.name_form, state.clip_form = nil, nil end
         if ui.win and ui.dirty_window then ui.dirty_window = false; save_window() end
     end
     pcall(Blocker.set_enabled, on and SKS.state.settings.block_input ~= false)
@@ -214,7 +218,6 @@ end
 
 -- re.on_frame
 local others_were = false
-local external_was = false
 function Panel.frame()
     local st = SKS.state
     pcall(Blocker.frame)
@@ -230,32 +233,30 @@ function Panel.frame()
         if Panel.open then Panel.set_open(false) end
         return
     end
-    if I.key_pressed(st.settings.hotkey or "Delete") and not P.is_open() then
+    if I.key_pressed(st.settings.hotkey or "Delete") and not TextInput.active then
         Panel.set_open(not Panel.open)
         if Panel.open and others then toast("warn", "ArmorVariantManager 的面板也开着：点击会同时传给两个面板") end
     end
-    -- the game's text form (Prompt 中文) is up: let the game have mouse and keyboard meanwhile
-    local external = Panel.open and P.external_active()
-    if external ~= external_was then
-        external_was = external
-        if Panel.open then pcall(Blocker.set_enabled, not external and st.settings.block_input ~= false) end
-    end
     if Panel.open then
         I.capture()
-        local sw, sh = D.raw_w, D.raw_h     -- cached by Panel.draw; d2d.surface_size throws outside d2d
-        Blocker.surface = function() return sw, sh end
-        local ok, e = pcall(P.draw, sw, sh)
-        if not ok then P.close(); toast("error", "输入框：" .. tostring(e)) end
     end
+end
+
+-- 仅由 re.on_frame 调用；d2d 回调登记的输入位置供下一帧使用，ImGui 后端用当帧布局。
+function Panel.draw_inputs()
+    if not Panel.open then return end
+    local ok, e = pcall(TextInput.draw)
+    if not ok then TextInput.clear(); toast("error", "输入框：" .. tostring(e)) end
 end
 
 function Panel.ui_open() return Panel.open, Panel.open and ui.want_signals end
 
--- d2d draw callback
+-- active backend's draw callback (d2d draw / re.on_frame for ImGui)
 function Panel.draw()
-    if not Panel.open or P.external_active() then return end
+    TextInput.begin_layout()
+    if not Panel.open then return end
     local st, live = SKS.state, SKS.live
-    D.reset_frame(max(0.5, min(3, tonumber(st.settings.ui_scale) or 1)))
+    if not D.reset_frame(max(0.5, min(3, tonumber(st.settings.ui_scale) or 1))) then return end
     I.begin_frame()
     local win = window()
     clamp_window(win)
@@ -321,11 +322,16 @@ function Panel.draw()
         ui.drag = { kind = "size", w0 = w, h0 = h, mx0 = I.mx, my0 = I.my }
     end
 
+    if W.open_select then TextInput.draw_static() end
     D.flush_deferred()
-    P.draw_dialog(x, y, w, h)
+    if W.open_select or not Panel.open then TextInput.clear() end
     draw_cursor()
 end
 
-function Panel.attach(sks) SKS = sks end
+-- 绑定后端和只读尺寸缓存；输入 hook 不持有或访问 d2d 渲染器。
+function Panel.attach(sks)
+    SKS = sks
+    Blocker.surface = D.surface_pixels
+end
 
 return Panel

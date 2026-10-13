@@ -5,10 +5,13 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
+local TextInput = require("ShapeKeySystem_UI.TextInput")
+local select_offsets = {}
 
 local W = {}
 local C = T.c
 local max, min, floor, abs = math.max, math.min, math.floor, math.abs
+local select_grab = 0
 
 W.open_select = nil      -- id of the open dropdown
 local scroll = {}        -- id -> offset
@@ -105,7 +108,7 @@ function W.default_suffix(ctx, id, bound)
 end
 
 -- ---------------------------------------------------------------- buttons
--- opt: kind = "primary" | "ghost" | "danger", disabled, pressed, font
+-- opt: kind = "primary" | "ghost" | "danger", disabled, pressed, font, text_color
 function W.button(label, x, y, w, h, opt)
     opt = opt or {}
     local f = opt.font or body()
@@ -119,6 +122,7 @@ function W.button(label, x, y, w, h, opt)
     if opt.pressed then border, fg = C.brass, C.brass end
     if hover then border = (opt.kind == "danger") and C.warn or C.muted end
     if opt.disabled then fg = C.faint end
+    fg = opt.text_color or fg
     if bg ~= 0 then D.rrect(x, y, w, h, 3, bg) end
     D.outline(x, y, w, h, 3, 1, border)
     D.text_center(label, x, y, w, h, fg, f)
@@ -197,8 +201,35 @@ function W.slider(id, x, y, w, h, value, lo, hi, opt)
     return changed, value
 end
 
--- ---------------------------------------------------------------- dropdown
--- labels: list of strings. Returns changed, index
+-- 候选列表独立处理滚轮和滚动条拖动；命中受父级裁剪限制，滚轮不传给页面。
+local function selection_scroll(id, x, y, w, h, content_h, offset, step)
+    local limit = max(0, content_h - h)
+    offset = max(0, min(offset or 0, limit))
+    if I.wheel ~= 0 and I.hit(x, y, w, h) then
+        offset = max(0, min(limit, offset - I.wheel * step))
+        I.wheel = 0
+    end
+    if limit == 0 then return offset, 0 end
+    local bx, bw = x + w - 10, 6
+    local th = min(h, max(24, h * h / content_h))
+    local travel = h - th
+    local ty = y + travel * offset / limit
+    local key = "select-sb:" .. id
+    if I.active == nil and I.click(bx - 2, y, bw + 4, h) then
+        select_grab = I.my >= ty and I.my < ty + th and (I.my - ty) or th / 2
+        I.active = key
+    end
+    if I.active == key and I.down and travel > 0 then
+        offset = max(0, min(limit, (I.my - y - select_grab) / travel * limit))
+        ty = y + travel * offset / limit
+    end
+    D.rrect(bx, y, bw, h, 2, C.ink)
+    D.rrect(bx, ty, bw, th, 2, I.active == key and C.muted or C.faint)
+    return offset, 14
+end
+
+-- 下拉选择：完整候选列表通过滚轮及滚动条浏览；延迟绘制浮层，选择结果在下一次布局返回。
+-- labels 为名称列表，返回 changed / index；页面仍使用同一套后端无关的控件。
 function W.select(id, x, y, w, h, labels, index, opt)
     opt = opt or {}
     h = h or T.m.row_h
@@ -215,8 +246,9 @@ function W.select(id, x, y, w, h, labels, index, opt)
     W.pending[id] = nil
     if I.click(x, y, w, h) then
         -- (not `open and nil or id`: that is always id)
-        if open then W.open_select = nil else W.open_select = id end
+        if open then W.open_select = nil else W.open_select = id; W.open_search = nil end
         open = not open
+        if #labels == 0 then W.open_select, open = nil, false end
     end
     if not open then
         if p and p ~= index then return true, p end
@@ -225,27 +257,31 @@ function W.select(id, x, y, w, h, labels, index, opt)
     local ih = 24
     local n = #labels
     local sw, sh = D.surface_size()
-    local ph = min(n * ih, 360)
+    local ph = min(n * ih, 360, max(ih, sh - 66))
     local py = y + h + 2
     if py + ph > sh - 10 then py = y - ph - 2 end
-    local first = 1
-    local visible = floor(ph / ih)
-    if index and index > visible then first = index - visible + 1 end
+    py = max(10, min(py, sh - ph - 10))
+    local offset = select_offsets[id] or max(0, (index or 1) * ih - ph)
     I.add_overlay(x, py, w, ph)
     local result
     D.defer(function()
         I.in_overlay = true
         D.rrect(x, py, w, ph, 3, C.panel2)
         D.outline(x, py, w, ph, 3, 1, C.muted)
-        for k = 0, visible - 1 do
-            local i = first + k
-            if i > n then break end
-            local iy = py + k * ih
-            local hov = I.inside(x, iy, w, ih)
-            if hov or i == index then D.rect(x + 1, iy, w - 2, ih, hov and C.panel3 or C.ink) end
-            D.text_mid(labels[i], x + 8, iy, ih, i == index and C.brass or C.text, body(), w - 16)
-            if I.clicked and hov then result = i; I.consume() end
+        local gutter
+        offset, gutter = selection_scroll(id, x, py, w, ph, n * ih, offset, ih * 3)
+        select_offsets[id] = offset
+        D.push_clip(x + 1, py, w - gutter - 2, ph)
+        for i, label in ipairs(labels) do
+            local iy = py + (i - 1) * ih - offset
+            if iy + ih > py and iy < py + ph then
+                local hov = I.active == nil and I.hit(x, iy, w - gutter, ih)
+                if hov or i == index then D.rect(x + 1, iy, w - gutter - 2, ih, hov and C.panel3 or C.ink) end
+                D.text_mid(label, x + 8, iy, ih, i == index and C.brass or C.text, body(), w - gutter - 16)
+                if I.active == nil and I.click(x, iy, w - gutter, ih) then result = i end
+            end
         end
+        D.pop_clip()
         I.in_overlay = false
     end)
     -- the popup is drawn at the end of the frame: its click is applied there, and returned on the
@@ -274,15 +310,112 @@ function W.header(label, x, y, w, open, stat)
     return I.click(x, y, w, h), h
 end
 
--- ---------------------------------------------------------------- text box (opens a prompt)
-function W.text_box(x, y, w, h, value, placeholder)
+-- 原位置输入框：自绘边框与占位文字，标准 ImGui InputText 负责文字、选择、剪贴板和 IME。
+-- shown：输入框为空且未激活时代替占位符显示的正常文字（搜索框收起时显示已选值）。
+function W.text_box(id, x, y, w, h, value, placeholder, on_change, shown)
     h = h or T.m.row_h
     local hover = I.hit(x, y, w, h)
     D.rrect(x, y, w, h, 3, C.ink)
     D.outline(x, y, w, h, 3, 1, hover and C.muted or C.line)
-    if value and value ~= "" then D.text_mid(value, x + 8, y, h, C.text, body(), w - 16)
-    else D.text_mid(placeholder or "", x + 8, y, h, C.faint, body(), w - 16) end
-    return I.click(x, y, w, h)
+    local registered = TextInput.register(id, x, y, w, h, value, on_change)
+    if not registered and value and value ~= "" then D.text_mid(value, x + 8, y, h, C.text, body(), w - 16)
+    elseif (not value or value == "") and TextInput.active ~= id then
+        if shown and shown ~= "" then D.text_mid(shown, x + 8, y, h, C.text, body(), w - 16)
+        else D.text_mid(placeholder or "", x + 8, y, h, C.faint, body(), w - 16) end
+    end
+    I.click(x, y, w, h) -- 只消费自绘控件的点击队列；ImGui 仍独立收到鼠标事件。
+end
+
+-- 可搜索选择框：页面持有搜索状态，布局线程只登记原位 InputText；候选项内联展开。
+-- 输入只过滤候选，选择才提交；on_query 可用于允许自由命名的形态键，信号绑定不使用它。
+-- 不处理 Enter/Esc，避免拦截输入法选字；完整候选在限高区域内滚动，搜索变化时回到顶部。
+function W.search_select(state, id, x, y, w, items, value, opt)
+    opt = opt or {}
+    state[id] = state[id] or { query = "", offset = 0 }
+    local s = state[id]
+    local open = W.open_search == id
+    local field_w = w - 30
+    if I.click(x, y, field_w, 28) then
+        if not open then s.query, s.offset = "", 0 end
+        W.open_search, open = id, true
+    end
+    if W.button("", x + field_w + 2, y, 28, 28, { font = small() }) then
+        if open then W.open_search, open = nil, false
+        else W.open_search, open, s.query, s.offset = id, true, "", 0 end
+    end
+    D.icon_tri(x + w - 14, y + 14, 4, open, C.muted)
+    -- 收起时 ImGui 缓冲区登记为空、已选值只做自绘显示：d2d 布局晚于 ImGui 一帧，
+    -- 点开那一下 ImGui 用的是上一次登记的文字，登记已选值会让搜索从旧值开始追加。
+    W.text_box(id, x, y, field_w, 28, open and s.query or "",
+        opt.placeholder or "输入文字搜索…", function(text)
+            s.query, s.offset, W.open_search = text, 0, id
+            if opt.on_query then opt.on_query(text) end
+        end, (not open) and value or nil)
+    if not open then return false, nil, 34 end
+    local matches, query = {}, s.query:lower()
+    -- 前缀匹配优先，其他匹配维持原有顺序；plain=true，不把玩家输入当作 Lua 模式。
+    local other = {}
+    for _, item in ipairs(items) do
+        local hay = (item.search or item.label):lower()
+        local at = query == "" and 1 or hay:find(query, 1, true)
+        if at then
+            local list = at == 1 and matches or other
+            list[#list + 1] = item
+        end
+    end
+    for _, item in ipairs(other) do matches[#matches + 1] = item end
+    local cy = y + 34
+    local chosen
+    local content_h = max(1, #matches) * 32
+    local list_h = min(content_h, opt.max_height or 256)
+    W.panel_box(x, cy, w, list_h + 8)
+    cy = cy + 4
+    local gutter
+    s.offset, gutter = selection_scroll(id, x + 4, cy, w - 8, list_h, content_h, s.offset, 64)
+    D.push_clip(x + 4, cy, w - 8 - gutter, list_h)
+    for i, item in ipairs(matches) do
+        local iy = cy + (i - 1) * 32 - s.offset
+        if iy + 28 > cy and iy < cy + list_h then
+            if W.button(item.label, x + 4, iy, w - 8 - gutter, 28,
+                { kind = "ghost", font = small(), pressed = item.value == opt.selected }) then chosen = item.value end
+            W.tooltip(item.label, x + 4, iy, w - 8 - gutter, 28)
+        end
+    end
+    if #matches == 0 then
+        D.text_mid(opt.empty or "没有匹配的候选项", x + 8, cy, 28, C.faint, small(), w - 16)
+    end
+    D.pop_clip()
+    cy = cy + list_h
+    if chosen ~= nil then
+        W.open_search = nil
+        TextInput.remove(id) -- 选择后释放旧搜索框，下一布局显示已选值，不残留搜索焦点。
+        return true, chosen, cy - y + 8
+    end
+    if I.clicked and not I.inside(x, y, w, cy - y + 8) then W.open_search = nil end
+    return false, nil, cy - y + 8
+end
+
+-- 命名表单由所属页面保存草稿；布局在操作栏下展开，不建立弹窗或全屏输入遮罩。
+function W.start_text(state, key, req)
+    req.text = req.text or ""
+    state[key] = req
+end
+function W.text_form(state, key, id, x, y, w)
+    local r = state[key]
+    if not r then return 0 end
+    local h = r.extra and 102 or 70
+    W.panel_box(x, y, w, h)
+    D.text_mid(r.title or "名称", x + 10, y + 4, 24, C.muted, small(), w - 20)
+    W.text_box(id, x + 10, y + 32, w - 190, 28, r.text, "点击输入名称…", function(t) r.text = t end)
+    local yes = W.button("确定", x + w - 164, y + 32, 70, 28, { kind = "primary", text_color = r.confirm_text_color, disabled = r.text == "" })
+    local no = W.button("取消", x + w - 82, y + 32, 70, 28)
+    if r.extra then
+        local changed, v = W.toggle(r.extra.label, x + 10, y + 68, r.extra.value == true)
+        if changed then r.extra.value = v end
+    end
+    if yes or no then state[key] = nil; TextInput.remove(id) end
+    if yes and r.on_submit then r.on_submit(r.text, r.extra and r.extra.value) end
+    return h + 8
 end
 
 -- ---------------------------------------------------------------- scroll area

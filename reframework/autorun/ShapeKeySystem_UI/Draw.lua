@@ -24,6 +24,7 @@ local fonts = {}
 local measure_cache, measure_count = {}, 0
 local images = {}
 local deferred = {}
+local surface_w, surface_h = 1920, 1080
 
 -- ---------------------------------------------------------------- backends
 D.BACKENDS = { "auto", "d2d", "imgui" }
@@ -146,8 +147,22 @@ function D.set_backend(name)
     DL = nil
 end
 
+-- 仅在当前后端的绘制回调中查询尺寸；设备重置期间保留最后有效的物理尺寸。
+-- 普通帧、输入 hook 和布局查询只读缓存，不能访问可能已释放的 d2d 资源。
+local function refresh_surface()
+    local get_size = A.surface_size
+    if type(get_size) ~= "function" then return true end
+    local ok, w, h = pcall(get_size)
+    if not ok or type(w) ~= "number" or type(h) ~= "number"
+        or not (w > 0 and w < math.huge and h > 0 and h < math.huge) then return false end
+    surface_w, surface_h = w, h
+    return true
+end
+
+-- 由 Panel.draw 调用；尺寸暂不可用时返回 false，让本次绘制停止并在下次回调重试。
 function D.reset_frame(scale)
     bind_api()
+    if not refresh_surface() then return false end
     if D.backend == "imgui" then
         local ok, dl = pcall(imgui.get_background_draw_list)
         DL = ok and dl or nil
@@ -158,6 +173,7 @@ function D.reset_frame(scale)
     end
     clip_stack, clip = {}, nil
     deferred = {}
+    return true
 end
 
 -- ---------------------------------------------------------------- fonts / text
@@ -344,7 +360,7 @@ end
 
 -- ---------------------------------------------------------------- clip / deferred
 function D.push_clip(x, y, w, h)
-    clip_stack[#clip_stack + 1] = clip
+    clip_stack[#clip_stack + 1] = clip or false
     local c = { x, y, x + w, y + h }
     if clip then
         c[1], c[2] = max(c[1], clip[1]), max(c[2], clip[2])
@@ -354,7 +370,7 @@ function D.push_clip(x, y, w, h)
 end
 
 function D.pop_clip()
-    clip = clip_stack[#clip_stack]
+    clip = clip_stack[#clip_stack] or nil
     clip_stack[#clip_stack] = nil
 end
 
@@ -371,15 +387,8 @@ function D.flush_deferred()
     clip = saved
 end
 
--- d2d.surface_size only works inside the d2d draw callback (it throws from re.on_frame, and REF
--- logs that as a script error even under pcall), so the last good raw size is cached for frame code
-D.raw_w, D.raw_h = 1920, 1080
-
-function D.surface_size()
-    bind_api()
-    local ok, w, h = pcall(A.surface_size)
-    if ok and w and h then D.raw_w, D.raw_h = w, h end
-    return D.raw_w / D.S, D.raw_h / D.S
-end
+-- 输入使用物理像素；布局按 UI 缩放转换成逻辑坐标。两者都不调用原生 API。
+function D.surface_pixels() return surface_w, surface_h end
+function D.surface_size() return surface_w / D.S, surface_h / D.S end
 
 return D

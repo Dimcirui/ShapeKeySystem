@@ -2,7 +2,7 @@
 
 ## ArmorVariantManager
 
-Parts of `reframework/autorun/ShapeKeySystem_UI/` (InputBlocker, Input, Draw, Panel, Prompt and
+Parts of `reframework/autorun/ShapeKeySystem_UI/` (InputBlocker, Input, Draw, Panel and
 related helpers) are adapted from ArmorVariantManager — https://github.com/Monkeysama/ArmorVariantManager
 
 ```
@@ -38,3 +38,4 @@ SOFTWARE.
 
 - REFramework — https://github.com/praydog/REFramework
 - reframework-d2d — https://github.com/cursey/reframework-d2d
+- REF-IME (IME support for standard ImGui text inputs across RE games) — https://github.com/Monkeysama/REF-IME/releases/latest

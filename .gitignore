@@ -9,6 +9,8 @@ reframework/data/ShapeKeySystem/Runtime/
 # third-party runtime (install separately)
 reframework/autorun/reframework-d2d.lua
 reframework/plugins/
+# 旧荒野输入组件退出发布，已有本地 DLL 不再作为项目文件管理。
+addons/WildsChineseInput/
 
 # mocap toy runtime output
 toys/SKS_Mocap/live.json
@@ -25,3 +27,6 @@ __pycache__/
 
 # release packages
 dist/
+
+# loacl
+AGENTS.md

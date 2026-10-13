@@ -92,85 +92,109 @@ click_text("设置与调试", true)
 check(Panel.ui.page == "debug", "rail: 设置与调试")
 check(find("设置", true) and find("性能", true), "debug page cards drawn")
 
--- sculpt page: scan + search prompt
+-- 页面内输入：搜索立即更新，不打开弹窗；控件 ID 和位置跨帧保持稳定。
 click_text("捏脸", true)
 check(Panel.ui.page == "sculpt", "rail: 捏脸")
-click_text("扫描装备", true)
-frame()
+click_text("扫描装备", true); frame()
 check(st.sculpt.scan ~= nil, "扫描装备 -> sculpt_scan")
-click_text("搜索形态键…", true)
-check(PROMPT_OPEN ~= nil, "search box opens the text prompt")
-PROMPT_TEXT = "zzz_no_such_key"; frame(); frame()
-check(find("没有匹配的形态键", false) ~= nil, "live search filters the list")
-PROMPT_TEXT = ""; frame(); KEYS[0x0D] = true; frame(); KEYS[0x0D] = false; frame()
-check(not find("没有匹配的形态键", false), "clearing the search shows keys again")
-
--- the prompt dialog is drawn by the panel; only the text field is an ImGui window laid over it
-local P = require("ShapeKeySystem_UI.Prompt")
-click_text("搜索形态键…", true); frame()
-local ptitle = find("搜索形态键", true)
-check(P.is_open() and ptitle ~= nil and find("完成", true) ~= nil and find("取消", true) ~= nil, "prompt: dialog drawn by the panel")
-check(PROMPT_RECT and ptitle and PROMPT_RECT.y > ptitle.y and PROMPT_RECT.w > 100 and PROMPT_RECT.h > 20, "prompt: ImGui field placed under the title")
-check(IMGUI_STACK.var == 0 and IMGUI_STACK.color == 0 and IMGUI_STACK.width == 0, "prompt: ImGui style stacks balanced")
-local page_before = Panel.ui.page
-click_text("表情", true)
-check(Panel.ui.page == page_before and P.is_open(), "prompt: modal, the rail under it takes no click")
-PROMPT_TEXT = "zzz_no_such_key"; frame(); frame()
-KEYS[0x1B] = true; frame(); KEYS[0x1B] = false; frame()
-check(not P.is_open() and not find("没有匹配的形态键", false), "prompt: Esc cancels and restores the live search")
-click_text("搜索形态键…", true); frame()
-PROMPT_TEXT = "zzz"; frame()
-CLIPBOARD = "_no_such\r\n"; click_text("粘贴", true)
-check(P.req and P.req.text == "zzz_no_such ", "prompt: 粘贴 appends the clipboard, line breaks flattened")
-PROMPT_TEXT = "zzz_no_such_key"; frame()
-click_text("完成", true)
-check(not P.is_open() and find("没有匹配的形态键", false) ~= nil, "prompt: 完成 button keeps the text")
--- 中文: the game's own text form (GameText, Wilds only) types for the field; the panel hides meanwhile
-local G = require("ShapeKeySystem_UI.GameText")
-check(not G.available() and find("中文", true) == nil, "prompt: no 中文 button without the game's text form")
-local g_avail, g_open, g_text = G.available, G.open, nil
-G.available = function() return true end
-G.open = function(text, cb) g_text = text; G.pending = { on_done = cb, handle = { call = function() return false end } }; return true end
-click_text("zzz_no_such_key", true); frame()
-check(find("中文", true) ~= nil, "prompt: 中文 button when the game's form exists")
-click_text("中文", true)
-check(G.active() and g_text == "zzz_no_such_key", "prompt: 中文 opens the game's form with the current text")
+local X = require("ShapeKeySystem_UI.TextInput")
+local D = require("ShapeKeySystem_UI.Draw")
+local W = require("ShapeKeySystem_UI.Widgets")
+local search = find("搜索形态键…", true)
 frame()
-check(#DRAWS == 0 and not Blocker.enabled, "prompt: panel hidden and game input released while the form is up")
-local done = G.pending.on_done
-G.pending = nil; done("测试\r\n")
-frame(); frame()
-check(P.req and P.req.text == "测试 " and Blocker.enabled and find("搜索形态键", true) ~= nil, "prompt: form text lands in the field, panel back")
-G.available, G.open = g_avail, g_open
-PROMPT_TEXT = "zzz_no_such_key"; frame(); click_text("完成", true)
+local rect = INPUT_RECTS.sculpt_filter
+check(rect and search and math.abs(rect.x - search.x) < 1 and math.abs(rect.y - (search.y - 2)) < 8,
+    "inline: ImGui overlays the original search field")
+check(INPUT_WINDOWS.sculpt_filter == "##sks_inline_sculpt_filter" and find("完成", true) == nil
+    and find("中文", true) == nil, "inline: stable window ID, no input dialog or game-form button")
+INPUT_ACTIVE = "sculpt_filter"
+INPUT_EDITS.sculpt_filter = "zzz_no_such_key"; frame(); frame()
+check(find("没有匹配的形态键", false) ~= nil, "inline: live search filters the list")
+KEYS[0x0D] = true; frame(); KEYS[0x0D] = false; frame()
+check(Panel.ui.page_state.sculpt.filter == "zzz_no_such_key", "inline: IME Enter does not submit or clear search")
+KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
+check(Panel.open, "inline: Delete edits text without closing the focused panel")
+INPUT_EDITS.sculpt_filter = ""; frame(); frame()
+check(not find("没有匹配的形态键", false), "inline: clearing the search shows keys again")
+INPUT_ACTIVE = nil; frame()
+check(IMGUI_STACK.var == 0 and IMGUI_STACK.color == 0 and IMGUI_STACK.width == 0
+    and IMGUI_STACK.window == 0 and IMGUI_STACK.font == 0, "inline: ImGui stacks balanced")
 
--- native IME through ArmorVariantManager's UI DLL (NativeText): Wilds only, our own runtime folder
-local N = require("ShapeKeySystem_UI.NativeText")
-local REQ, RES = "ShapeKeySystem/Runtime/D2DTextInputRequest.json", "ShapeKeySystem/Runtime/D2DTextInputResult.json"
-local reg_args
-avm_bridge = { register_runtime = function(id, dir) reg_args = { id, dir }; return true end }
-check(not N.available(), "native: off outside MH Wilds even with the DLL")
-N.WILDS = true
-click_text("zzz_no_such_key", true); frame()
-check(P.req and P.req.native and reg_args and reg_args[1] == "ShapeKeySystem" and reg_args[2] == "ShapeKeySystem/Runtime",
-    "native: registered as its own client")
-local req = json.load_file(REQ)
-check(req and req.active == true and req.text == "zzz_no_such_key" and req.width > 100 and req.focus_sequence >= 1,
-    "native: request written (active, text, field rect, focus sequence)")
-check(find("中文", true) == nil, "native: no 中文 button")
-json.dump_file(RES, { sequence = 1, id = req.id, session = req.session, token = req.token, text = "测试",
-                      composition = "ce", caret_start = 2, caret_end = 2, focused = true })
-frame(); frame()
-check(P.req.text == "测试" and find("测试", true) ~= nil and find("ce", true) ~= nil, "native: DLL text and composition drawn")
-click_text("完成", true)
-req = json.load_file(REQ)
-check(not P.is_open() and req and req.active == false, "native: closing the dialog releases the IME")
-N.WILDS, avm_bridge = false, nil
-click_text("测试", true); frame(); PROMPT_TEXT = "zzz_no_such_key"; frame(); click_text("完成", true)
+-- 移除桥接依赖：即使 AVM 桥接存在也不得注册或读写它；换游戏名仍走相同控件。
+local saved_game_name = reframework.get_game_name
+avm_bridge = { register_runtime = function() error("SKS must not use AVM IME") end }
+for _, game in ipairs({ "mhws", "mhrise", "re2", "re4" }) do
+    reframework.get_game_name = function() return game end
+    INPUT_EDITS.sculpt_filter = "中文测试"; frame(); frame()
+    check(Panel.ui.page_state.sculpt.filter == "中文测试" and INPUT_WINDOWS.sculpt_filter == "##sks_inline_sculpt_filter",
+        "inline: generic input path for " .. game)
+end
+avm_bridge, reframework.get_game_name = nil, saved_game_name
+INPUT_EDITS.sculpt_filter = ""; frames(2)
 
-click_text("zzz_no_such_key", true); frame()   -- the box now shows the filter
-PROMPT_TEXT = ""; frame(); click_text("完成", true)
-check(not P.is_open() and not find("没有匹配的形态键", false), "prompt: reopened with the filter, cleared")
+-- 命名表单在保存操作栏下展开；通用选项、确定和取消保留原有语义。
+click_text("另存为…", true); frames(2)
+local form = Panel.ui.page_state.sculpt.name_form
+check(form and find("另存为", true) ~= nil and INPUT_RECTS.sculpt_name,
+    "inline: save-as expands an embedded naming row")
+INPUT_EDITS.sculpt_name = "内联捏脸"; frames(2)
+click_text("存为通用配置", false, -25)
+check(form and form.extra.value == true, "inline: general preset option remains editable")
+click_text("确定", true); frames(2)
+check(not Panel.ui.page_state.sculpt.name_form and st.sculpt.preset and st.sculpt.preset.name == "内联捏脸"
+    and st.sculpt.preset.folder == nil, "inline: confirm saves the named general preset")
+click_text("另存为…", true); frames(2)
+INPUT_EDITS.sculpt_name = "取消的配置"; frames(2)
+click_text("取消", true); frames(2)
+check(not Panel.ui.page_state.sculpt.name_form and st.sculpt.preset.name == "内联捏脸",
+    "inline: cancel discards naming without saving")
+
+-- 输入框不遮挡导航；切页后旧控件不能继续收到输入。
+click_text("另存为…", true); frames(2)
+INPUT_ACTIVE = "sculpt_filter"; frame()
+click_text("表情", true); frame()
+check(Panel.ui.page == "basic" and #X.fields == 0 and X.active == nil and not Panel.ui.page_state.sculpt.name_form,
+    "inline: rail stays interactive, page switch discards the previous page's naming draft")
+INPUT_ACTIVE = nil
+click_text("捏脸", true); frame()
+
+-- 在两个绘制回调之间登记布局；缩放、裁剪和异常清理不访问 d2d。
+local saved_fields, saved_scale = X.fields, D.S
+X.begin_layout(); D.S = 2
+local changed
+X.register("probe", 10, 20, 100, 28, "", function(t) changed = t end)
+INPUT_EDITS.probe = "测试"; X.draw()
+check(INPUT_RECTS.probe.x == 36 and INPUT_RECTS.probe.y == 40 and INPUT_RECTS.probe.w == 168
+    and changed == "测试", "inline: logical geometry converted to physical pixels")
+D.push_clip(0, 0, 60, 60); X.begin_layout()
+check(not X.register("clipped", 10, 20, 100, 28, "") and #X.fields == 0,
+    "inline: partly clipped controls create no input window")
+D.pop_clip(); X.begin_layout()
+X.register("probe", 10, 20, 100, 28, "")
+local saved_input = imgui.input_text
+imgui.input_text = function() error("input reset") end
+local ok = pcall(X.draw)
+imgui.input_text = saved_input
+check(not ok and IMGUI_STACK.var == 0 and IMGUI_STACK.color == 0 and IMGUI_STACK.width == 0
+    and IMGUI_STACK.window == 0 and IMGUI_STACK.font == 0, "inline: input errors release every ImGui resource")
+X.fields, D.S = saved_fields, saved_scale
+frame()
+
+-- searchable select: while closed the ImGui buffer stays empty (the d2d layout runs a frame after
+-- ImGui, so the click that opens it activates whatever was registered before)
+local Wd = require("ShapeKeySystem_UI.Widgets")
+X.begin_layout(); DRAWS = {}
+Wd.search_select({}, "probe_search", 10, 20, 240, { { value = "a", label = "alpha" } }, "blink.L · fcParam_001", {})
+check(X.fields[1] and X.fields[1].text == "" and find("blink.L · fcParam_001", true) ~= nil,
+    "search select: closed field registers an empty buffer, the selection is drawn")
+X.fields = saved_fields
+frame()
+
+-- an open dropdown removes the ImGui fields: their text is still drawn under the popup
+INPUT_ACTIVE = "sculpt_filter"; INPUT_EDITS.sculpt_filter = "Bang"; frame(); frame(); INPUT_ACTIVE = nil; frame()
+Wd.open_select = "sculpt_preset"; frame()
+check(find("Bang", true) ~= nil and #X.fields == 0, "dropdown open: field text kept, ImGui windows removed")
+Wd.open_select = nil; INPUT_EDITS.sculpt_filter = ""; frame(); frame()
 
 -- undo with nothing to undo is not shown as an error
 local errs = 0
@@ -290,4 +314,64 @@ check(not Panel.open, "no backend: hotkey does not open it")
 imgui.get_background_draw_list, d2d = saved_dl, saved_d2d
 iframe()
 check(D.backend == "d2d" and not Panel.open, "d2d back: auto uses it again")
+
+-- Surface queries belong to the active draw callback; frame/input/layout read only the cache.
+local saved_surface, saved_display = d2d.surface_size, imgui.get_display_size
+local surface_calls, in_draw = 0, false
+local surface_result, surface_error = { 2560, 1440 }, false
+d2d.surface_size = function()
+    surface_calls = surface_calls + 1
+    assert(in_draw, "d2d surface queried outside its draw callback")
+    if surface_error then error("device resetting") end
+    return surface_result[1], surface_result[2]
+end
+-- Bind the mock renderer once; its results change across resets without replacing the API.
+D.set_backend(nil); D.set_backend("d2d")
+Panel.set_open(true)
+CB.frame()
+Blocker.surface(); D.surface_size()
+check(surface_calls == 0, "surface: frame, input and layout never query d2d")
+in_draw = true; CB.d2d_draw(); in_draw = false
+local sw, sh = D.surface_pixels()
+check(surface_calls == 1 and sw == 2560 and sh == 1440, "surface: d2d draw refreshes physical dimensions")
+CB.frame(); Blocker.surface(); D.surface_size()
+check(surface_calls == 1, "surface: cached dimensions remain safe between draw callbacks")
+
+local invalid_sizes = { { 0, 1440 }, { -1, 1440 }, { math.huge, 1440 }, { 0/0, 1440 },
+                        { "2560", 1440 }, { 2560, 0 }, {} }
+for _, size in ipairs(invalid_sizes) do
+    surface_result = size
+    DRAWS, CMDS = {}, {}
+    in_draw = true; CB.d2d_draw(); in_draw = false
+    sw, sh = D.surface_pixels()
+    check(#DRAWS == 0 and #CMDS == 0 and sw == 2560 and sh == 1440,
+        "surface: invalid dimensions skip drawing and retain the cache")
+end
+surface_error = true
+DRAWS, CMDS = {}, {}
+in_draw = true; CB.d2d_draw(); in_draw = false
+sw, sh = D.surface_pixels()
+check(#DRAWS == 0 and #CMDS == 0 and sw == 2560 and sh == 1440,
+    "surface: renderer reset skips drawing and retains the cache")
+surface_error, surface_result = false, { 1920, 1080 }
+DRAWS = {}; in_draw = true; CB.d2d_draw(); in_draw = false
+sw, sh = D.surface_pixels()
+check(#DRAWS > 0 and sw == 1920 and sh == 1080, "surface: rendering resumes after reset")
+
+-- Installed d2d must not be queried when ImGui is the selected backend.
+surface_calls = 0
+d2d.surface_size = function() surface_calls = surface_calls + 1; error("inactive d2d") end
+imgui.get_display_size = function() return { x = 2560, y = 1440 } end
+SKS.call("set_setting", { key = "ui_backend", value = "imgui" })
+SKS.call("set_setting", { key = "ui_scale", value = 2 })
+iframe()
+sw, sh = D.surface_pixels()
+local lw, lh = D.surface_size()
+check(surface_calls == 0 and sw == 2560 and sh == 1440 and lw == 1280 and lh == 720
+    and find("SHAPEKEYSYSTEM", true) ~= nil, "surface: ImGui uses its own dimensions and UI scale")
+Panel.set_open(false)
+d2d.surface_size, imgui.get_display_size = saved_surface, saved_display
+SKS.call("set_setting", { key = "ui_backend", value = "auto" })
+SKS.call("set_setting", { key = "ui_scale", value = 1 })
+iframe()
 print("UI FAILS:", ufails)

@@ -151,24 +151,27 @@ MOUSE = { x = -1, y = -1, down = false }
 KEYS = {}
 DRAWS = {}          -- text draws of the last d2d frame: { s, x, y }
 DRAWN_IMAGES = {}
-PROMPT_TEXT = nil   -- text the mock imgui prompt "types"
-PROMPT_ENTER = false
+INPUT_EDITS, INPUT_RECTS, INPUT_WINDOWS, INPUT_BUFFERS = {}, {}, {}, {}
+INPUT_ACTIVE = nil
+local input_id, input_rect, input_window
 imgui.get_mouse = function() return { x = MOUSE.x, y = MOUSE.y } end
 imgui.is_mouse_down = function() return MOUSE.down end
 imgui.is_mouse_clicked = function() return false end
-imgui.begin_window = function(name) PROMPT_OPEN = name; return true end
-imgui.end_window = function() end
-imgui.set_next_window_pos = function() end
-imgui.set_next_window_size = function() end
-imgui.set_keyboard_focus_here = function() end
-imgui.input_text = function(label, v)
-    if label == "##sks_prompt_text" and PROMPT_TEXT then
-        local t = PROMPT_TEXT; PROMPT_TEXT = nil
-        local e = PROMPT_ENTER; PROMPT_ENTER = false
-        return e, t
-    end
-    return false, v
+imgui.begin_window = function(name)
+    input_window = name
+    IMGUI_STACK.window = IMGUI_STACK.window + 1
+    return true
 end
+imgui.end_window = function() IMGUI_STACK.window = IMGUI_STACK.window - 1 end
+imgui.input_text = function(label, v)
+    input_id = label:match("^##sks_text_(.+)$")
+    if not input_id then return false, v end
+    INPUT_RECTS[input_id], INPUT_WINDOWS[input_id], INPUT_BUFFERS[input_id] = input_rect, input_window, v
+    local t = INPUT_EDITS[input_id]
+    INPUT_EDITS[input_id] = nil
+    return t ~= nil, t or v
+end
+imgui.is_item_active = function() return input_id ~= nil and INPUT_ACTIVE == input_id end
 Vector2f = { new = function(x, y) return { x = x, y = y } end }
 reframework = { is_key_down = function(_, vk) return KEYS[vk] == true end }
 re.on_pre_application_entry = function() end
@@ -194,8 +197,8 @@ d2d = {
 -- points must be {x, y} pairs and colours integers, anything else is noted in IMGUI_ERR
 IMGUI_ERR = {}
 local font_px = {}
-imgui.push_font_size = function(px) font_px[#font_px + 1] = px end
-imgui.pop_font_size = function() font_px[#font_px] = nil end
+imgui.push_font_size = function(px) font_px[#font_px + 1] = px; IMGUI_STACK.font = IMGUI_STACK.font + 1 end
+imgui.pop_font_size = function() font_px[#font_px] = nil; IMGUI_STACK.font = IMGUI_STACK.font - 1 end
 imgui.calc_text_size = function(s)
     local px = font_px[#font_px] or 18
     local w, h = font_mt.__index.measure({ size = px, family = "Microsoft YaHei UI" }, s)
@@ -203,16 +206,15 @@ imgui.calc_text_size = function(s)
 end
 imgui.get_display_size = function() return { x = 1920, y = 1080 } end
 -- style stacks must balance (the prompt's field window pushes and pops them every frame)
-IMGUI_STACK = { var = 0, color = 0, width = 0, window = 0 }
+IMGUI_STACK = { var = 0, color = 0, width = 0, window = 0, font = 0 }
 imgui.push_style_var = function() IMGUI_STACK.var = IMGUI_STACK.var + 1 end
 imgui.pop_style_var = function(n) IMGUI_STACK.var = IMGUI_STACK.var - (n or 1) end
 imgui.push_style_color = function() IMGUI_STACK.color = IMGUI_STACK.color + 1 end
 imgui.pop_style_color = function(n) IMGUI_STACK.color = IMGUI_STACK.color - (n or 1) end
 imgui.push_item_width = function() IMGUI_STACK.width = IMGUI_STACK.width + 1 end
 imgui.pop_item_width = function() IMGUI_STACK.width = IMGUI_STACK.width - 1 end
-PROMPT_RECT = nil   -- pos / size of the last prompt window
-imgui.set_next_window_pos = function(v) PROMPT_RECT = { x = v.x, y = v.y } end
-imgui.set_next_window_size = function(v) if PROMPT_RECT then PROMPT_RECT.w, PROMPT_RECT.h = v.x, v.y end end
+imgui.set_next_window_pos = function(v) input_rect = { x = v.x, y = v.y } end
+imgui.set_next_window_size = function(v) if input_rect then input_rect.w, input_rect.h = v.x, v.y end end
 Vector4f = { new = function(x, y, z, w) return { x = x, y = y, z = z, w = w } end }
 CLIPBOARD = ""
 imgui.get_clipboard = function() return CLIPBOARD end

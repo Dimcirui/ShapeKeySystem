@@ -85,7 +85,8 @@ local function top_bar(ctx, x, y, w)
     local ch, i = W.select("cond_set", x + 46, y + 8, sw, 28, labels, idx)
     if ch then
         local ok = call("cond_select", { name = ids[i] })
-        if not ok then ctx.toast("warn", "当前配置有未保存的修改：先保存或还原") end
+        if not ok then ctx.toast("warn", "当前配置有未保存的修改：先保存或还原")
+        else s.name_form, s.clip_form = nil, nil end
     end
     local bx = x + 56 + sw
     local dw = W.default_button(ctx, bx, y + 8, "conditions", (cur and not cur.dirty) and cur.id or nil, cs.binding_name)
@@ -96,18 +97,18 @@ local function top_bar(ctx, x, y, w)
         return clicked
     end
     if btn("新建") then
-        ctx.prompt({ title = "新建条件表情配置", on_submit = function(name)
+        W.start_text(s, "name_form", { title = "新建条件表情配置", on_submit = function(name)
             if name ~= "" then call("cond_new", { name = name }) end
         end })
     end
     if cur then
         if btn("保存", { kind = cur.dirty and "primary" or nil, disabled = not cur.dirty and cur.source == "user" }) then
             if cur.source == "user" then call("cond_save", {})
-            else ctx.prompt({ title = "另存为（mod 自带的配置不能覆盖）", text = cur.name, on_submit = function(n)
+            else W.start_text(s, "name_form", { title = "另存为（mod 自带的配置不能覆盖）", text = cur.name, on_submit = function(n)
                 if n ~= "" then call("cond_save", { as_name = n }) end end }) end
         end
         if btn("另存为") then
-            ctx.prompt({ title = "另存为", text = cur.name, on_submit = function(n)
+            W.start_text(s, "name_form", { title = "另存为", text = cur.name, on_submit = function(n)
                 if n ~= "" then call("cond_save", { as_name = n }) end end })
         end
         if cur.dirty and btn("还原", { kind = "ghost" }) then call("cond_revert") end
@@ -129,7 +130,7 @@ local function top_bar(ctx, x, y, w)
         if W.button("取消", x + w - 82, y + 56, 70, 28, { kind = "ghost" }) then call("cancel_delete") end
         h = 96
     end
-    return h
+    return h + W.text_form(s, "name_form", "conditions_name", x, y + h, w)
 end
 
 -- ---------------------------------------------------------------- add-condition form
@@ -291,13 +292,14 @@ local function clips_section(ctx, x, y, w)
     local cy = y
     W.h2("表情组合", x, cy)
     if W.button("＋ 新建组合", x + w - 110, cy - 2, 110, 26, { font = W.small() }) then
-        ctx.prompt({ title = "新建表情组合", on_submit = function(name)
+        W.start_text(s, "clip_form", { title = "新建表情组合", on_submit = function(name)
             if name == "" then return end
             edit(ctx, function(d) if not d.clips[name] then d.clips[name] = { values = {}, fade_in = 0.15, fade_out = 0.3 } end end)
             s.open_clip = name
         end })
     end
     cy = cy + 32
+    cy = cy + W.text_form(s, "clip_form", "conditions_clip", x, cy, w)
     local ids = {}
     for id in pairs(data.clips) do ids[#ids + 1] = id end
     table.sort(ids)
