@@ -38,24 +38,46 @@ local function quat_to_yaw_pitch(q)
     return -deg(asin(s)), -pitch
 end
 
--- Bone signals (Profile.BONE_BASE ids): each bone's position in the head's frame against its rest
--- pose, along the signal's axis, times sign, over full, past the deadzone, never below 0.
--- bones = Scene.bone_reads result; a bone without a rest pose takes its first reading as rest.
+-- Bone signals (Profile.BONE_BASE ids), past the idle offset `off`, times sign, over full, past the
+-- deadzone, never below 0:
+--   pos: the bone's position in the head's frame against its rest pose, along the signal's axis
+--        (a bone without a rest pose takes its first reading as rest);
+--   rot: the bone's local turn (degrees) about its own axis against its base rotation.
+-- bones = Scene.bone_reads result.
 local M_POS, M_ROT = W.M_POS, W.M_ROT
+local atan2 = math.atan
+local function twist_deg(q, r, axis)
+    -- d = conj(r) * q: the turn on top of the base rotation, in the joint's own frame
+    local rx, ry, rz, rw = -r[1], -r[2], -r[3], r[4]
+    local dw = rw * q.w - rx * q.x - ry * q.y - rz * q.z
+    local d = { rw * q.x + rx * q.w + ry * q.z - rz * q.y,
+                rw * q.y - rx * q.z + ry * q.w + rz * q.x,
+                rw * q.z + rx * q.y - ry * q.x + rz * q.w }
+    if dw < 0 then dw = -dw; d[axis] = -d[axis] end
+    return deg(2 * atan2(d[axis], dw))
+end
 local function read_bones(bones, P)
+    if #bones.list == 0 then return end
     local head = bones.head
-    if not head or #bones.list == 0 then return end
-    local hp, hq = M_POS:call(head), M_ROT:call(head)
-    if not hp or not hq then return end
-    local qx, qy, qz, qw = -hq.x, -hq.y, -hq.z, hq.w
+    local hp, hq = head and M_POS:call(head), head and M_ROT:call(head)
+    local qx, qy, qz, qw
+    if hq then qx, qy, qz, qw = -hq.x, -hq.y, -hq.z, hq.w end
     for _, b in ipairs(bones.list) do
-        local p = M_POS:call(b.j)
-        if p then
-            local x, y, z = p.x - hp.x, p.y - hp.y, p.z - hp.z
-            local tx, ty, tz = 2 * (qy * z - qz * y), 2 * (qz * x - qx * z), 2 * (qx * y - qy * x)
-            local v = { x + qw * tx + (qy * tz - qz * ty), y + qw * ty + (qz * tx - qx * tz), z + qw * tz + (qx * ty - qy * tx) }
-            if not b.rest then b.rest = v end
-            local val = b.sign * (v[b.axis] - b.rest[b.axis]) / b.full
+        local val
+        if b.kind == "rot" then
+            local q = M_LROT:call(b.j)
+            if q then val = b.sign * (twist_deg(q, b.rest, b.axis) - b.off) / b.full end
+        elseif hp and hq then
+            local p = M_POS:call(b.j)
+            if p then
+                local x, y, z = p.x - hp.x, p.y - hp.y, p.z - hp.z
+                local tx, ty, tz = 2 * (qy * z - qz * y), 2 * (qz * x - qx * z), 2 * (qx * y - qy * x)
+                local v = { x + qw * tx + (qy * tz - qz * ty), y + qw * ty + (qz * tx - qx * tz), z + qw * tz + (qx * ty - qy * tx) }
+                if not b.rest then b.rest, b.off = v, 0 end   -- a first reading is already the idle face
+                val = b.sign * (v[b.axis] - b.rest[b.axis] - b.off) / b.full
+            end
+        end
+        if val then
             if b.deadzone > 0 then val = (val - b.deadzone) / (1 - b.deadzone) end
             P[b.id] = val > 0 and val or 0
         end

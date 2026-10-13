@@ -549,14 +549,18 @@ end)
 ## 16. 骨骼信号（2026-10-13）
 
 - **为什么**：游戏里的动作表情（emote：开心、战吼、仙人掌转圈等）只动面部骨骼，不动 fcParam（kevin 在游戏里用探针实测，2026-10-13），所以只读 fcParam 的配置在做动作时脸不动，只剩眨眼和视线。过场里 fcParam 照常有值。
-- **定义**：`signals.json` 的条目可以写 `bone`（`Player_Face` 下的骨骼名）、`axis`（`x` / `y` / `z`，头部坐标系：+x 角色自己的左边，+y 上，+z 前）、`sign`、`full_mm`（满值时的位移，毫米）、`deadzone`（0..1，过了死区再拉伸回 0..1）。内部编号从 `Profile.BONE_BASE`（1000）起，配置里照样写语义名，例如 `{"s": "jawDrop"}`。
-- **读法**：每帧把骨骼的世界位置换到 `Head` 骨骼的坐标系，减去静止位置，取指定轴 × sign ÷ full，过死区，小于 0 取 0。所以头怎么动、怎么转都不影响信号。静止位置是骨骼的 base local pose 沿父链一路合成到 `Head`；读不到时用第一次读到的位置。和 fcParam 一样，只读当前配置用得到的骨骼，`scene.rigs[i].reads` 也把它们算进去。调试页的信号列表显示骨骼名。
-- **内置 15 个**（按 2026-10-13 第 5 轮探针校准；括号里是动作时实测的位移）：
+- **定义**：`signals.json` 的条目可以写 `bone`（`Player_Face` 下的骨骼名）、`sign`、`deadzone`（0..1，过了死区再拉伸回 0..1），再加下面两种之一：
+  - 位移：`axis`（`x` / `y` / `z`，头部坐标系：+x 角色自己的左边，+y 上，+z 前）、`full_mm`（满值时的位移，毫米）、`rest_mm`（游戏待机时骨骼离绑定姿势的位移，毫米）；
+  - 转动：`rot_axis`（骨骼自己的局部轴）、`full_deg`（满值时的角度）、`rest_deg`（待机时的角度）。眼睑靠转动闭眼，用这一种。内部编号从 `Profile.BONE_BASE`（1000）起，配置里照样写语义名，例如 `{"s": "jawDrop"}`。
+- **读法**：位移信号每帧把骨骼的世界位置换到 `Head` 骨骼的坐标系，减去静止位置和 `rest_mm`，取指定轴 × sign ÷ full；转动信号取骨骼局部旋转相对基础旋转绕 `rot_axis` 的转角，减去 `rest_deg` 再 × sign ÷ full。之后过死区，小于 0 取 0。所以头怎么动、怎么转都不影响信号。静止位置是骨骼的 base local pose 沿父链一路合成到 `Head`；读不到时用第一次读到的位置。和 fcParam 一样，只读当前配置用得到的骨骼，`scene.rigs[i].reads` 也把它们算进去。调试页的信号列表显示骨骼名。
+- **内置 17 个**（`eyeClose.L/R` 见下；按 2026-10-13 第 5 轮探针校准；括号里是动作时实测的位移）：
   - `jawDrop`：`C_Chin_LOD00` y 向下，满值 25mm（22–27mm）
   - `mouthCornerUp.L/R`、`mouthCornerDown.L/R`：`L/R_cornerLip_LOD02` y 向上满值 10mm（8–11mm）、向下满值 12mm（8–13mm）
   - `mouthCornerOut.L/R`：同一骨骼 x 向外，满值 9mm（8–10mm）
   - `browInnerDown.L/R`：`L/R_BetweenEyeBrow_LOD01` y 向下，满值 7mm（6–7mm）
   - `browRaise.L/R`、`browLower.L/R`：`L/R_EyeBrow_A_LOD01` y 向上满值 8mm、向下满值 6mm
   - `cheekRaise.L/R`：`L/R_malarFat_B_LOD01` y 向上，满值 9mm（9–10mm）
-- **配置**：`tools/vrc_profiles/gen.py` 生成的 11 个 VRChat 配置（airi、chocolat、kaguya、karin、kipfel、mafuyu、manuka、maya、moko、nitco、sairou）里，眉（上、下、皱眉）、下睑上提、张嘴、嘴角（上、下、向外）这几类键取 `max(原信号, 骨骼信号)`，对应关系在 `gen.py` 的 `BONE` 里，通道说明末尾也写了。手写的配置（ARKit、MMD、Shinano、EKU、Milltina）没有改。
-- **还要在游戏里确认**：静止位置是否就是游戏待机时的位置。打开调试页看信号列表，待机时骨骼信号应该接近 0。
+- **配置**：`tools/vrc_profiles/gen.py` 生成的 11 个 VRChat 配置（airi、chocolat、kaguya、karin、kipfel、mafuyu、manuka、maya、moko、nitco、sairou）里，眉（上、下、皱眉）、闭眼、下睑上提、张嘴、嘴角（上、下、向外）这几类键取 `max(原信号, 骨骼信号)`，对应关系在 `gen.py` 的 `BONE` 里，通道说明末尾也写了。手写的配置（ARKit、MMD、Shinano、EKU、Milltina）没有改。
+- **待机不是绑定姿势**（第 6 轮探针，2026-10-13）：游戏待机时眉毛比绑定姿势低 3–4mm，嘴角也偏 1–3mm。只按绑定姿势算的话，待机时 Maya 的怒り 约 0.5、眉_下 约 0.42。所以每个位移信号都带了实测的 `rest_mm`，待机时全部读 0。
+- **动作表情里的眨眼**：动作表情闭眼只靠上眼睑骨骼（`L/R_UpEyeLidJ_LOD02` 绕自身 x 轴转动，全闭约 38°，待机 −0.8°），眨眼 fcParam 001/002 一直是 0。新增转动信号 `eyeClose.L/R`；待机眨眼时两者一起动（38° × fcParam），取较大者不会叠加。
+- 用游戏录到的数据回放（待机、仙人掌转圈、开心 1、开心 2、战吼）：待机时所有位移信号是 0.00；四个动作表情里 `eyeClose` 达到 0.87–0.97。

@@ -67,6 +67,26 @@ for _, s in ipairs({ "L", "R" }) do
         mk_bone(s .. "_" .. name, head_j, p, IDENT, p)
     end
 end
+-- Eyelid hinges for rotation bone signals: LID_DEG[name] = turn about the joint's own x axis
+-- (degrees) on top of a base local rotation that is not identity, so a signal is only right if
+-- it measures against the base rotation, in the joint's own frame.
+LID_DEG = {}
+local function qmul(a, b)
+    return { w = a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+             x = a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+             y = a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+             z = a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w }
+end
+local LID_BASE = { x = 0, y = 0.258819, z = 0, w = 0.965926 }      -- 30 degrees about Y
+for _, s in ipairs({ "L", "R" }) do
+    local name = s .. "_UpEyeLidJ_LOD02"
+    local p = { (s == "L") and 0.03 or -0.03, 0.03, 0.08 }
+    local b = mk_bone(name, head_j, p, LID_BASE, p)
+    b.get_LocalRotation = function()
+        local h = math.rad(LID_DEG[name] or 0) / 2
+        return qmul(LID_BASE, { x = math.sin(h), y = 0, z = 0, w = math.cos(h) })
+    end
+end
 
 CHANNELS = { "blendShape1.EyeBlinkLeft", "blendShape1.JawOpen", "blendShape1_LOD1.JawOpen_LOD1",
              "blendShape1.LookInLeft", "blendShape1.Other", "blendShape1.Mouth_Smile_Left",

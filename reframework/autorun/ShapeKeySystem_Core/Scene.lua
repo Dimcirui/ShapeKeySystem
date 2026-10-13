@@ -175,9 +175,11 @@ local function rest_in_head(j)
     return nil
 end
 
--- Bone signal reads of a face for a list of bone signals ({param, bone, axis, sign, full,
--- deadzone}). Returns { head = Head joint, list = { {id, j, rest, axis, sign, full, deadzone} } };
--- a bone the face lacks is left out, so its signal stays 0. rest = nil: taken from the first read.
+-- Bone signal reads of a face for a list of bone signals ({param, bone, kind, axis, sign, full,
+-- rest, deadzone}). Returns { head = Head joint, list = { {id, j, kind, rest, off, axis, sign,
+-- full, deadzone} } }; a bone the face lacks is left out, so its signal stays 0.
+-- pos: rest = position in the head's frame (nil: taken from the first read); rot: rest = base
+-- local rotation {x, y, z, w}. off = where the idle face holds the bone against rest.
 function S.bone_reads(face, sigs)
     local head = (#sigs > 0) and M_JBN:call(face, "Head") or nil
     local out = { head = head, list = {} }
@@ -185,9 +187,19 @@ function S.bone_reads(face, sigs)
     for _, sig in ipairs(sigs) do
         local j = M_JBN:call(face, sig.bone)
         if j then
-            local ok, rest = pcall(rest_in_head, j)
-            out.list[#out.list + 1] = { id = sig.param, j = j, rest = ok and rest or nil, axis = sig.axis,
-                                        sign = sig.sign, full = sig.full, deadzone = sig.deadzone or 0, name = sig.bone }
+            local rest
+            if sig.kind == "rot" then
+                local ok, q = pcall(W.M_BLROT.call, W.M_BLROT, j)
+                rest = ok and q and { q.x, q.y, q.z, q.w } or nil
+            else
+                local ok, r = pcall(rest_in_head, j)
+                rest = ok and r or nil
+            end
+            if rest or sig.kind ~= "rot" then
+                out.list[#out.list + 1] = { id = sig.param, j = j, kind = sig.kind or "pos", rest = rest,
+                                            off = sig.rest or 0, axis = sig.axis, sign = sig.sign, full = sig.full,
+                                            deadzone = sig.deadzone or 0, name = sig.bone }
+            end
         end
     end
     return out

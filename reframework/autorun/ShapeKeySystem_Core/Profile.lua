@@ -28,11 +28,15 @@ P.signals = { list = {}, by_name = {}, by_param = {}, full = 0.01 }
 P.registry = {}   -- id -> { id, name, source, path, data }
 P.list = {}       -- sorted list of registry entries (for the UI)
 
--- Bone signals (signals.json entries with "bone" instead of "param"): a face bone's offset from
--- its rest pose in the head's frame, along one axis (+x = the face's left, +y = up, +z =
--- forward), times sign, over full_mm (with an optional deadzone), never below 0. Gameplay
--- emotes move the face bones, not the fcParam joints (kevin's in-game probes, 2026-10-13).
--- Each gets an id past the fcParam range so profiles use it by name like any signal.
+-- Bone signals (signals.json entries with "bone" instead of "param"). Gameplay emotes move the
+-- face bones, not the fcParam joints (kevin's in-game probes, 2026-10-13). Two kinds:
+--   pos: the bone's offset from its rest pose in the head's frame, along `axis` (+x = the face's
+--        left, +y = up, +z = forward), over full_mm;
+--   rot: the bone's local turn about its own `rot_axis` against its base rotation, over full_deg
+--        (eyelids: emotes close the eyes with the lid bones while the blink fcParams stay 0).
+-- rest_mm / rest_deg is where the game's idle face holds the bone (it is not the bind pose: the
+-- brows idle 3-4 mm lower), so idle reads 0. Value = sign * (offset - rest) / full, past the
+-- deadzone, never below 0. Each gets an id past the fcParam range so profiles use it by name.
 P.BONE_BASE = 1000
 local AXES = { x = 1, y = 2, z = 3 }
 
@@ -44,11 +48,18 @@ function P.load_signals()
         if type(e.name) == "string" and tonumber(e.param) then
             sig = { slot = i, name = e.name, param = math.floor(tonumber(e.param)),
                     guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
-        elseif type(e.name) == "string" and type(e.bone) == "string" and AXES[e.axis] and tonumber(e.full_mm) then
-            sig = { slot = i, name = e.name, param = P.BONE_BASE + i, bone = e.bone, axis = AXES[e.axis],
-                    sign = (tonumber(e.sign) or 1) < 0 and -1 or 1, full = tonumber(e.full_mm) / 1000,
-                    deadzone = U.clamp(tonumber(e.deadzone) or 0, 0, 0.95),
-                    guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
+        elseif type(e.name) == "string" and type(e.bone) == "string" then
+            local pos = AXES[e.axis] and tonumber(e.full_mm)
+            local rot = AXES[e.rot_axis] and tonumber(e.full_deg)
+            if pos or rot then
+                sig = { slot = i, name = e.name, param = P.BONE_BASE + i, bone = e.bone,
+                        kind = pos and "pos" or "rot", axis = pos and AXES[e.axis] or AXES[e.rot_axis],
+                        full = pos and tonumber(e.full_mm) / 1000 or tonumber(e.full_deg),
+                        rest = pos and (tonumber(e.rest_mm) or 0) / 1000 or (tonumber(e.rest_deg) or 0),
+                        sign = (tonumber(e.sign) or 1) < 0 and -1 or 1,
+                        deadzone = U.clamp(tonumber(e.deadzone) or 0, 0, 0.95),
+                        guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
+            end
         end
         if sig then
             s.list[#s.list + 1] = sig

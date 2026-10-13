@@ -67,11 +67,12 @@ def joint_node(slot):
 
 
 # slot -> bone signal (builtin/signals.json). Gameplay emotes move the face's bones, not the
-# fcParams (in-game probes, 2026-10-13), so these keys take the larger of the two.
+# fcParams (in-game probes, 2026-10-13), so these keys take the larger of the two. Emote blinks
+# close the eyes with the upper-lid bones while the blink fcParams stay 0.
 BONE = {
     "brow_outer": "browRaise", "brow_down": "browLower", "brow_bring": "browInnerDown",
-    "lower_up": "cheekRaise", "jaw": "jawDrop", "smile": "mouthCornerUp", "frown": "mouthCornerDown",
-    "stretch": "mouthCornerOut",
+    "blink": "eyeClose", "lower_up": "cheekRaise", "jaw": "jawDrop", "smile": "mouthCornerUp",
+    "frown": "mouthCornerDown", "stretch": "mouthCornerOut",
 }
 BONE_NOTE = "游戏动作表情由面部骨骼驱动：同时读骨骼信号 {}，取较大者"
 
