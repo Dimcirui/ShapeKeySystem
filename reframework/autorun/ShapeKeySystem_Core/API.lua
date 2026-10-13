@@ -185,6 +185,13 @@ local function notice(level, key, args)
 end
 
 local function save_soon() C.save_at = C.frame + 60 end
+-- gains as saved, for one trail line per save naming what changed (kevin, 2026-10-13: the master
+-- and mouth gains were found at 0 with no idea how; a drag saves once, ~1 s after it stops)
+local function gains_of(e)
+    local g = { master = e.master_gain, gaze = e.gaze_gain }
+    for k, v in pairs(e.region_gains or {}) do g[k] = v end
+    return g
+end
 local function save_now()
     C.save_at = nil
     local out = cfg
@@ -198,6 +205,15 @@ local function save_now()
         for k, v in pairs(t.stash_eyes) do out.eyes[k] = v end
     end
     if not U.save_json(SETTINGS_PATH, out) then log("settings save failed") end
+    local now, was, diff = gains_of(out.expression), C.saved_gains, {}
+    if was then
+        for k, v in pairs(now) do
+            if was[k] and math.abs(was[k] - v) > 1e-6 then diff[#diff + 1] = string.format("%s %.2f -> %.2f", k, was[k], v) end
+        end
+    end
+    table.sort(diff)
+    if #diff > 0 then Trail.event("gains saved: %s", table.concat(diff, ", ")) end
+    C.saved_gains = now
 end
 
 local function request_rescan(...)
@@ -876,6 +892,12 @@ local function do_scan()
     state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  hunters=%s  scan %.2f ms", res.faces, res.skipped,
         C.gc_open and " [guild card]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
+    -- the master hunter's parts, when they change (kevin, 2026-10-13: once the body vanished after
+    -- a gear switch and never came back; this shows whether the part was there at all)
+    if res.sig ~= C.parts_logged then
+        C.parts_logged = res.sig
+        Trail.event("master parts: %s", res.sig ~= "" and (res.sig:gsub("|", " ")) or "none")
+    end
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
 end
@@ -1808,6 +1830,7 @@ function SKS.init()
         notice("error", "notice.no_profile", { tostring(code), tostring(msg) })
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
+    C.saved_gains = gains_of(cfg.expression)
     C.publish_api()
 end
 

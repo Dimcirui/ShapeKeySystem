@@ -449,6 +449,50 @@ do
           "the trail names the parts that came and went")
 end
 
+-- Rare, unexplained events get one trail line each (kevin, 2026-10-13): the master and mouth
+-- gains were found at 0 with no idea how, and once the hunter's body vanished after a gear switch.
+do
+    local Trail = require("ShapeKeySystem_Core.Trail")
+    local orig, seen = Trail.event, {}
+    Trail.event = function(fmt, ...)
+        seen[#seen + 1] = select("#", ...) > 0 and string.format(fmt, ...) or fmt
+        return orig(fmt, ...)
+    end
+    local function find(pat) for _, l in ipairs(seen) do if l:find(pat) then return l end end end
+    for _, v in ipairs({ 0.8, 0.5, 0.2, 0 }) do SKS.call("set_master_gain", { value = v }); ticks(2) end
+    SKS.call("set_region_gain", { region = "mouth", value = 0 })
+    ticks(70)
+    local line = find("^gains saved:")
+    check(line and line:find("master 1.00 %-> 0.00", 1) and line:find("mouth 1.00 %-> 0.00", 1),
+          "a slider dragged to 0: one trail line names the gains that changed (" .. tostring(line) .. ")")
+    local n = 0
+    for _, l in ipairs(seen) do if l:find("^gains saved:") then n = n + 1 end end
+    check(n == 1, "the drag is one line, not one per frame (" .. n .. ")")
+    SKS.call("set_master_gain", { value = 1 }); SKS.call("set_region_gain", { region = "mouth", value = 1 }); ticks(70)
+    seen = {}
+    SKS.call("rescan"); ticks(5)
+    check(find("^master parts: ") == nil, "a rescan with the same parts writes no parts line")
+    local npc = ARMOR.get_Next()
+    local extra = { _name = "ch03_024_0099" }
+    extra.get_GameObject = function(self) return { call = function(_, m)
+        if m == "get_Name" then return self._name end
+        if m == "get_Transform" then return self end
+        if m == "getComponent(System.Type)" then return nil end
+    end } end
+    extra.get_Next = function() return npc end
+    extra.call = function(self, m, ...)
+        if m == "get_GameObject" then return self:get_GameObject() end
+        return self[m](self, ...)
+    end
+    ARMOR.get_Next = function() return extra end
+    SKS.call("rescan"); ticks(5)
+    line = find("^master parts: ")
+    check(line and line:find("ch03_024_0099", 1, true), "the hunter's part list changes: the trail lists the parts (" .. tostring(line) .. ")")
+    ARMOR.get_Next = function() return npc end
+    SKS.call("rescan"); ticks(5)
+    Trail.event = orig
+end
+
 local Probe = require("ShapeKeySystem_Core.Probe")
 MM3 = Probe.murmur3("eyeBlinkLeft")
 ticks(70)
