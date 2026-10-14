@@ -1,12 +1,13 @@
--- ShapeKeySystem: finds the faces that carry fcParam joints (the master player, the guild-card
--- preview hunter, optionally other hunters) and the hunter armour meshes next to them.
--- Only children named ch02_* / ch03_* are considered: NPC faces also carry fcParam.
+-- ShapeKeySystem: finds the faces that carry driver joints (the primary character, the preview
+-- character, optionally others) and the part meshes next to them. What counts as a face or a part
+-- is the adapter's call (`S.adapter`: is_face, face_rank, is_part, eye_joints).
 
 local U = require("ShapeKeySystem_Core.Util")
 local Names = require("ShapeKeySystem_Core.Names")
 local W = require("ShapeKeySystem_Core.Writer")
 
 local S = {}
+S.adapter = {}   -- set by SKS.init
 
 local M_JBN, M_CN, M_CNAME = W.M_JBN, W.M_CN, W.M_CNAME
 local clock = os.clock
@@ -18,11 +19,9 @@ function S.go_name(transform)
     return ok and n or "?"
 end
 
-function S.master_root()
-    local ok, tr = pcall(function()
-        return sdk.get_managed_singleton("app.PlayerManager"):call("getMasterPlayer"):call("get_Object"):call("get_Transform")
-    end)
-    return ok and tr or nil
+function S.primary_root()
+    local f = S.adapter.primary_root
+    return f and f() or nil
 end
 
 function S.children_signature(root)
@@ -33,16 +32,17 @@ function S.children_signature(root)
 end
 
 local function find_faces(root, scene_search)
+    local A = S.adapter
     local faces, seen = {}, {}
     local function add(tr)
-        if tr and not seen[tr] and M_JBN:call(tr, "fcParam_001") then
+        if tr and not seen[tr] and A.is_face(tr) then
             seen[tr] = true; faces[#faces + 1] = tr
         end
     end
     if root then
         local c = root:call("get_Child")
         while c do
-            if S.go_name(c):find("Player_Face", 1, true) == 1 then add(c) end
+            if A.face_rank(c) > 0 then add(c) end
             c = c:call("get_Next")
         end
     end
@@ -60,14 +60,14 @@ local function find_faces(root, scene_search)
     return faces
 end
 
--- Hunter armour meshes under one parent: every ch02/ch03 child with blendshape channels.
+-- Part meshes under one parent: every child the adapter calls a part, with blendshape channels.
 -- Returns parts = { {id, mesh, names, n} } (names = every channel name, read once per scan).
 local function read_parts(parent)
     local parts = {}
     local child = parent and parent:call("get_Child")
     while child do
         local cname = S.go_name(child)
-        if cname:find("ch02", 1, true) or cname:find("ch03", 1, true) then
+        if S.adapter.is_part(cname) then
             local mesh
             pcall(function() mesh = child:call("get_GameObject"):call("getComponent(System.Type)", W.MESH_TYPE) end)
             local n = mesh and (M_CN:call(mesh) or 0) or 0
@@ -120,11 +120,11 @@ end
 -- opts = { index, scene_search (bool), min_hits }
 function S.scan(opts)
     local t0 = clock()
-    local root = S.master_root()
+    local root = S.primary_root()
     local sig = S.children_signature(root)
     local faces = find_faces(root, opts.scene_search)
     -- one face per parent: a cutscene actor can carry several transforms with fcParam joints
-    -- (all of them would drive the same armour meshes); a Player_Face* child wins
+    -- (all of them would drive the same part meshes); the higher face_rank wins
     local by_parent, order = {}, {}
     for _, face in ipairs(faces) do
         local parent = face:call("get_Parent")
@@ -132,7 +132,7 @@ function S.scan(opts)
             local cur = by_parent[parent]
             if not cur then
                 by_parent[parent] = face; order[#order + 1] = parent
-            elseif S.go_name(cur):find("Player_Face", 1, true) ~= 1 and S.go_name(face):find("Player_Face", 1, true) == 1 then
+            elseif S.adapter.face_rank(face) > S.adapter.face_rank(cur) then
                 by_parent[parent] = face
             end
         end
@@ -171,7 +171,7 @@ function S.scan(opts)
                 label = S.go_name(parent), primary = primary, face = face,
                 parent = parent, psig = psig or sig,
                 params = {}, dict_params = {}, use_eyes = false,
-                eyes = { L = M_JBN:call(face, "L_EyeJ_LOD02"), R = M_JBN:call(face, "R_EyeJ_LOD02") },
+                eyes = S.adapter.eye_joints(face),
                 targets = targets, angles = { L = { 0, 0 }, R = { 0, 0 } },
                 W = {}, V = {},
             }

@@ -196,8 +196,9 @@ A.conditions = {
 
 ```lua
 A.input = {
-    install = function(is_enabled) end,   -- 安装游戏侧钩子；is_enabled() 返回面板当前是否屏蔽输入
-    capture_mouse = function() -> dx, dy, wheel | nil,  -- UpdateMotionFrame 前调用：读取并清掉游戏的鼠标输入
+    install = function(is_enabled, failed, forced) end,  -- 安装游戏侧钩子；is_enabled() 返回面板当前是否屏蔽输入，
+                                                          -- failed(text) 报告没装上的钩子，forced() 记一次放开光标
+    capture_mouse = function() -> dx, dy, wheel | nil,    -- UpdateMotionFrame 前调用：读取并清掉游戏的鼠标输入
 }
 ```
 

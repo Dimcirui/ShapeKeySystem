@@ -47,7 +47,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `rev` | int | |
-| `last_scan` | `{time, ms, faces, cached_skip, guild_card}` | 最近一次扫描的信息 |
+| `last_scan` | `{time, ms, faces, cached_skip, preview}` | 最近一次扫描的信息 |
 | `rigs` | list of Rig | 被驱动的角色。主角色和名片分身**不作区分**，界面只显示合并后的结果 |
 | `parts` | list of Part | 当前身上的部件，去重后合并 |
 

@@ -23,6 +23,7 @@ $owned = @(
     "autorun\ShapeKeySystem.lua",
     "autorun\ShapeKeySystem_Core",
     "autorun\ShapeKeySystem_UI",
+    "autorun\ShapeKeySystem_Games",
     "data\ShapeKeySystem\builtin",
     "data\ShapeKeySystem\faces",
     "images\ShapeKeySystem"

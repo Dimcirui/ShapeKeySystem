@@ -10,7 +10,6 @@ local Scene   = require("ShapeKeySystem_Core.Scene")
 local Writer  = require("ShapeKeySystem_Core.Writer")
 local X       = require("ShapeKeySystem_Core.Expression")
 local Guard   = require("ShapeKeySystem_Core.Guard")
-local Probe   = require("ShapeKeySystem_Core.Probe")
 local Trail   = require("ShapeKeySystem_Core.Trail")
 local Presets = require("ShapeKeySystem_Core.Presets")
 local Sculpt  = require("ShapeKeySystem_Core.Sculpt")
@@ -137,7 +136,7 @@ local C = {
     prog = nil, resolved = nil, original_resolved = nil, edits = {}, index = {},
     gains = {}, forced = {},
     rigs = {}, parts = {}, sig = "", cov_key = nil,
-    frame = 0, scan_at = { 1 }, next_periodic = 0, gc_open = false,
+    frame = 0, scan_at = { 1 }, next_periodic = 0, preview_open = false,
     pending_zero = {}, save_at = nil,
     P = {}, Pbuf = {}, inv_full = 100, dict_params = {},
     want_signals = false,
@@ -766,7 +765,7 @@ end
 
 local function do_scan()
     if not C.prog then return end
-    local res = Scene.scan({ index = C.index, scene_search = C.gc_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3 })
+    local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3 })
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
     -- rescans neither pause writing nor rewrite every channel
     local old = {}
@@ -790,7 +789,7 @@ local function do_scan()
     C.next_periodic = C.frame + (C.menu and MENU_SCAN_FRAMES or max(1, cfg.periodic_scan_sec) * 60)
     prof.scan = prof.scan + res.ms / 1000
     local sc = state.scene
-    sc.last_scan = { time = os.time(), ms = res.ms, faces = res.faces, cached_skip = res.skipped, guild_card = C.gc_open }
+    sc.last_scan = { time = os.time(), ms = res.ms, faces = res.faces, cached_skip = res.skipped, preview = C.preview_open }
     local rigs = {}
     for i, r in ipairs(res.rigs) do
         local ts = {}
@@ -867,7 +866,7 @@ local function do_scan()
         tn[#tn + 1] = (r.primary and "*" or "") .. r.label .. "[" .. table.concat(t, ",") .. "]"
     end
     state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  hunters=%s  scan %.2f ms", res.faces, res.skipped,
-        C.gc_open and " [guild card]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
+        C.preview_open and " [preview]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
@@ -1004,7 +1003,7 @@ end
 
 -- ---------------------------------------------------------------- experimental cutscene mode
 -- While a cutscene plays (IsBusy, not IsBusyLoad) and cfg.cutscene_drive is on, the hunter is
--- driven like in gameplay. Segment boundaries come from app.DemoMediator hooks (Guard):
+-- driven like in gameplay. Segment boundaries come from the adapter events (MH Wilds hooks):
 --   onPlayStartTimeline(i)            a segment starts: drop everything, settle, search the whole
 --                                     scene (the visible hunter is often the cutscene copy Pl000_00)
 --   requestSkip / requestStop / unload  drop everything at once (pre-hook, before the game tears
@@ -1027,7 +1026,7 @@ local function zero_ready_targets(why)
     end
 end
 
--- a non-primary rig (guild card / save select / cutscene hunter) whose parent's children changed:
+-- a non-primary rig (preview / save select / cutscene character) whose parent's children changed:
 -- its parts are being rebuilt or torn down
 local function parents_changed()
     for _, r in ipairs(C.rigs) do
@@ -1157,11 +1156,11 @@ function SKS.tick()
         C.pending_zero = {}
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
-    if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.master_root()) ~= C.sig then
+    if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("hunter parts changed", Guard.SETTLE_FRAMES)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
         drop_rigs("preview hunter changed", Guard.SETTLE_FRAMES)
-    elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.master_root()) ~= C.sig then
+    elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         request_rescan(Guard.SETTLE_FRAMES)
     end
     local due = false
@@ -1171,7 +1170,8 @@ function SKS.tick()
     if due or ((C.menu or cfg.periodic_scan_sec > 0) and f >= C.next_periodic) then do_scan() end
     if C.probe_pending then
         C.probe_pending = false
-        state.debug.probe = Probe.run("ShapeKeySystem\\hash_probe.txt")
+        local probe = SKS.adapter.probe
+        state.debug.probe = probe and probe("ShapeKeySystem\\hash_probe.txt") or { "no probe for this game" }
         bump("debug")
     end
 
@@ -1861,7 +1861,11 @@ function SKS.set_ui_open(open, want_signals)
 end
 
 -- ---------------------------------------------------------------- init / hooks
-function SKS.init()
+-- adapter: the game adapter (ShapeKeySystem_Games/<Game>/Adapter.lua); its hooks are installed last
+function SKS.init(adapter)
+    SKS.adapter = adapter
+    Scene.adapter, Guard.adapter, Presets.adapter = adapter, adapter, adapter
+    Cnd.install(adapter.conditions)
     Trail.open()
     load_settings()
     if hotkey_migrated_now then
@@ -1890,10 +1894,14 @@ function SKS.init()
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
     C.publish_api()
+    if adapter.init then
+        adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
+                       menu = SKS.on_menu, preview = SKS.on_preview })
+    end
 end
 
 -- skip / stop / unload (pre-hook): let go before the game destroys the cutscene actors
-function SKS.on_cutscene_stop(reason)
+function SKS.on_release(reason)
     Trail.event("hook %s (cs active %s, released %s, rigs %d)", tostring(reason), tostring(CS.active), tostring(CS.released), #C.rigs)
     zero_ready_targets(reason)   -- the meshes are still valid in the pre-hook
     CS.released, CS.released_at = true, C.frame
@@ -1904,17 +1912,17 @@ function SKS.on_cutscene_stop(reason)
     if not CS.active then request_rescan(Guard.SETTLE_FRAMES * 4) end
 end
 
--- a cutscene segment starts (pre-hook of onPlayStartTimeline)
-function SKS.on_cutscene_segment(index)
-    Trail.event("hook onPlayStartTimeline(%s) (cs active %s, released %s, rigs %d)", tostring(index), tostring(CS.active), tostring(CS.released), #C.rigs)
+-- a cutscene segment starts (pre-hook)
+function SKS.on_segment(index)
+    Trail.event("hook segment(%s) (cs active %s, released %s, rigs %d)", tostring(index), tostring(CS.active), tostring(CS.released), #C.rigs)
     zero_ready_targets("segment start")
     CS.seg, CS.seg_t0, CS.released, CS.scanned = index, C.frame, false, false
     drop_rigs("cutscene segment " .. tostring(index), nil)
     C.scan_at = {}
 end
 
-function SKS.on_equip_build()
-    Trail.event("hook onEquipBuildEnd (rigs %d)", #C.rigs)
+function SKS.on_rebuilt()
+    Trail.event("hook rebuilt (rigs %d)", #C.rigs)
     if #C.rigs > 0 then drop_rigs("equipment rebuilt", Guard.SETTLE_FRAMES)
     else request_rescan(Guard.SETTLE_FRAMES) end
 end
@@ -1922,17 +1930,18 @@ end
 -- debug: run the blendshape hash-table probe on the next stable frame
 function SKS.request_probe() C.probe_pending = true end
 
--- title / save-select GUI opened or closed: the preview hunters are (re)built around it.
--- Only a flag here: the game calls some of these every frame, many times per frame (GUI010100
--- onClose froze the title screen when each call dropped refs + ran a full GC). tick() handles
+-- title / save-select GUI opened or closed: the preview characters are (re)built around it.
+-- Only a flag here: the game may call these many times per frame (a hook that dropped refs and
+-- ran a full GC on every call froze the title screen). tick() handles
 -- the flag at most once per frame and only when it changes.
 function SKS.on_menu(name, open)
     C.menu_event = name .. (open and " open" or " close")
 end
 
-function SKS.on_guild_card(open)
-    if C.gc_open == open then return end   -- repeated calls: nothing new
-    C.gc_open = open
+-- the preview character screen (guild card) opened or closed
+function SKS.on_preview(open)
+    if C.preview_open == open then return end   -- repeated calls: nothing new
+    C.preview_open = open
     if open then request_rescan(10, 30, 60, 120, 240, 480) else request_rescan(5, 60) end
 end
 

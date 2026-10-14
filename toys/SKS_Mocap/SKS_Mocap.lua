@@ -7,6 +7,7 @@
 local U      = require("ShapeKeySystem_Core.Util")
 local Names  = require("ShapeKeySystem_Core.Names")
 local Scene  = require("ShapeKeySystem_Core.Scene")
+Scene.adapter = require("ShapeKeySystem_Games.Wilds.Adapter")   -- face / part lookups only, no hooks
 local Writer = require("ShapeKeySystem_Core.Writer")
 
 local LIVE_PATH = "SKS_Mocap\\live.json"
@@ -246,7 +247,7 @@ local function cache_targets(rig)
 end
 
 local function scan()
-    local root = Scene.master_root()
+    local root = Scene.primary_root()
     if not root or not parts_ready(root) then
         root = nil
         drop_rig("waiting for hunter meshes to finish loading")
@@ -344,7 +345,7 @@ local function drive_head()
         -- only while the cutscene is playing; cutscene_update lets these go when it ends
         if not (gate.demo_busy and not gate.demo_load) then return end
     else
-        local root = Scene.master_root()
+        local root = Scene.primary_root()
         if not root or root:get_address() ~= body:get_address() then st.head_chain = nil; return end   -- hunter object was rebuilt
     end
     local ho, f = st.head_out, st.fade
@@ -424,7 +425,7 @@ local function cg_scan()
     st.cg_rig = pick
     -- the master player on screen also gets the head turn; its joints are let go with the face
     if pick.primary then
-        st.cg_body = Scene.master_root()
+        st.cg_body = Scene.primary_root()
         st.cg_head = build_head_chain(st.cg_body)
     end
     st.cg_status = "driving " .. (pick.primary and "master player" or pick.label) .. " [" .. table.concat(names, ", ") .. "]"
@@ -538,7 +539,7 @@ re.on_application_entry("LateUpdateBehavior", function()
             st.next_scan = math.max(st.next_scan, st.frame + RESCAN_DELAY)
         end
         -- parts changed (load screen, cutscene, equipment): stop touching the old meshes at once
-        if st.frame % 5 == 0 and (st.rig or st.head_chain) and Scene.children_signature(Scene.master_root()) ~= st.sig then
+        if st.frame % 5 == 0 and (st.rig or st.head_chain) and Scene.children_signature(Scene.primary_root()) ~= st.sig then
             drop_rig("hunter parts changed, rescanning")
         end
         if st.rig then
