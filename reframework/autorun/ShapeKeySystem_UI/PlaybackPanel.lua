@@ -1,5 +1,6 @@
--- 表情页面的录制测试区：两种绘制后端共用，仅读取播放快照并提交命令，不持有引擎资源。
--- 位于表情详情底部，默认收起以节省空间，播放期间保持展开；命令只在游戏更新时执行。
+-- 绘制面部动画测试控件和播放分析。
+--
+-- 页面拥有筛选和分页状态，播放数据归后端所有；两种后端共用控件，不持有引擎引用。
 local D = require("ShapeKeySystem_UI.Draw")
 local T = require("ShapeKeySystem_UI.Theme")
 local W = require("ShapeKeySystem_UI.Widgets")
@@ -7,7 +8,6 @@ local Mapping = require("ShapeKeySystem_UI.MappingEditor")
 local P = {}
 local C = T.c
 
--- 日志共用两套后端，每页最多五条；只读取本次统计，筛选与分页归页面状态所有。
 local function draw_analysis(ctx, x, y, w)
     local a, s = ctx.st.playback.analysis, ctx.state
     local cy = y + 8
@@ -75,7 +75,6 @@ local function draw_analysis(ctx, x, y, w)
         else
             D.text_mid(bound, x + 16, cy + 24, 24, C.warn, W.small(), action_x - x - 24)
             if W.button("添加映射", action_x, cy + 22, action_w, 24, { font = W.small() }) then
-                -- 复用表情映射编辑器；信号名写入新节点，用户只需选择形态键并应用。
                 Mapping.open(ctx, nil, row.signal)
             end
             W.tooltip("新建形态键映射，并自动使用 " .. (row.signal or row.label) .. " 作为面部信号", x + 16, cy + 24, action_x - x - 24, 24)

@@ -1,8 +1,8 @@
--- ShapeKeySystem: backend entry point. The UI reads SKS.state / SKS.live and changes things
--- only through SKS.call(cmd, args). Mesh writes happen in SKS.tick (LateUpdateBehavior);
--- 录制 raw 输入由游戏适配器在 UpdateMotion / 面部动画回调注入，UI 只提交命令。
--- Contract: docs/plans/shape-key-system-api.md (v0.1). M1: runtime, scene, expression, eyes,
--- mapping, debug. M2: parent presets (bindings, per part ID) and the sculpt layer.
+-- 管理运行状态、配置和形态键驱动。
+--
+-- UI 读取 `SKS.state` / `SKS.live`，通过 `SKS.call` 提交修改，不直接写引擎。
+-- 网格权重在 `SKS.tick`（LateUpdateBehavior）写入；录制 raw 输入由游戏适配器的更新和面部回调注入。
+-- 接口与文件格式见 docs/plans/shape-key-system-api.md。
 
 local U       = require("ShapeKeySystem_Core.Util")
 local Names   = require("ShapeKeySystem_Core.Names")
@@ -969,7 +969,7 @@ local function drive(rig, primary)
     local t0 = clock()
     local P = primary and C.P or C.Pbuf
     X.read(rig, P, C.inv_full, primary and C.want_signals and state.runtime.ui_open, cfg.eyes, rig.use_eyes)
-    -- 播放代次只重置此角色的平滑缓存；其他角色仍读取并计算自己的实时输入。
+    -- 播放、循环和跳转改变 `Playback.epoch`，主角色不得沿用此前的平滑缓存。
     if rig.primary and rig.playback_epoch ~= Playback.epoch then
         rig.W, rig.V, rig.playback_epoch = {}, {}, Playback.epoch
     end
@@ -1287,7 +1287,7 @@ function cmds.set_enabled(a)
     return true
 end
 
--- 录制测试命令只排队；游戏更新回调负责验证、连接、注入及恢复原输入。
+-- 绘制回调只提交播放命令，引擎操作由更新回调执行。
 function cmds.playback(a)
     if a.action == "play" and not cfg.enabled then return false, "E_BAD_ARGS", "请先启用 ShapeKeySystem" end
     return Playback.request(a.action, a)

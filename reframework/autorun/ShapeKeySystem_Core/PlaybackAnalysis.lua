@@ -1,11 +1,12 @@
--- 本次播放分析：纯 Lua，实例拥有帧游标和计数，公开状态只含普通数据，不持有引擎对象。
--- 按实际经过的录制帧统计绝对幅值 > 1% 的命中，暂停不计，循环累计，跳转只计目标帧。
+-- 统计录制信号命中次数及当前配置的形态键绑定。
+--
+-- 实例拥有录制帧游标和累计计数，不持有引擎对象。每次经过幅值超过 1% 的录制帧计一次命中，
+-- 相同时间的重复调用不计数，循环累计，跳转只计目标帧。
 local Profile = require("ShapeKeySystem_Core.Profile")
 local A = {}
 A.__index = A
 local THRESHOLD = 0.01
 
--- 重建有命中的排名；同次数按参数编号排序，绑定信息变化不改变已经累积的计数。
 function A:publish()
     local s, rows, bound = self.state, {}, 0
     for _, row in pairs(self.by_param) do
@@ -21,7 +22,6 @@ end
 
 local function hit(value, unit) return math.abs(value / unit) > THRESHOLD end
 
--- 单帧计数，不使用渲染帧数或钩子次数；每次经过静止录制帧也正常计入一次。
 function A:count(frame)
     self.state.sampled_frames = self.state.sampled_frames + 1
     for param, column in pairs(self.clip.map) do
@@ -37,7 +37,7 @@ function A:range(elapsed)
     return changed
 end
 
--- 跨循环时完整周期用预计算总量相乘，避免高倍速或短录制造成逐循环遍历。
+-- 完整循环使用预计算总量，避免逐循环遍历录制帧。
 function A:advance(elapsed, loops)
     local changed = false
     if loops > 0 then
@@ -55,7 +55,7 @@ function A:advance(elapsed, loops)
     if changed then self:publish() end
 end
 
--- 跳转后统计目标所显示的录制帧，不补记跳过的帧；再次经过旧帧视为一次新播放。
+-- 只统计目标显示帧，不补计跳过的帧。
 function A:seek(elapsed)
     local frames, lo, hi = self.clip.frames, 1, #self.clip.frames
     while lo < hi do
@@ -66,7 +66,7 @@ function A:seek(elapsed)
     self:publish()
 end
 
--- 当前编译配置的信号依赖包括嵌套运算、原始 p 节点和 ref 间接引用；仅修订变化时重建。
+-- 修订变化时重建绑定依赖，保留累计命中次数；`Profile.needs` 包含间接引用。
 function A:bindings(prog, signals, channels, revision)
     if revision ~= nil and self.binding_revision == revision then return end
     self.binding_revision = revision
@@ -80,7 +80,7 @@ function A:bindings(prog, signals, channels, revision)
             end
         end
         local param_name = self.label(param)
-        -- 通用 fcParam 名称只是补全编号，不重复显示为“fcParam · fcParam”。
+        -- 字典别名与原始通道名相同时，只显示一次。
         local semantic = {}
         for _, alias in ipairs(aliases) do if alias ~= param_name then semantic[#semantic + 1] = alias end end
         row.label = #semantic > 0 and (table.concat(semantic, " / ") .. " · " .. param_name) or param_name
@@ -106,13 +106,13 @@ function A:bindings(prog, signals, channels, revision)
     self:publish()
 end
 
--- 停止后释放大体积解码帧，仅保留排名和参数元数据；绑定仍可跟随当前已应用配置刷新。
+-- 释放解码帧，保留排名供停止后查看和更新绑定。
 function A:finish()
     self.clip, self.totals = nil, nil
     self.state.finished = true
 end
 
--- raw 的幅值单位由游戏适配器给出，仅用于活跃判定；这一步不把 raw 当成 final 信号。
+-- `unit` 只用于活跃判定，不将原版输入转换为游戏求值后的最终信号。
 function A.new(clip, unit, file, label)
     assert(type(unit) == "number" and unit > 0 and unit < math.huge, "播放分析缺少游戏信号幅值单位")
     local self = setmetatable({ clip = clip, unit = unit, label = label or tostring, cursor = 2, by_param = {}, totals = {},

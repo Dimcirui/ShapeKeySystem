@@ -1,5 +1,7 @@
--- 录制播放器：拥有文件目录、解码样本、播放时钟和命令队列；引擎对象完全归游戏适配器所有。
--- UI 只提交命令，连接/恢复和推进仅在游戏更新回调执行；final 仅覆盖主角色的计算输入。
+-- 管理录制列表、播放时钟和测试命令。
+--
+-- 本模块拥有解码帧与采样表，引擎对象归游戏适配器所有；UI 只提交命令，更新回调执行连接和恢复。
+-- `final` 只覆盖匹配会话的主角色输入，其他角色继续读取自身信号。
 local U = require("ShapeKeySystem_Core.Util")
 local Recording = require("ShapeKeySystem_Core.Recording")
 local Analysis = require("ShapeKeySystem_Core.PlaybackAnalysis")
@@ -9,13 +11,13 @@ local adapter, clip, values, last_time, catalog
 local pending = {}
 local analysis
 
--- 仅修订变化时解析当前配置绑定；停止后仍刷新映射标记，但不再增加命中次数。
+-- 停止后仍刷新当前配置的绑定，已累计的命中次数不变。
 local function update_analysis_bindings()
     if not analysis or not R.context then return end
     analysis:bindings(R.context())
 end
 
--- 仅列出当前游戏的内置/用户目录；API 以目录登记的 ID 查找，不接受任意外部路径。
+-- 注册列表中的 ID 才能用于播放，命令不能指定外部文件路径。
 function R.refresh()
     local s = R.state
     s.rev = s.rev + 1
@@ -36,7 +38,7 @@ function R.refresh()
     return true
 end
 
--- 结束只释放当前会话；自然结束保留末尾进度，失效对象释放时禁止恢复旧指针。
+-- 释放当前会话并保留进度和分析；`restore` 为 false 时适配器不得写回旧对象。
 function R.stop(restore, message)
     local was_active = clip ~= nil
     local restore_error
@@ -70,7 +72,7 @@ function R.fail(message)
     if R.log then R.log("recording playback: %s", tostring(message)) end
 end
 
--- 稳定时钟推进，不以帧号或 sample_hz 计时；暂停保持样本，循环和跳转重置平滑代次。
+-- 按游戏时钟推进；暂停也更新时钟基线，恢复时不得补计暂停的时间。
 local function advance()
     if not clip then return end
     local s = R.state
@@ -91,7 +93,7 @@ local function advance()
     else
         analysis:advance(s.elapsed, 0)
     end
-    -- 生成新表再交换，面部回调只读取已完成的样本，不与游标推进共写同一表。
+    -- 替换完整采样表，面部回调不读取正在生成的样本。
     values = Recording.sample(clip, s.elapsed)
 end
 
@@ -122,7 +124,7 @@ local function start(a)
         s.game, file.name, decoded.track, s.frames, s.channels, s.duration) end
 end
 
--- 接受参数时不写入引擎；按提交顺序处理，连续调速/播放/暂停不会相互覆盖。
+-- 只验证并排队，保持同帧连续命令的提交顺序。
 function R.request(action, a)
     a = a or {}
     if not adapter then return false, "E_UNSUPPORTED", R.state.message end
@@ -155,7 +157,7 @@ function R.inject()
     if clip and clip.track == "raw" and values then adapter.inject(values) end
 end
 
--- 本函数由 UpdateMotion / SKS tick 调用，所有错误停止当前测试并保留可读原因。
+-- 由游戏更新回调调用；推进或注入失败时停止会话并保留错误原因。
 function R.tick(inject)
     if not adapter then return end
     local ok, err = pcall(function()
@@ -187,7 +189,7 @@ function R.tick(inject)
     if not ok then R.fail(err) end
 end
 
--- final 数据以游戏适配器定义的单位归一化；仅主猎人匹配会话时替换其独立输入表。
+-- 仅覆盖匹配会话的角色输入；缺失参数置零，眼球角度不参与最终信号测试。
 function R.apply(rig, P, inv_full)
     if not clip or clip.track ~= "final" or not adapter.matches(rig) then return false end
     for param in pairs(P) do P[param] = nil end
@@ -196,7 +198,7 @@ function R.apply(rig, P, inv_full)
     return true
 end
 
--- 注册在脚本加载阶段，满足 REF 的 require 限制；未知游戏不安装荒野回调。
+-- 加载阶段接入所选游戏适配器；没有 `playback` 接口时不注册播放回调。
 function R.init(game, log, params, context)
     R.log, R.params, R.context = log, params, context
     adapter = game.playback

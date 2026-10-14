@@ -1,5 +1,7 @@
--- 录制解码与时间采样：纯 Lua 数据模块，不持有游戏对象，不读取文件，也不写引擎。
--- 格式校验在加载时完成；差分列是 params 的一基下标，新值为绝对值，空差分保持前帧。
+-- 校验录制数据并按时间采样。
+--
+-- 解码结果拥有独立逐帧值，源数据保持不变；不读取文件或持有引擎对象。
+-- 差分列是 `params` 的一基下标，值为绝对值，空差分保留前帧；格式见 docs/plans/shape-key-system-api.md。
 local R = {}
 local abs, min, max = math.abs, math.min, math.max
 
@@ -7,7 +9,7 @@ function R.finite(v, bound, integer)
     return type(v) == "number" and v == v and abs(v) <= bound and (not integer or v % 1 == 0)
 end
 
--- 检查稠密数组；只在允许空差分时接受 {}，拒绝带字符串键的对象和缺号数组。
+-- 拒绝对象键和缺号数组；调用方另行检查是否允许空数组。
 local function array(t, limit, label)
     assert(type(t) == "table", label .. " 必须是数组")
     local n = #t
@@ -21,7 +23,7 @@ local function array(t, limit, label)
     return n
 end
 
--- 解码所选轨道，同时校验另一轨道；返回独立的逐帧值及编号映射，原 JSON 保持不变。
+-- 同时校验已声明的两条轨道，拒绝错误后不得得到可播放的部分结果。
 function R.decode(data, track, catalog, game)
     assert(type(data) == "table", "录制文件无法读取")
     assert(track == "raw" or track == "final", "未知播放模式")
@@ -89,7 +91,7 @@ function R.decode(data, track, catalog, game)
         track = track, has_final = has_final }
 end
 
--- 二分查找时间段；保留静止帧的时间，不提前向远处变化插值。输出表归播放实例所有。
+-- 在相邻录制帧之间插值；`out` 可复用，调用方拥有采样结果。
 function R.sample(clip, elapsed, out)
     assert(R.finite(elapsed, 1e9), "播放时间无效")
     local frames, lo, hi = clip.frames, 1, #clip.frames

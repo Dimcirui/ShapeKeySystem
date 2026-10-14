@@ -1,5 +1,6 @@
--- 表情映射编辑器：页面持有未提交草稿，共用 d2d / ImGui 控件；后端命令负责验证及运行时应用。
--- 节点树沿用 sks.profile/1，保留 any/unless 等元数据；保存只写 user/profiles。
+-- 编辑表情映射草稿并提交后端命令。
+--
+-- 页面独立持有草稿，取消不改变已应用配置；d2d / ImGui 共用控件，后端负责验证和保存。
 local D = require("ShapeKeySystem_UI.Draw")
 local T = require("ShapeKeySystem_UI.Theme")
 local W = require("ShapeKeySystem_UI.Widgets")
@@ -28,7 +29,7 @@ local OPS = { sum = true, max = true, min = true, mul = true, sub = true }
 local GROUP_KEYS, GROUP_LABELS = {}, {}
 for i, g in ipairs(Expression.GROUPS) do GROUP_KEYS[i], GROUP_LABELS[i] = g.key, g.name end
 
--- 根据面部信号的名称给新映射选择最接近的部位；只负责初始值，用户仍可在编辑器中调整。
+-- 从语义名推断新映射的初始部位；原始通道名归入扩展，仍可手动修改。
 local function group_for_signal(signal)
     local n = (signal or ""):lower()
     if n:find("brow", 1, true) then return "brow" end
@@ -77,13 +78,12 @@ end
 
 local function mark(draft) draft.dirty = true end
 
--- 信号的显示名：语义名 · 原始通道名；本游戏没有的信号标出来
 local function signal_title(sd)
     local label = sd.no_signal and "本游戏没有" or sd.label
     return sd.name == label and label or (sd.name .. " · " .. label)
 end
 
--- 节点摘要只读，不把 JSON 元数据当成指令；用于总览、路径和折叠后的辨认。
+-- 生成摘要，不修改节点或后端快照。
 function E.summary(ctx, node)
     local kind = E.node_type(node)
     local label = LABELS[index_of(TYPES, kind)]
@@ -136,7 +136,6 @@ function E.tree(ctx, draft)
     return rows, selected
 end
 
--- 每个节点一张紧凑卡片，树负责显示关系；具体参数只在当前节点设置区绘制。
 local function draw_tree(ctx, draft, x, y, w, compact)
     local rows = E.tree(ctx, draft)
     local cy = y
@@ -190,7 +189,6 @@ local function slider(draft, id, label, x, y, w, value, lo, hi, step, fmt)
     return v, y + 34
 end
 
--- 信号选择器在节点下展开；可按语义名、原始通道名或用途搜索，完整词典通过滚动浏览。
 local function signal_picker(ctx, draft, node, id, x, y, w)
     local signals = ctx.st.mapping.signals or {}
     local selected
@@ -224,7 +222,6 @@ local function signal_picker(ctx, draft, node, id, x, y, w)
     return y
 end
 
--- 仅绘制选中的一个节点；嵌套关系由紧凑树展示，避免每个输入重复展开整套设置。
 local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
     local cy = y
     local kind = E.node_type(node)
@@ -326,8 +323,6 @@ local function parse_names(text)
     return #list > 0 and list or nil
 end
 
--- 页面内工作区：宽窗口左右分栏，窄窗口上下排列；操作固定在工作区顶部。
--- 左侧只显示结构和摘要，右侧只编辑选中节点；说明及匹配规则按需展开。
 function E.draw_draft(ctx, x, y, w)
     local draft = ctx.state.mapping_draft
     if not draft then return 0 end

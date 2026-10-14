@@ -1,4 +1,6 @@
--- 表情详情：共用两种绘制后端，按部位显示实时权重；映射草稿由 MappingEditor 编辑和提交。
+-- 绘制表情详情与实时权重。
+--
+-- 映射草稿归 `MappingEditor` 管理；两种后端共用页面，绘制只提交命令，不写引擎。
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -190,7 +192,7 @@ end
 function Page.draw(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
     local ex = st.expression
-    -- 首次进入详情页默认收起所有映射分组；后续只保留用户的展开/收起操作。
+    -- 折叠状态只初始化一次，后续绘制保留玩家操作。
     if not s.collapsed_initialized then
         s.collapsed = {}
         for _, g in ipairs((ex and ex.groups) or {}) do s.collapsed[g.key] = true end
@@ -210,7 +212,7 @@ function Page.draw(ctx, x, y, w)
     local filter = (s.filter or ""):lower()
     local pv = s.browsing
     local src = pv or ex
-    -- 以同一份通道/分组快照完成本次绘制，避免应用或删除映射时新旧 slot 混用。
+    -- 本次绘制使用同一份通道和分组快照，避免命令生效后混用新旧 `slot`。
     local channels, groups = src.channels, src.groups
     for _, g in ipairs(groups or {}) do
         local rows = {}
@@ -245,7 +247,6 @@ function Page.draw(ctx, x, y, w)
     if clicked then s.gaze_open = not gopen end
     cy = cy + hh + 6
     if gopen then cy = cy + Eyes.draw(ctx, x, cy, w) end
-    -- 录制测试放在全部通道和视线设置之后，保持表情详情的主要编辑区域紧凑。
     cy = cy + 10
     cy = cy + PlaybackPanel.draw(ctx, x, cy, w)
     return cy - y

@@ -1,6 +1,7 @@
--- 荒野录制适配器：只拥有当前主猎人的面部动画层，禁止把录制索引复用到另一个对象。
--- 连接/恢复由 UpdateMotion 主流程执行，raw 注入在面部回调前后执行；UI 不触碰引擎对象。
--- 对象、场景或参数布局变化时丢弃会话，不对失效引用恢复；不写其他猎人和名片分身。
+-- 管理荒野主猎人的录制播放会话。
+--
+-- 面部和动画层引用归 `session` 所有；写入前复查对象身份与参数索引，失效时放弃恢复。
+-- 更新回调连接和恢复会话，面部钩子注入已生成的 raw 样本；输入已是引擎单位，不再乘 0.01。
 local U = require("ShapeKeySystem_Core.Util")
 local Recording = require("ShapeKeySystem_Core.Recording")
 local A = { id = "mhwilds", name = "怪物猎人：荒野", final_unit = 0.01, raw_unit = 0.01 }
@@ -14,7 +15,7 @@ function A.now()
     return now
 end
 
--- 每次只从当前管理器查询当前面部；返回新查询对象，旧会话不能决定新对象的位置。
+-- 每次重新查询主猎人的面部，用于验证会话引用是否仍属于当前角色。
 local function locate()
     local manager = sdk.get_managed_singleton("app.PlayerManager")
     local player = manager and manager:call("getMasterPlayer")
@@ -65,7 +66,7 @@ function A.valid()
         and layer:call("get_ValueCount") == session.count
 end
 
--- 先查全部索引、关节及基线再接受会话，任何参数缺失都不会部分写入。
+-- 全部参数索引、关节和基线校验通过后才建立会话，不在连接阶段写入。
 function A.connect(clip)
     assert(clip.track ~= "raw" or A.hook_ready, "荒野面部动画回调不可用，无法重播 raw")
     local face, controller, layer = locate()
@@ -91,7 +92,6 @@ function A.matches(rig)
     return session and rig.primary and rig.face:get_address() == session.face_addr
 end
 
--- 调用前必须重新确认会话身份；输入已是引擎单位，严禁再乘 0.01。
 function A.inject(values)
     assert(A.valid(), "主猎人、场景或面部动画层已更换，播放已停止")
     -- 数量不变也可能更换输入布局；先核对全部哈希索引，再开始本批写入。
@@ -125,7 +125,7 @@ function A.stop(restore)
     return true
 end
 
--- 回调只注入由主流程生成的不可变样本；线程局部标记防止其他角色/重入回调使用本会话。
+-- 仅在所选适配器加载时安装；线程局部标记将 pre/post 钩子限定到会话控制器和动画层。
 function A.attach(cb)
     callbacks = cb
     if installed then return end
