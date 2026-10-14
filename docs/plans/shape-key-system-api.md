@@ -144,7 +144,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `rev` | int | |
 | `binding` | 见下 | 当前父预设的解析结果 |
 | `expression` | list of `{name, source, extends?}` | 可选的表情配置 |
-| `sculpt` | list of `{name, source, target_part?}` | 可选的捏脸配置 |
+| `sculpt` | list of `{name, source, target_part?}` | 可选的捏脸配置；同一文件夹里和用户配置同名的 mod 配置不列出（加载的总是用户那份） |
 | `pending_delete` | `{kind, name}?` | 等待确认的删除操作 |
 
 `binding`：

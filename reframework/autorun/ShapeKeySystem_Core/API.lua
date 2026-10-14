@@ -451,8 +451,13 @@ local function build_presets_state()
         list[#list + 1] = { id = e.id, name = e.name, source = e.source, extends = e.extends }
     end
     state.presets.expression = list
-    local sc = {}
-    for _, e in ipairs(Presets.sculpt_list) do sc[#sc + 1] = sculpt_entry_state(e) end
+    -- a user preset hides the mod's preset of the same name and folder (it is the one that loads);
+    -- sculpt_list has user entries first
+    local sc, taken = {}, {}
+    for _, e in ipairs(Presets.sculpt_list) do
+        local k = (e.folder or "") .. "\0" .. e.name
+        if not taken[k] then taken[k] = true; sc[#sc + 1] = sculpt_entry_state(e) end
+    end
     state.presets.sculpt = sc
     local b = C.binding
     if b then

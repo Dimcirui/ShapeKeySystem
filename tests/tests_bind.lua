@@ -70,6 +70,17 @@ SKS.call("rescan"); ticks(5)
 check(st.expression.profile.id == other, "after revert the binding switches the profile")
 SKS.call("bind_config", { kind = "expression", name = cur }); SKS.call("rescan"); ticks(5)
 
+-- a user preset hides the mod's preset of the same name and folder
+local U = require("ShapeKeySystem_Core.Util")
+local folder
+for _, e in ipairs(st.presets.sculpt) do if e.name == "Other" then folder = e.folder end end
+U.save_json(U.path("mods", folder, "sculpt", "Other.json"), { schema = "sks.sculpt/1", name = "Other", values = {} })
+SKS.call("sculpt_scan"); ticks(5)
+local n_other, src_other = 0, nil
+for _, e in ipairs(st.presets.sculpt) do if e.name == "Other" then n_other = n_other + 1; src_other = e.source end end
+check(folder ~= nil and n_other == 1 and src_other == "user", "same-name mod sculpt preset hidden behind the user one")
+U.save_json(U.path("mods", folder or "x", "sculpt", "Other.json"), {})
+
 -- 设置与调试 holds the old presets page
 Panel.ui.page = "debug"; Panel.ui.page_state.debug.files_open = true; Panel.ui.win.h = 1060; frame()
 check(not find("页面出错"), "debug page with the binding / files section draws")
