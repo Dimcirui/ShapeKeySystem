@@ -32,19 +32,21 @@ local function live_json(path)
     return data
 end
 
--- ch03_012_0014 -> "ch03_012_001", "4"; the representative is the slot-2 part of the model
+-- model a part belongs to, slot, and the part that represents the model: the adapter's naming
+-- (`P.adapter`); nil when the game has none or the part does not follow it
+P.adapter = {}   -- set by SKS.init
 function P.model_of(part)
-    if type(part) ~= "string" then return nil end
-    local model, slot = part:match("^(ch%d+_%d+_%d+)(%d)$")
-    return model, slot
+    local f = P.adapter.model_of
+    if not f then return nil end
+    return f(part)
 end
 
 function P.representative_of(part)
-    local model = P.model_of(part)
-    return model and (model .. "2") or nil
+    local f = P.adapter.representative_of
+    return f and f(part) or nil
 end
 
--- folder of a part's bindings: its model, or the part ID itself when it does not follow chXX_SSS_MMMs
+-- folder of a part's bindings: its model, or the part ID itself when the adapter names no model
 function P.folder_of(part)
     return P.model_of(part) or U.safe_id(part)
 end

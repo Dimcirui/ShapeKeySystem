@@ -332,6 +332,7 @@ end
 function Panel.attach(sks)
     SKS = sks
     Blocker.surface = D.surface_pixels
+    Blocker.game = sks.adapter and sks.adapter.input
 end
 
 return Panel
