@@ -1,17 +1,31 @@
 # 鬼武者·剑之道适配器：探查方法和实施计划（#7）
 
 写给接手的人。适配器接口见 `multi-game-adapter.md`，Core 和 UI 的约定见 `shape-key-system-api.md`，仓库工作规则见
-根目录 `CLAUDE.md` 和 `docs/writing/`。本文写于 2026-10-14，记录已经实测确认的事实、还没查的问题、怎么查，
-以及适配器按什么顺序写。
+根目录 `CLAUDE.md` 和 `docs/writing/`。本文写于 2026-10-14，记录已经实测确认的事实、实现了什么、还没查的问题和怎么查。
 
 ## 0. 现状
 
-- 荒野适配器在 `reframework/autorun/ShapeKeySystem_Games/Wilds/`，`Registry.lua` 只登记了它。鬼武者还没有适配器，
-  在鬼武者里加载 SKS 只会在 REF 菜单显示「暂不支持当前游戏」。
-- 通道名反查（`ShapeKeySystem_Core/NameHash.lua`，见第 2.3 节）已经写好，离线测试通过，**在 dim-dev 上还没提交**，
-  等用户在荒野里回归测试后提交。接手前先 `git status` 看它是否已经进了 main。
-- 游戏路径 `E:\Program\Steam\steamapps\common\OnimushaWotS`。原版解包在 `OnimushaWotS\EXTRACT\natives\stm\`
-  （角色 mesh、jcns、部分 talk motlist）。用户的测试 mod 放在 `OnimushaWotS\natives\stm\`。
+已实现（`ShapeKeySystem_Games/Onimusha/`，已在游戏里试过）：
+
+- 游戏 id `onimusha_wots`（`get_game_name()` 的点调用和冒号调用都返回它）。
+- 找主角色、脸和部件；通道名靠哈希反查（`NameHash.lua`）。
+- `bsControl` 信号（`raw` / `bind` / `read`）和信号字典 `builtin/onimusha_wots/signals.json`：63 个通用信号里 47 个有映射、
+  16 个无信号，近似映射标 `guessed`，`full = 0.01`。字典由 `tools/onimusha_signals.py` 从原版 v36 jcns 生成，
+  需要 RE-JCNS-Editor 的 modules 路径和显式 `--full`。
+- 眼球 `eye_Lt` / `eye_Rt`，用 Core 的角度换算。
+- 过场：播放中由 Core 的过场驱动接管（副本 `Pl000_00`，脸 `ch001_00_10_event`），加载中不碰；
+  跳过、停止、unload、分段开始用和荒野同名的 `DemoMediator` 钩子。
+- 换装检测：部件名换装后不变，`A.child_tag` 把各部件的 mesh 地址拼进 Core 的子节点签名。
+- 绑定：所有部件归到一个模型 `musashi`，整个角色用 `<src>/musashi/musashi.json`，单个部件需要时再用
+  `<src>/musashi/Head.json`。
+- 输入屏蔽（`Onimusha/Input.lua`）：面板打开时借用原生光标控制器 `app.GUI090000` 的菜单优先级让鼠标自由，
+  并固定相机旋转；关闭和重载时恢复。
+
+用户的测试数据在游戏目录，不进仓库：`mods/names/`（测试 mod 的名字表）、`mods/sculpt/ShinanoOC.json`、
+`mods/profiles/ShinanoOC_Onimusha.json`、`mods/default.json`。
+
+还没做或待确认的见第 3 节。路径：游戏 `E:\Program\Steam\steamapps\common\OnimushaWotS`；原版解包
+`OnimushaWotS\EXTRACT\natives\stm\`（角色 mesh、jcns、部分 talk motlist）；用户的测试 mod 在 `OnimushaWotS\natives\stm\`。
 
 ## 1. 探查方法
 
@@ -66,7 +80,7 @@
 
 - 主角色：`app.PlayerManager:getControllingPlayer()`（`app.cPlayerManageInfo`）→ `get_Object()` → `Player_00`。
   就绪：`PlayerManager:isPlayerReady(false)`，`getControllingPlayer():get_Valid()` / `get_CharacterValid()`。
-- `Player_00` 的子物体（按 GameObject 名）：`Head`（脸，带 mesh）、`Hair`（在 Head 下）、`Body`、`Cloak`、
+- `Player_00` 的子物体（按 GameObject 名）：`Head`（脸，带 mesh，`Hair` 挂在它下面）、`Body`、`Cloak`、
   `Gauntlet`、`Amulet`，以及隐藏的 `OniHead` / `OniBody` / `OniHair`（鬼化形态，平时 `DrawSelf = false`）、
   `Gm800_*`（武器道具）、碰撞体和特效节点。
 - mesh 资源路径可读：`getComponent(via.render.Mesh):getMesh():get_ResourcePath()`，例如 `Head` →
@@ -94,81 +108,75 @@
   `HeadCorrectives_blendShape.*`，`ch033_00_50` 是 `HeadCorrectives_blendShape_HeadSkinned2.*`。
 - 用户的 mod 不带前缀，Head 141 个、Body 29 个通道全部按原名反查成功。
 - Core 的处理：引擎缺这个方法时，`Scene` 改从哈希反查（`NameHash.lua`，API 文档第 8 节的 `names/`）。
-  **待验证**：REF Lua 里 `get_ChannelNameHash()` 返回的数组用 `get_elements()` 能否拿到整数，见 3.1。
+  REF Lua 里数组和 `get_elements()` 返回的容器都是 userdata，元素也是 userdata，`ToString()` 得到十进制整数。
 
 ### 2.4 写入
 
 - `setBlendShapeChannelWeightParam(idx, v)` 写进去能读回来（Pre LateUpdate 写 1 和 10 都读回原值）。
   画面上看不出变化，原因见 1.4，没有排除「游戏在同一帧后面又覆盖了」。
 
-## 3. 还没查的问题
+## 3. 待查和待确认
 
-按适配器需要的先后排。每一项写明怎么查。
-
-1. **Lua 侧读哈希数组。** 在 `OnimushaWotS\reframework\autorun\` 放一个临时 Lua 脚本：取 Head 的 mesh，
-   `local a = mesh:call("get_ChannelNameHash")`，打印 `type(a)`、`a:get_size()`、`a:get_elements()[1]` 的类型和值，
-   和探针输出的第 0 个哈希（原版 `D68FFE36`）对照。`NameHash.names_of` 里的 `unbox` 按结果改。用完删掉脚本。
-2. **`reframework.get_game_name()` 的值。** 同一个临时脚本里打印 `reframework.get_game_name()` 和
-   `reframework:get_game_name()`，适配器的 `A.id` 和 `Registry` 都按它定。
-3. **写入是否被覆盖。** 打开探针的写入测试，只写 mod 头部的一个明显形状（如 `eye_close`，在用户的 mod 里是第 0 个通道），
-   Pre 写 1，同帧 Post 读回；再让用户看画面。如果 Post 读回不是 1，或者画面不变，说明后面有人覆盖，
-   要找更晚的写入时机（REF 的 `re.on_application_entry` 各阶段，或挂在 `app.FacialController.lateUpdate` 之后）。
-4. **bsControl 的满值。** 让角色做大表情（说话、受击、过场），探针记录 600 帧里每个关节每个轴的最大值。
-   对照 jcns 里的映射范围，定字典的 `full`（荒野是 0.01）。
-5. **过场。** `get_type app.DemoMediator`，确认 `get_IsBusy`、`get_IsBusyLoad`、`requestSkip`、`execSkip`、
-   `requestStop`、`requestForceStop`、`unload`、`onPlayStartTimeline` 是否和荒野同名同签名（荒野适配器
-   `hook_cutscene` 用的就是这些）。再看一段过场里主角是不是还是 `Player_00`，还是另有副本。
-6. **换装重建。** 候选：`PlayerManager.changePlayerModel(...)`（两个重载）、`changePlayerModelHQ`、
-   `bindObjectToManageInfo`、`evLoadEnd`。用探针或临时 Lua 挂 post 钩子打日志，让用户换一次装，看哪个触发、
-   触发后子物体和 mesh 地址是否变了。鬼化（`OniHead` 可见）也要看一次。
-7. **暂停 / 菜单。** `app.PauseManager:get_IsPaused()`（现有的眼球 mod `OnimushaEyeMovementIntensity.lua` 用它），
-   以及打开菜单、标题画面时玩家对象是否还在。
-8. **输入屏蔽。** 荒野靠和 ArmorVariantManager 共享的屏蔽表。鬼武者里有没有要共存的 mod、面板打开时
-   怎么挡住游戏输入（`app.PlayerManager.setButtonMask` / `setCommandMask` 是候选），没查。
-9. 眼球轴向和正负号（荒野的约定见记忆 `sks-gaze-yaw-convention`：yaw +1 = 角色的左边）。
+1. **写入是否被覆盖。** 打开探针的写入测试，只写 mod 头部的一个明显形状（如 `eye_close`），Pre 写 1、同帧 Post 读回，
+   再让用户看画面。读回不是 1 或画面不变，就要找更晚的写入时机（`re.on_application_entry` 各阶段，或
+   `app.FacialController.lateUpdate` 之后）。目前自动表情画面正常，这一项优先级低。
+2. **大表情的满值。** jcns 把局部位置 0..1 映射到权重 0..1；待机采样里眨眼峰值约 0.0096，所以 `full = 0.01`。
+   说话、受击、过场的张嘴等轴还没采样，不能由待机推断。
+3. **换装和鬼化。** `child_tag` 能发现 mesh 被换掉，但还没在游戏里换过装。再看换装时 `PlayerManager.changePlayerModel`
+   之类的方法是否触发、是否值得挂成 `events.rebuilt`（让 Core 立即放手，不用等 5 帧一次的签名检查）。
+   鬼化形态（`OniHead` / `OniBody`）目前不驱动。
+4. **暂停和菜单。** `app.PauseManager:get_IsPaused()`，以及打开菜单、回标题时玩家对象是否还在。
+5. **眼球方向。** Core 的约定是 +yaw = 脸自己的右侧、+pitch = 向上；画面上的方向还没核对。记忆
+   `sks-gaze-yaw-convention` 写的是 yaw +1 = 角色的左边，和代码注释矛盾，核对时一并确认哪个对。
+6. **输入屏蔽的副作用。** 只借用光标控制器的优先级、固定相机旋转，没改命令掩码、鼠标操纵模式和原始输入缓存。
+   面板打开时角色是否仍会响应键盘、手柄，还没系统测过。
 
 ## 4. 适配器实施计划
 
 ### 4.1 文件
 
 ```
-reframework/autorun/ShapeKeySystem_Games/Onimusha/Adapter.lua      -- 必需
-reframework/autorun/ShapeKeySystem_Games/Onimusha/Conditions.lua   -- 可选，先不做
-reframework/data/ShapeKeySystem/builtin/<game id>/signals.json     -- 信号字典
-reframework/data/ShapeKeySystem/builtin/<game id>/profiles/        -- 只有这个游戏才有的配置（可以没有）
+reframework/autorun/ShapeKeySystem_Games/Onimusha/Adapter.lua      -- 适配器
+reframework/autorun/ShapeKeySystem_Games/Onimusha/Input.lua        -- 输入屏蔽
+reframework/data/ShapeKeySystem/builtin/onimusha_wots/signals.json -- 信号字典
+tools/onimusha_signals.py                                          -- 从原版 jcns 生成字典
+tests/tests_onimusha.lua                                           -- 独立运行环境里的离线检查
 ```
 
-`Registry.lua` 的 `R.list` 加一行（括号别丢，见那里的注释）。`<game id>` 用 3.2 查到的 `get_game_name()` 返回值。
+适配器登记在 `Registry.lua` 的 `R.list`。条件（`Conditions.lua`）和只属于这个游戏的配置（`builtin/onimusha_wots/profiles/`）还没有。
 
 ### 4.2 按接口逐项（`multi-game-adapter.md` 第 2 节）
 
 | 接口 | 鬼武者的写法 |
 |---|---|
-| `id`, `name` | 3.2 的游戏名；`"Onimusha: Way of the Sword"` |
-| `init(events)` | 检查 `app.PlayerManager`；缓存 `DemoMediator` 的方法；挂过场和换装钩子（3.5、3.6）。缺必需类型时返回 `false, 原因` |
+| `id`, `name` | `onimusha_wots`；`"Onimusha: Way of the Sword"` |
+| `init(events)` | 查必需的类型和方法，缺了返回 `false, 原因`；挂 `DemoMediator` 的过场钩子 |
 | `primary_root` | `PlayerManager:getControllingPlayer():get_Object():get_Transform()`，全程 pcall |
-| `primary_ready` | `isPlayerReady(false)` 且 `getControllingPlayer():get_Valid()` |
-| `gate(frame)` | 照荒野：过场加载 / 播放 → 不碰；玩家没就绪 → 不碰。暂停是否要停，按 3.7 定 |
-| `is_face(tr)` | `getJointByName("bsControl_000") ~= nil` |
-| `face_rank(tr)` | GameObject 名是 `Head` 给 1，`OniHead` 在可见时也给 1（鬼化），其余 0 |
-| `is_part(name)` | 见 4.3 |
-| `eye_joints(face)` | `{ L = jbn(face, "eye_Lt"), R = jbn(face, "eye_Rt") }`，轴向按 3.9 |
-| `raw` | `term = "bsControl"`；key = 关节号 × 3 + 轴（x=0、y=1、z=2）；`parse` 接受 `"bsControl_012.y"` 和 `"012.y"`；`label` 反过来；`slider = nil`（映射编辑器先不给滑块） |
-| `bind(face, keys)` | 按 key 找 `bsControl_%03d`，返回 `{key, joint, ...}` 和找到的个数 |
-| `read(handle, P, inv_full)` | `get_LocalPosition()` 取对应轴，乘 `inv_full` |
-| `model_of` / `representative_of` / `model_names` / `slot_names` | 先不给（捏脸页会显示部件 id）。以后可以按 mesh 路径 `chXXX_YY` 分系列 |
-| `conditions`, `input`, `probe` | 先不给 |
+| `primary_ready` | `isPlayerReady(false)`，且 `getControllingPlayer()` 的 `get_Valid` / `get_CharacterValid` |
+| `gate(frame)` | 过场加载 → `"load"`；过场播放 → `"playing"`（交给 Core 的过场驱动）；玩家没就绪 → 不碰，不给 kind |
+| `is_face(tr)` | 有 `bsControl_000`，且 mesh 路径含 `/ch001_`（NPC 的头也有 bsControl） |
+| `face_rank(tr)` | GameObject 名是 `Head` 给 1，其余 0 |
+| `is_part(name)` | `Head`、`Body`、`Cloak`、`Gauntlet`、`Amulet`，或过场副本按 mesh 命名的 `ch001_NN_NN*` |
+| `child_tag(tr, name)` | 部件的 mesh 地址，见 4.3 |
+| `eye_joints(face)` | `{ L = eye_Lt, R = eye_Rt }` |
+| `raw` | `term = "bsControl"`；key = 关节号 × 3 + 轴（x=0、y=1、z=2）；`parse` 接受 `"bsControl_012.y"` 和 `"012.y"`；不给 `slider` |
+| `bind` / `read` | 按 key 找 `bsControl_%03d`，每帧取 `get_LocalPosition()` 的对应轴乘 `inv_full` |
+| `model_of` / `representative_of` / `slot_names` | 所有部件归 `musashi`，见 4.3 |
+| `input` | `Onimusha/Input.lua` |
+| `conditions`, `probe`, `model_names` | 不给 |
 
-### 4.3 部件 id 的问题（要改 Core）
+### 4.3 部件 id 和换装（2026-10-14 定）
 
-Core 现在用子物体的 GameObject 名当部件 id（`Scene.read_parts` 的 `cname`），绑定、捏脸预设的文件夹、指纹都按它存。
-荒野的子物体名是 `ch03_012_0012` 这种装备编号，天然区分不同装备；鬼武者的子物体名是固定的 `Head` / `Body`，
-换了服装名字也不变，不同服装的预设会互相覆盖。
+Core 用子物体的 GameObject 名当部件 id。荒野的名字是 `ch03_012_0012` 这种装备编号；鬼武者是固定的 `Head` / `Body`，
+换装后名字不变。由此有两个问题，都在适配器里解决，Core 只加了一个可选接口：
 
-建议加一个可选接口 `A.part_id(transform, go_name) -> id`，默认返回 GameObject 名；鬼武者返回 mesh 资源路径的文件名
-（`ch001_00_10`）。`is_part` 仍按 GameObject 名判断（`Head`、`Body`、`Hair`、`Cloak`、`Gauntlet`、`Amulet`，
-鬼化形态的 `Oni*` 是否算进来按 3.6 的结果定）。这一项改 Core，要同步改 `multi-game-adapter.md` 第 2.2 节，
-加离线测试（`tests_fake.lua` 那种独立运行环境最合适）。
+- **绑定按角色，不按部件。** `model_of` 把主角的所有部件归到 `musashi`，`representative_of` 也返回 `musashi`，
+  所以整个角色共用 `<src>/musashi/musashi.json`，捏脸预设放 `<src>/musashi/sculpt/`。不直接把部件 id 改成同一个：
+  Core 按部件 id 去重，Body 会被当成重复项丢掉。换装后的旧 mod 文件靠指纹排除。
+- **换装检测。** Core 每 5 帧比较一次主角色子节点的签名，签名原本只有名字。新增可选的 `A.child_tag(tr, name)`，
+  返回的字符串拼在名字后面；鬼武者返回部件 mesh 的地址，mesh 重建后地址变了，Core 就放手重扫。
+
+如果以后要按服装区分绑定，可以把 mesh 路径里的 `ch001_00` / `ch001_50` 作为模型的下一层，现在不做。
 
 ### 4.4 信号字典
 
@@ -184,13 +192,8 @@ Core 现在用子物体的 GameObject 名当部件 id（`Scene.read_parts` 的 `
 
 ### 4.5 顺序
 
-1. 先查 3.1、3.2（一个临时 Lua 脚本就够）。
-2. 写只有 2.2 那几项的最小适配器（找角色、找脸、找部件），不给 `raw`。验收：捏脸页能列出 mod 头部的 141 个键（名字反查），
-   拖滑块画面有变化。这一步同时验证 NameHash 在游戏里能用。
-3. 做 4.3 的部件 id。
-4. 查 3.3、3.4，写 `raw` / `bind` / `read` 和信号字典。验收：ARKit 配置能驱动 mod 头部，表情跟着游戏动。
-5. 查 3.5、3.6，加 `gate` 和钩子。验收：过场、跳过过场、换装、鬼化都不闪退，回来以后继续驱动。
-6. 眼球（3.9）、条件、输入屏蔽按需要再做。
+第 1 到 5 步已完成：最小适配器 → 信号和字典 → 过场 → 部件 id 和换装检测 → 输入屏蔽。剩下的按第 3 节的顺序，
+其中换装、鬼化（3.3）最影响稳定性，先做。
 
 ## 5. 测试和部署
 

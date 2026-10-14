@@ -72,6 +72,7 @@ A.primary_ready()       -> bool                  -- 主角色已经装配完成�
 A.is_face(tr)           -> bool                  -- 这个 transform 是带驱动骨骼的脸
 A.face_rank(tr)         -> number                -- 同一个父节点下有多张脸时，分数高的胜出
 A.is_part(name)         -> bool                  -- 这个子节点名是可驱动的装备部件
+A.child_tag(tr, name)   -> string | nil          -- 可选：拼进子节点签名，换装后名字不变的游戏用它发现重建
 A.scene_search_type     = "via.motion.Motion"    -- 全场景搜索其他角色时用的组件类型
 ```
 
@@ -221,6 +222,9 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）不�
 | `Presets.lua:35` `model_of`：`ch03_012_0014` → `ch03_012_001` + 槽位 `4` | `A.model_of(part) -> model, slot` | 原有正则 `^(ch%d+_%d+_%d+)(%d)$` |
 | `Presets.lua:41` `representative_of`：槽位 2（身体）代表整个模型 | `A.representative_of(part) -> part` | `model .. "2"` |
 | `API.lua:410-420` `armor_name`：读 `builtin/armor_names.json` | `A.model_names = "armor_names.json"`（文件放在 `builtin/<id>/`）；`A.slot_names = {[槽位] = 部位名}`，可选 | 现有文件搬到 `builtin/mhwilds/`；槽位 1~5 = 腕部、躯干、头部、腿部、腰部 |
+
+鬼武者：部件名是固定的 `Head` / `Body`，`model_of` 和 `representative_of` 都返回 `musashi`，整个角色共用
+`<src>/musashi/musashi.json`（见 `onimusha-adapter.md` 4.3）。
 
 没有 `model_of` 的游戏：model = 部件 id 本身，绑定只有「每个部件自己的文件」和 `default.json` 这两层。
 绑定文件的目录结构（`<src>/<model>/<part>.json`）不变。
