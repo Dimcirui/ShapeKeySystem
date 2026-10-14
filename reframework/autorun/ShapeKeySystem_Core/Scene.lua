@@ -25,10 +25,16 @@ function S.primary_root()
     return f and f() or nil
 end
 
+-- child names, plus the adapter's child_tag where a rebuild keeps the names (adapter interface 2.2)
 function S.children_signature(root)
     if not root then return "" end
+    local tag = S.adapter.child_tag
     local parts, c = {}, root:call("get_Child")
-    while c do parts[#parts + 1] = S.go_name(c); c = c:call("get_Next") end
+    while c do
+        local name = S.go_name(c)
+        parts[#parts + 1] = tag and (name .. (tag(c, name) or "")) or name
+        c = c:call("get_Next")
+    end
     return table.concat(parts, "|")
 end
 
