@@ -10,6 +10,8 @@ os.makedirs(os.path.join(data, "ShapeKeySystem", "user", "conditions"), exist_ok
 shutil.copy(os.path.join(HERE, "fixtures", "ShinanoOC.json"), os.path.join(data, "ShapeKeySystem", "user", "conditions"))
 if os.path.isdir(os.path.join(GAME, "data", "ShapeKeySystem", "faces")):
     shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "faces"), os.path.join(data, "ShapeKeySystem", "faces"))
+if os.path.isdir(os.path.join(GAME, "data", "ShapeKeySystem", "games")):
+    shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "games"), os.path.join(data, "ShapeKeySystem", "games"))
 if "--legacy" in sys.argv:
     shutil.copy(os.path.join(GAME, "data", "ArkitFaceDriver.json"), data)
 
@@ -90,6 +92,8 @@ L.execute(open(os.path.join(HERE, "tests_shinano.lua"), encoding="utf-8").read()
 G.MMD_NAMES = to_lua(json.load(open(os.path.join(HERE, "mmd_names.json"), encoding="utf-8")))
 G.VRC_FACES = to_lua(json.load(open(os.path.join(HERE, "vrc_faces.json"), encoding="utf-8")))
 L.execute(open(os.path.join(HERE, "tests_mmd.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_playback_analysis.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_playback.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))

@@ -23,8 +23,10 @@ $owned = @(
     "autorun\ShapeKeySystem.lua",
     "autorun\ShapeKeySystem_Core",
     "autorun\ShapeKeySystem_UI",
+    "autorun\ShapeKeySystem_Game",
     "data\ShapeKeySystem\builtin",
     "data\ShapeKeySystem\faces",
+    "data\ShapeKeySystem\games",
     "images\ShapeKeySystem"
 )
 # REF-IME 从上游最新 Release 独立安装，见 install-ref-ime.ps1；这里仅部署 SKS 主包。

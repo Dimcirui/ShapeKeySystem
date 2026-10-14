@@ -6,6 +6,7 @@ local W = require("ShapeKeySystem_UI.Widgets")
 local Eyes = require("ShapeKeySystem_UI.PageEyes")   -- gaze settings, drawn as a section here
 local Mapping = require("ShapeKeySystem_UI.MappingEditor")
 local I = require("ShapeKeySystem_UI.Input")
+local PlaybackPanel = require("ShapeKeySystem_UI.PlaybackPanel")
 
 local Page = {}
 local C = T.c
@@ -237,6 +238,9 @@ function Page.draw(ctx, x, y, w)
     if clicked then s.gaze_open = not gopen end
     cy = cy + hh + 6
     if gopen then cy = cy + Eyes.draw(ctx, x, cy, w) end
+    -- 录制测试放在全部通道和视线设置之后，保持表情详情的主要编辑区域紧凑。
+    cy = cy + 10
+    cy = cy + PlaybackPanel.draw(ctx, x, cy, w)
     return cy - y
 end
 

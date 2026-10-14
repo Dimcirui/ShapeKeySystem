@@ -1,5 +1,6 @@
 -- ShapeKeySystem: backend entry point. The UI reads SKS.state / SKS.live and changes things
--- only through SKS.call(cmd, args). Engine writes happen only in SKS.tick (LateUpdateBehavior).
+-- only through SKS.call(cmd, args). Mesh writes happen in SKS.tick (LateUpdateBehavior);
+-- 录制 raw 输入由游戏适配器在 UpdateMotion / 面部动画回调注入，UI 只提交命令。
 -- Contract: docs/plans/shape-key-system-api.md (v0.1). M1: runtime, scene, expression, eyes,
 -- mapping, debug. M2: parent presets (bindings, per part ID) and the sculpt layer.
 
@@ -18,6 +19,7 @@ local Ext     = require("ShapeKeySystem_Core.External")
 local Cnd     = require("ShapeKeySystem_Core.Conditions")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch   = require("ShapeKeySystem_Core.Touch")
+local Playback = require("ShapeKeySystem_Core.Playback")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -131,6 +133,7 @@ local live = {
     eye_angle = { L = { yaw = 0, pitch = 0 }, R = { yaw = 0, pitch = 0 } },
 }
 SKS.state, SKS.live = state, live
+state.playback = Playback.state
 
 -- ---------------------------------------------------------------- internal
 local C = {
@@ -204,6 +207,7 @@ end
 local MENU_SCAN_FRAMES = 180
 
 local function drop_rigs(reason, rescan_after)
+    Playback.stop(false, "角色或场景变化，录制播放已停止：" .. tostring(reason))
     if #C.rigs > 0 or #C.pending_zero > 0 then log("released rigs: %s", reason) end
     C.rigs, C.parts, C.instances, C.pending_zero = {}, {}, {}, {}
     Sculpt.clear_targets()
@@ -921,6 +925,10 @@ local function drive(rig, primary)
     local t0 = clock()
     local P = primary and C.P or C.Pbuf
     X.read(rig, P, C.inv_full, primary and C.want_signals and state.runtime.ui_open, cfg.eyes, rig.use_eyes)
+    -- 播放代次只重置此角色的平滑缓存；其他角色仍读取并计算自己的实时输入。
+    if rig.primary and rig.playback_epoch ~= Playback.epoch then
+        rig.W, rig.V, rig.playback_epoch = {}, {}, Playback.epoch
+    end
     -- panel gaze drag: both eyes look at the held angle instead of following the game
     local gh = C.gaze_hold
     if gh then
@@ -932,6 +940,7 @@ local function drive(rig, primary)
         end
     end
     local t1 = clock()
+    Playback.apply(rig, P, C.inv_full)
     local s = cfg.expression.smoothing
     local alpha = (s > 0) and (1 - min(s, 1) * 0.9) or 1
     X.compute(prog, rig, P, C.gains, C.forced, cfg.clamp, alpha, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch)
@@ -1074,6 +1083,7 @@ local function cutscene_gate(f)
 end
 
 function SKS.tick()
+    Playback.tick(false)
     C.frame = C.frame + 1
     local f = C.frame
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
@@ -1224,9 +1234,16 @@ end
 function cmds.set_enabled(a)
     if type(a.on) ~= "boolean" then return false, "E_BAD_ARGS", "on must be boolean" end
     cfg.enabled = a.on
+    if not a.on then Playback.request("stop") end
     if not a.on then queue_zero_all(); zero_sculpt() else Sculpt.mark_dirty(); request_rescan(1) end
     build_settings_state(); save_soon()
     return true
+end
+
+-- 录制测试命令只排队；游戏更新回调负责验证、连接、注入及恢复原输入。
+function cmds.playback(a)
+    if a.action == "play" and not cfg.enabled then return false, "E_BAD_ARGS", "请先启用 ShapeKeySystem" end
+    return Playback.request(a.action, a)
 end
 
 local SETTING_TYPES = {
@@ -1864,6 +1881,10 @@ end
 function SKS.init()
     Trail.open()
     load_settings()
+    Playback.init(log, function() return C.prog and C.prog.params or {} end, function()
+        return C.prog, Profile.signals.list, state.expression.channels,
+            state.mapping.rev .. ":" .. state.expression.rev .. ":" .. state.scene.rev
+    end)
     if hotkey_migrated_now then
         notice("info", "打开面板的按键改成了 Delete（End 是游戏的暂停键，Home 和 ArmorVariantManager 冲突），可在设置里修改")
         save_soon()
@@ -1937,6 +1958,7 @@ function SKS.on_guild_card(open)
 end
 
 function SKS.shutdown()
+    Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
     C.unpublish_api()
     if not C.paused then
