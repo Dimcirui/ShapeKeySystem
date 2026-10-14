@@ -113,7 +113,7 @@ function A:finish()
 end
 
 -- `unit` 只用于活跃判定，不将原版输入转换为游戏求值后的最终信号。
-function A.new(clip, unit, file, label)
+function A.new(clip, unit, file, label, checkpoint)
     assert(type(unit) == "number" and unit > 0 and unit < math.huge, "播放分析缺少游戏信号幅值单位")
     local self = setmetatable({ clip = clip, unit = unit, label = label or tostring, cursor = 2, by_param = {}, totals = {},
         state = { rev = 0, file = file, mode = clip.track, sampled_frames = 0, threshold = THRESHOLD,
@@ -121,9 +121,21 @@ function A.new(clip, unit, file, label)
     for param, column in pairs(clip.map) do
         self.by_param[param] = { param = param, hits = 0, mappings = {}, present_count = 0,
             label = self.label(param), purpose = "词典尚未标注用途" }
-        local total = 0
-        for _, frame in ipairs(clip.frames) do if hit(frame.values[column], unit) then total = total + 1 end end
-        self.totals[param] = total
+        self.totals[param] = 0
+    end
+    -- 连续共享快照一次判定幅值，按帧数累计，空差分不重复扫描全部参数。
+    local frames, first = clip.frames, 1
+    while first <= #frames do
+        local values, last = frames[first].values, first
+        while last < #frames and frames[last + 1].values == values do
+            last = last + 1
+            if checkpoint and last % 128 == 0 then checkpoint(128, last, #frames) end
+        end
+        for param, column in pairs(clip.map) do
+            if hit(values[column], unit) then self.totals[param] = self.totals[param] + last - first + 1 end
+        end
+        if checkpoint then checkpoint(clip.n or #values, last, #frames) end
+        first = last + 1
     end
     self:count(clip.frames[1]); self:publish()
     return self

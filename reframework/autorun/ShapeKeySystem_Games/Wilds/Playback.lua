@@ -4,6 +4,8 @@
 -- 更新回调连接和恢复会话，面部钩子注入已生成的 raw 样本；输入已是引擎单位，不再乘 0.01。
 local U = require("ShapeKeySystem_Core.Util")
 local Recording = require("ShapeKeySystem_Core.Recording")
+local Perf = require("ShapeKeySystem_Core.Perf")
+local clock = os.clock
 local A = { id = "mhwilds", name = "怪物猎人：荒野", final_unit = 0.01, raw_unit = 0.01 }
 local facial, app_type
 local session, callbacks, installed
@@ -93,6 +95,7 @@ function A.matches(rig)
 end
 
 function A.inject(values)
+    local started = clock()
     assert(A.valid(), "主猎人、场景或面部动画层已更换，播放已停止")
     -- 数量不变也可能更换输入布局；先核对全部哈希索引，再开始本批写入。
     for _, slot in ipairs(session.slots) do
@@ -104,6 +107,7 @@ function A.inject(values)
         session.changed[column] = true
         session.layer:call("setExtraValue(System.Int32, System.Single)", slot.index, values[column] + 0.0)
     end
+    Perf.record("raw_inject", clock() - started)
 end
 
 function A.stop(restore)
@@ -138,9 +142,9 @@ function A.attach(cb)
     local function inject()
         if not session then return end
         local ok, err = pcall(function()
-            assert(A.valid(), "面部对象已更换")
-            session.last_hook = A.now()
+            -- 实际写入入口 `A.inject` 复查身份与全部索引，同一批次不重复查询角色树。
             callbacks.inject()
+            if session then session.last_hook = A.now() end
         end)
         if not ok then callbacks.fail(tostring(err)) end
     end

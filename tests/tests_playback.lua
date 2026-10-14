@@ -43,10 +43,10 @@ U.save_json(U.path("user", "games", "mhwilds", "recordings", "ClockTest.json"), 
 U.save_json(U.path("user", "games", "mhwilds", "recordings", "LegacyTest.json"), raw)
 U.save_json(U.path("user", "games", "other", "recordings", "OtherGame.json"), raw)
 U.save_json(U.path("games", "mhwilds", "recordings", "OldBuiltin.json"), raw)
-local now, restored, injected, stale = 0, 0, nil, false
+local now, restored, injected, stale, connects = 0, 0, nil, false, 0
 local adapter = { raw_unit = 0.01, final_unit = 0.01, catalog = function() return catalog end,
     attach = function() end, now = function() return now end,
-    connect = function() stale = false end,
+    connect = function() stale = false; connects = connects + 1 end,
     healthy = function() assert(not stale, "replaced face") end,
     inject = function(v) injected = v[1] end,
     stop = function(restore) if restore then restored = restored + 1 end end,
@@ -89,6 +89,76 @@ check(not R.apply({ primary = false }, {}, 100), "final playback does not affect
 R.request("options", { loop = false }); R.tick(); now = 5; R.tick()
 check(R.state.status == "stopped" and R.state.elapsed == 2 and R.state.analysis.finished,
     "natural completion preserves end progress and releases decoded frames")
+-- 准备期间不连接引擎；取消、重播和末帧错误都必须放掉尚未发布的结果。
+local stress = { schema = "fcparam.recording/2", game = "mhwilds", duration = 5,
+    encoding = "quantized-delta", raw_scale = 10000000, final_scale = 100000, params = {}, frames = {} }
+local first_raw, first_final = {}, {}
+for i = 1, 200 do
+    stress.params[i] = { param = i, hash = catalog[i] }
+    first_raw[i], first_final[i] = 10000, 50000
+end
+stress.frames[1] = { t = 0, raw = first_raw, final = first_final }
+for i = 2, 151 do stress.frames[i] = { t = (i - 1) / 30, d = {}, df = {} } end
+local static = Recording.decode(stress, "raw", catalog, "mhwilds")
+check(static.frames[1].values == static.frames[151].values and static.frames[151].values[1] == 0.001,
+    "unchanged deltas share read-only snapshots")
+stress.frames[151].d = { 1, 20000 }
+local changed = Recording.decode(stress, "raw", catalog, "mhwilds")
+check(changed.frames[150].values[1] == 0.001 and changed.frames[151].values[1] == 0.002
+    and first_raw[1] == 10000, "copy-on-write leaves earlier snapshots and source arrays unchanged")
+for i = 2, 151 do
+    local d, df = {}, {}
+    for col = 1, 200 do
+        d[#d + 1], d[#d + 2] = col, col == 1 and i == 151 and 20000 or 10000
+        df[#df + 1], df[#df + 2] = col, 50000
+    end
+    stress.frames[i].d, stress.frames[i].df = d, df
+end
+U.save_json(U.path("user", "recordings", "BudgetTest.json"), stress); R.refresh()
+local connected_before = connects
+injected = nil
+R.request("play", { id = "user:BudgetTest.json" }); R.tick(true)
+check(R.state.status == "preparing" and connects == connected_before and injected == nil,
+    "large recordings yield before connecting or injecting")
+local seek_ok = R.request("seek", { time = 1 })
+check(not seek_ok, "seek is rejected until all recording data is validated")
+R.request("stop"); R.tick(true)
+for _ = 1, 20 do R.tick(true) end
+check(R.state.status == "stopped" and connects == connected_before,
+    "stop cancels preparation and no delayed session appears")
+R.request("play", { id = "user:BudgetTest.json" }); R.request("pause")
+R.request("options", { speed = 1.25 }); R.tick(true)
+for _ = 1, 1000 do if R.state.status ~= "preparing" then break end; R.tick(true) end
+check(R.state.status == "paused" and R.state.elapsed == 0 and R.state.speed == 1.25
+    and R.state.analysis.sampled_frames == 1 and injected == 0.001,
+    "budgeted preparation completes and preserves ordered pause/options commands")
+R.stop(true)
+R.request("play", { id = "user:BudgetTest.json" }); R.tick(true)
+R.request("play", { id = "user:ClockTest.json" }); R.tick(true)
+check(R.state.status == "playing" and R.state.file == "ClockTest", "new play replaces an unfinished preparation")
+R.stop(true)
+local bad = U.copy(stress); bad.frames[151].df = { 1, 1, 1, 2 }
+U.save_json(U.path("user", "recordings", "LateBad.json"), bad); R.refresh()
+connected_before = connects; injected = nil
+R.request("play", { id = "user:LateBad.json", mode = "raw" }); R.tick(true)
+for _ = 1, 1000 do if R.state.status ~= "preparing" then break end; R.tick(true) end
+check(R.state.status == "stopped" and R.state.message:find("差分列号", 1, true)
+    and connects == connected_before and injected == nil,
+    "a late error on the unselected track never produces engine writes or a partial clip")
+R.request("play", { id = "user:ClockTest.json" }); R.tick(true)
+check(R.state.status == "playing", "a valid recording still plays after a preparation error")
+R.stop(true)
+local synchronous = Recording.decode(stress, "final", catalog, "mhwilds")
+local job = Recording.prepare(stress, "final", catalog, "mhwilds")
+local done, sliced, steps = false, nil, 0
+repeat done, sliced = job:step(); steps = steps + 1 until done
+local equal = steps > 1 and #sliced.frames == #synchronous.frames
+for _, time in ipairs({ -1, 0, 0.37, 2.5, 5, 6 }) do
+    local a, b = Recording.sample(sliced, time), Recording.sample(synchronous, time)
+    for col = 1, 200 do equal = equal and a[col] == b[col] end
+end
+check(equal, "sliced and synchronous decoders have identical seek/interpolation results")
+
 local ok, code = R.request("play", { id = "../../outside.json" })
 check(not ok and code == "E_NOT_FOUND", "arbitrary paths are refused")
 R.init({ id = "other", name = "other" })

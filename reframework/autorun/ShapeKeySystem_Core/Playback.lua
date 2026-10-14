@@ -5,16 +5,26 @@
 local U = require("ShapeKeySystem_Core.Util")
 local Recording = require("ShapeKeySystem_Core.Recording")
 local Analysis = require("ShapeKeySystem_Core.PlaybackAnalysis")
+local Perf = require("ShapeKeySystem_Core.Perf")
+local clock = os.clock
 local R = { state = { rev = 0, files = {}, status = "stopped", elapsed = 0, duration = 0,
     speed = 1, loop = false, mode = "raw", message = "", supported = false }, epoch = 0 }
 local adapter, clip, values, last_time, catalog
 local pending = {}
-local analysis
+local analysis, preparation
 
 -- 停止后仍刷新当前配置的绑定，已累计的命中次数不变。
 local function update_analysis_bindings()
     if not analysis or not R.context then return end
     analysis:bindings(R.context())
+end
+
+-- JSON 解析由 REFramework 同步执行，单独计时以区分文件加载和可分片的准备工作。
+local function load_recording(path)
+    local started = clock()
+    local data = U.load_json(path)
+    Perf.record("playback_load", clock() - started)
+    return data
 end
 
 -- 注册列表中的 ID 才能用于播放，命令不能指定外部文件路径。
@@ -35,7 +45,7 @@ function R.refresh()
             -- 旧用户目录只作读取回退；同名录制以新目录为准，播放 ID 保持不变。
             if not seen[id] then
                 seen[id] = true
-                local data = U.load_json(file.path)
+                local data = load_recording(file.path)
                 s.files[#s.files + 1] = { id = id, name = file.base,
                     path = file.path, source = dir.source,
                     duration = data and Recording.finite(data.duration, 300) and data.duration or 0,
@@ -55,7 +65,8 @@ function R.stop(restore, message)
         local ok, result, err = pcall(adapter.stop, restore)
         if not ok then restore_error = result elseif result == false then restore_error = err end
     end
-    clip, values, pending, last_time = nil, nil, {}, nil
+    clip, values, pending, last_time, preparation = nil, nil, {}, nil, nil
+    R.state.preparation_progress = nil
     R.state.status, R.state.message = "stopped", message or "播放已停止，已恢复游戏动画"
     R.state.rev = R.state.rev + 1
     if analysis then
@@ -106,31 +117,52 @@ local function advance()
     values = Recording.sample(clip, s.elapsed)
 end
 
+-- 准备任务只持有录制数据；停止和重新播放直接丢弃任务，不触碰新游戏对象。
 local function start(a)
     local file
     for _, f in ipairs(R.state.files) do if f.id == a.id then file = f; break end end
     assert(file, "所选录制不存在，请刷新录制列表")
-    local decoded = Recording.decode(U.load_json(file.path), a.mode or "raw", catalog, R.state.game)
+    local data = load_recording(file.path)
+    R.stop(true)
+    analysis, R.state.analysis = nil, nil
+    preparation = { file = file, job = Recording.prepare(data, a.mode or "raw", catalog, R.state.game,
+        function(decoded, checkpoint)
+            return Analysis.new(decoded, decoded.track == "raw" and adapter.raw_unit or 1, file.name, R.raw_label, checkpoint)
+        end) }
+    local s = R.state
+    s.status, s.elapsed, s.duration, s.file, s.file_id, s.mode = "preparing", 0, 0, file.name, file.id, a.mode or "raw"
+    s.message, s.preparation_progress = "正在准备面部动画…", 0
+end
+
+-- 每次更新恢复一片准备工作；校验、统计全部完成后才连接适配器并发布新会话。
+local function prepare_tick()
+    if not preparation then return end
+    local task = preparation
+    local slice_start = clock()
+    local done, decoded, ready_analysis = task.job:step()
+    Perf.record("playback_prepare", clock() - slice_start)
+    R.state.preparation_progress = task.job.progress
+    R.state.message = (task.job.stage == "analysis" and "正在分析录制信号… " or "正在校验录制帧… ")
+        .. string.format("%.0f%%", task.job.progress * 100)
+    if not done then return end
     local missing = {}
     for _, param in ipairs(R.params and R.params() or {}) do
         if not decoded.map[param] then missing[#missing + 1] = string.format("%03d", param) end
     end
-    R.stop(true)
     adapter.connect(decoded)
     local now = adapter.now()
-    clip, values, last_time = decoded, Recording.sample(decoded, 0), now
+    clip, values, last_time, analysis, preparation = decoded, Recording.sample(decoded, 0), now, ready_analysis, nil
     local s = R.state
-    s.status, s.elapsed, s.duration, s.mode, s.file, s.file_id = "playing", 0, decoded.duration, decoded.track, file.name, file.id
+    s.status, s.elapsed, s.duration, s.mode = task.paused and "paused" or "playing", 0, decoded.duration, decoded.track
+    s.preparation_progress, s.analysis = nil, analysis.state
     s.channels, s.frames, s.missing = decoded.n, #decoded.frames, table.concat(missing, ", ")
-    analysis = Analysis.new(decoded, decoded.track == "raw" and adapter.raw_unit or 1, file.name, R.raw_label)
-    s.analysis = analysis.state
     update_analysis_bindings()
     s.message = decoded.track == "raw" and "重播原版输入，SKS 读取游戏求值后的信号"
         or "直接测试最终信号；眼球角度固定为零，缺失参数置零"
     if #missing > 0 then s.message = s.message .. " · 配置未覆盖参数：" .. s.missing end
-    R.epoch = R.epoch + 1
+    s.rev, R.epoch = s.rev + 1, R.epoch + 1
     if R.log then R.log("recording started: %s / %s / %s (%d frames, %d params, %.3fs)",
-        s.game, file.name, decoded.track, s.frames, s.channels, s.duration) end
+        s.game, task.file.name, decoded.track, s.frames, s.channels, s.duration) end
 end
 
 -- 只验证并排队，保持同帧连续命令的提交顺序。
@@ -169,6 +201,7 @@ end
 -- 由游戏更新回调调用；推进或注入失败时停止会话并保留错误原因。
 function R.tick(inject)
     if not adapter then return end
+    local tick_start = clock()
     local ok, err = pcall(function()
         local commands = pending
         pending = {}
@@ -181,6 +214,9 @@ function R.tick(inject)
                 if a.action == "options" then
                     if a.speed ~= nil then R.state.speed = a.speed end
                     if a.loop ~= nil then R.state.loop = a.loop == true end
+                elseif preparation then
+                    if a.action == "pause" then preparation.paused = true
+                    elseif a.action == "resume" then preparation.paused = false end
                 elseif clip then
                     if a.action == "pause" then R.state.status = "paused"
                     elseif a.action == "resume" then R.state.status = "playing"
@@ -191,11 +227,13 @@ function R.tick(inject)
                 end
             end
         end
+        prepare_tick()
         advance()
         update_analysis_bindings()
         if inject then R.inject() end
     end)
     if not ok then R.fail(err) end
+    Perf.record("playback_tick", clock() - tick_start)
 end
 
 -- 仅覆盖匹配会话的角色输入；缺失参数置零，眼球角度不参与最终信号测试。
@@ -209,6 +247,7 @@ end
 
 -- 加载阶段接入所选游戏适配器；没有 `playback` 接口时不注册播放回调。
 function R.init(game, log, params, context)
+    if adapter then R.stop(true) end
     R.log, R.params, R.context = log, params, context
     adapter = game.playback
     R.raw_label = game.raw and game.raw.label or tostring

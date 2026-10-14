@@ -90,10 +90,11 @@ end
 function P.draw(ctx, x, y, w)
     local r, s = ctx.st.playback, ctx.state
     if not r then return 0 end
+    local preparing = r.status == "preparing"
     local active = r.status ~= "stopped"
     local open = active or s.playback_open == true
     local clicked, height = W.header("面部动画测试", x, y, w, open,
-        active and ((r.status == "paused" and "暂停" or "播放中") .. " · " .. (r.file or "")
+        active and ((preparing and "准备中" or r.status == "paused" and "暂停" or "播放中") .. " · " .. (r.file or "")
             .. (r.mode == "final" and " · 最终信号" or " · 原版输入")) or nil)
     if clicked and not active then s.playback_open = not open end
     local cy = y + height + 6
@@ -128,7 +129,7 @@ function P.draw(ctx, x, y, w)
     if W.button(active and "重新播放" or "播放录制", x + 8, cy, 94, 28, { kind = "primary", disabled = disabled, font = W.small() }) then
         ctx.call("playback", { action = "play", id = s.playback_id, mode = mode })
     end
-    if W.button(r.status == "paused" and "继续" or "暂停", x + 110, cy, 66, 28, { disabled = not active, font = W.small() }) then
+    if W.button(r.status == "paused" and "继续" or "暂停", x + 110, cy, 66, 28, { disabled = not active or preparing, font = W.small() }) then
         ctx.call("playback", { action = r.status == "paused" and "resume" or "pause" })
     end
     if W.button("停止", x + 184, cy, 66, 28, { disabled = not active, font = W.small() }) then ctx.call("playback", { action = "stop" }) end
