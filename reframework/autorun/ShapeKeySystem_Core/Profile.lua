@@ -17,6 +17,8 @@
 -- none (`raw` null or absent: the game lacks it, the node reads 0 and the channel is flagged
 -- no_signal). `lo` / `hi` give the raw range mapped to 0..1, default 0..full. A name the
 -- dictionary does not list is a compile error, so typos are not mistaken for missing signals.
+-- A game with no dictionary at all (no builtin/<id>/signals.json) has no signals: every name
+-- compiles as no_signal.
 -- A profile that uses `p` carries `game` (the adapter id); profiles of other games are skipped.
 
 local U = require("ShapeKeySystem_Core.Util")
@@ -36,7 +38,7 @@ P.list = {}       -- sorted list of registry entries (for the UI)
 function P.load_signals(data)
     local id = P.adapter.id
     data = data or (id and U.load_json(U.path("builtin", id, "signals.json"))) or {}
-    local s = { list = {}, by_name = {}, full = tonumber(data.full) or 0.01 }
+    local s = { list = {}, by_name = {}, full = tonumber(data.full) or 0.01, none = data.signals == nil }
     local raw = P.adapter.raw
     for i, e in ipairs(data.signals or {}) do
         local v = e.raw
@@ -157,6 +159,7 @@ local function compile_node(node, env, depth)
     local fn, text
     if node.s ~= nil then
         local sig = env.signals.by_name[node.s]
+        if not sig and env.signals.none then sig = { name = tostring(node.s), no_signal = true } end
         if not sig then error("unknown signal: " .. tostring(node.s)) end
         if sig.guessed then env.guessed = true end
         if sig.no_signal then

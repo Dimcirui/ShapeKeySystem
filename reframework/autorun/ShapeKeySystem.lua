@@ -1,16 +1,32 @@
--- ShapeKeySystem for MH Wilds
--- Drives armour mesh shape keys from the hunter's facial animation (expression system) and,
--- from M2 on, holds static sculpt values. Backend: ShapeKeySystem_Core/API.lua.
+-- ShapeKeySystem
+-- Drives outfit mesh shape keys from the character's facial animation (expression system) and
+-- holds static sculpt values. Backend: ShapeKeySystem_Core/API.lua; the game adapter is picked
+-- from ShapeKeySystem_Games/Registry.lua.
 -- Data: reframework/data/ShapeKeySystem/{settings.json, builtin/, mods/, user/}
 
 local SKS = require("ShapeKeySystem_Core.API")
 local DebugUI = require("ShapeKeySystem_Core.DebugUI")
--- fixed to MH Wilds: there is no adapter registry yet
-local Game = require("ShapeKeySystem_Games.Wilds.Adapter")
+local Games = require("ShapeKeySystem_Games.Registry")
+local D = require("ShapeKeySystem_UI.Draw")
+local Panel = require("ShapeKeySystem_UI.Panel")
 
+-- an unsupported game (or an adapter whose types are gone after a game update) only gets a line
+-- in the REFramework menu: no hooks, no callbacks, the data folder is not touched
+local game = Games.game_name()
+local Game = Games.pick(game)
+local ok, why = false, "暂不支持当前游戏（" .. tostring(game) .. "）"
 -- also installs the adapter's hooks (write safety: release on cutscene skip / stop, rescan after
 -- equipment rebuilds and menus)
-SKS.init(Game)
+if Game then ok, why = SKS.init(Game) end
+if not ok then
+    re.on_draw_ui(function()
+        if imgui.tree_node("ShapeKeySystem") then
+            imgui.text("ShapeKeySystem 没有启动：" .. tostring(why))
+            imgui.tree_pop()
+        end
+    end)
+    return
+end
 DebugUI.attach(SKS)
 
 re.on_application_entry("LateUpdateBehavior", function()
@@ -21,8 +37,6 @@ end)
 -- standalone panel (M3), drawn with reframework-d2d when it is installed, else with REFramework's
 -- own ImGui draw list (settings.ui_backend: auto / d2d / imgui, see ShapeKeySystem_UI/Draw.lua).
 -- With neither only the imgui debug panel exists.
-local D = require("ShapeKeySystem_UI.Draw")
-local Panel = require("ShapeKeySystem_UI.Panel")
 Panel.attach(SKS)
 local last_err
 local function draw_panel(backend)

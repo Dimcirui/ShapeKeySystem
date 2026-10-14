@@ -910,7 +910,7 @@ local function do_scan()
         for _, x in ipairs(r.targets) do t[#t + 1] = x.name .. ":" .. x.channels end
         tn[#tn + 1] = (r.primary and "*" or "") .. r.label .. "[" .. table.concat(t, ",") .. "]"
     end
-    state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  hunters=%s  scan %.2f ms", res.faces, res.skipped,
+    state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  chars=%s  scan %.2f ms", res.faces, res.skipped,
         C.preview_open and " [preview]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
     Trail.event("scan: %s", state.debug.status)
@@ -1908,8 +1908,15 @@ function SKS.set_ui_open(open, want_signals)
 end
 
 -- ---------------------------------------------------------------- init / hooks
--- adapter: the game adapter (ShapeKeySystem_Games/<Game>/Adapter.lua); its hooks are installed last
+-- adapter: the game adapter (ShapeKeySystem_Games/<Game>/Adapter.lua). Its init runs first: when it
+-- returns false, reason (a type it needs is missing), nothing else starts and the data folder is
+-- not touched. Returns true, or false, reason.
 function SKS.init(adapter)
+    if adapter.init then
+        local ok, why = adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
+                                       menu = SKS.on_menu, preview = SKS.on_preview })
+        if ok == false then return false, why end
+    end
     SKS.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
     Cnd.install(adapter.conditions)
@@ -1943,10 +1950,7 @@ function SKS.init(adapter)
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
     C.publish_api()
-    if adapter.init then
-        adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
-                       menu = SKS.on_menu, preview = SKS.on_preview })
-    end
+    return true
 end
 
 -- skip / stop / unload (pre-hook): let go before the game destroys the cutscene actors

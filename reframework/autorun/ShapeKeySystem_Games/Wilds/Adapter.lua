@@ -168,7 +168,13 @@ local function hook_cutscene(T_DEMO, events)
     end)
 end
 
+-- types without which nothing works (the primary character); the rest degrade on their own
+local REQUIRED = { "app.PlayerManager" }
+
 function A.init(events)
+    for _, t in ipairs(REQUIRED) do
+        if not sdk.find_type_definition(t) then return false, "找不到类型 " .. t .. "（游戏更新后改名了？）" end
+    end
     local T_DEMO = sdk.find_type_definition("app.DemoMediator")
     M_DEMO_BUSY = T_DEMO and T_DEMO:get_method("get_IsBusy")
     M_DEMO_LOAD = T_DEMO and T_DEMO:get_method("get_IsBusyLoad")
@@ -184,6 +190,7 @@ function A.init(events)
     -- the guild card preview hunter spawns some time after onOpen
     hook_post("app.GUI040200", "onOpen", function() events.preview(true) end)
     hook_post("app.GUI040200", "onClose", function() events.preview(false) end)
+    return true
 end
 
 return A
