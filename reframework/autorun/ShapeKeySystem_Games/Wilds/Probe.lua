@@ -5,6 +5,8 @@
 -- Writes reframework/data/ShapeKeySystem/hash_probe.txt. Read-only: nothing is written to the game.
 -- Type lookups happen in R.run, not at load (adapter files do not call sdk at load).
 
+local NameHash = require("ShapeKeySystem_Core.NameHash")
+
 local R = {}
 
 local function go_name(transform)
@@ -12,54 +14,8 @@ local function go_name(transform)
     return ok and n or "?"
 end
 
--- UTF-8 -> UTF-16LE code units
-local function utf16(s)
-    local units = {}
-    for _, c in utf8.codes(s) do
-        if c >= 0x10000 then
-            c = c - 0x10000
-            units[#units + 1] = 0xD800 + (c >> 10)
-            units[#units + 1] = 0xDC00 + (c & 0x3FF)
-        else
-            units[#units + 1] = c
-        end
-    end
-    return units
-end
-
--- murmur3 x86 32-bit over the UTF-16LE bytes, seed 0xFFFFFFFF
-function R.murmur3(s)
-    local u = utf16(s)
-    local bytes = {}
-    for _, x in ipairs(u) do bytes[#bytes + 1] = x & 0xFF; bytes[#bytes + 1] = (x >> 8) & 0xFF end
-    local M = 0xFFFFFFFF
-    local function mul(a, b) return (a * b) & M end
-    local function rotl(x, r) return ((x << r) | (x >> (32 - r))) & M end
-    local c1, c2 = 0xcc9e2d51, 0x1b873593
-    local h = 0xFFFFFFFF
-    local n = #bytes
-    local i = 1
-    while i + 3 <= n do
-        local k = bytes[i] | (bytes[i + 1] << 8) | (bytes[i + 2] << 16) | (bytes[i + 3] << 24)
-        k = mul(rotl(mul(k, c1), 15), c2)
-        h = rotl(h ~ k, 13)
-        h = (mul(h, 5) + 0xe6546b64) & M
-        i = i + 4
-    end
-    local k, rem = 0, n - i + 1
-    if rem >= 3 then k = k ~ (bytes[i + 2] << 16) end
-    if rem >= 2 then k = k ~ (bytes[i + 1] << 8) end
-    if rem >= 1 then
-        k = k ~ bytes[i]
-        k = mul(rotl(mul(k, c1), 15), c2)
-        h = h ~ k
-    end
-    h = h ~ n
-    h = h ~ (h >> 16); h = mul(h, 0x85ebca6b)
-    h = h ~ (h >> 13); h = mul(h, 0xc2b2ae35)
-    h = h ~ (h >> 16)
-    return h
-end
+-- murmur3 of the UTF-16LE name, the engine's channel-name hash
+R.murmur3 = NameHash.murmur3
 
 local function unbox(v)
     if type(v) == "number" then return v end

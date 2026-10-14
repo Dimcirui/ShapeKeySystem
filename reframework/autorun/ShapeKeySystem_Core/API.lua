@@ -17,6 +17,7 @@ local Ext     = require("ShapeKeySystem_Core.External")
 local Cnd     = require("ShapeKeySystem_Core.Conditions")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch   = require("ShapeKeySystem_Core.Touch")
+local NameHash = require("ShapeKeySystem_Core.NameHash")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -808,9 +809,41 @@ local function update_coverage(parts)
                                   recommended = (#parts > 0) and best or nil, recommended_hits = best_n }
 end
 
+-- hash -> name for engines that only keep channel-name hashes: every name SKS knows (ARKit, the
+-- alias tables, every profile's channels and "any" lists, sculpt preset and condition clip keys)
+-- plus the user / mod name tables. Rebuilt when one of those lists was reloaded.
+local function known_names()
+    local key = tostring(Profile.list) .. tostring(Presets.sculpt_list) .. tostring(Names.alias_sets) .. tostring(CondExpr.list)
+    if C.known and C.known_key == key then return C.known end
+    local list = {}
+    local function add(n) if type(n) == "string" and n ~= "" and n:sub(1, 1) ~= "#" then list[#list + 1] = n end end
+    local function add_keys(t) for k in pairs(type(t) == "table" and t or {}) do add(k) end end
+    for _, n in ipairs(Names.ARKIT52) do add(n) end
+    for _, n in ipairs(Names.alias_names) do add(n) end
+    for _, e in ipairs(Profile.list) do
+        for _, ch in ipairs(e.data and e.data.channels or {}) do
+            if type(ch) == "table" then
+                add(ch.name)
+                for _, a in ipairs(type(ch.any) == "table" and ch.any or {}) do add(a) end
+            end
+        end
+    end
+    for _, e in ipairs(Presets.sculpt_list) do
+        add_keys(e.values)
+        for _, o in pairs(e.overrides or {}) do add_keys(o) end
+    end
+    for _, e in ipairs(CondExpr.list) do
+        for _, c in pairs(e.data and e.data.clips or {}) do add_keys(c.values) end
+    end
+    for _, n in ipairs(NameHash.table_names()) do add(n) end
+    C.known, C.known_key = NameHash.table(list), key
+    return C.known
+end
+
 local function do_scan()
     if not C.prog then return end
-    local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3 })
+    local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
+                             known = not Writer.M_CNAME and known_names() or nil })
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
     -- rescans neither pause writing nor rewrite every channel
     local old = {}
