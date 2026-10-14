@@ -1,0 +1,314 @@
+{
+  "schema": "sks.signals/2",
+  "full": 0.01,
+  "signals": [
+    {
+      "name": "blink.L",
+      "raw": "bsControl_003.z",
+      "note": "eyeClosed_L"
+    },
+    {
+      "name": "blink.R",
+      "raw": "bsControl_004.x",
+      "note": "eyeClosed_R"
+    },
+    {
+      "name": "eyeWide.L",
+      "raw": "bsControl_006.x",
+      "note": "eyeOpen_L"
+    },
+    {
+      "name": "eyeWide.R",
+      "raw": "bsControl_005.z",
+      "note": "eyeOpen_R"
+    },
+    {
+      "name": "eyeSquint.L",
+      "raw": "bsControl_010.z",
+      "note": "lidTightener_L"
+    },
+    {
+      "name": "eyeSquint.R",
+      "raw": "bsControl_010.y",
+      "note": "lidTightener_R"
+    },
+    {
+      "name": "browBring.L",
+      "raw": "bsControl_000.y",
+      "note": "browLowerer_L",
+      "guessed": true
+    },
+    {
+      "name": "browBring.R",
+      "raw": "bsControl_000.x",
+      "note": "browLowerer_R",
+      "guessed": true
+    },
+    {
+      "name": "browDown.L",
+      "raw": "bsControl_000.y",
+      "note": "browLowerer_L"
+    },
+    {
+      "name": "browDown.R",
+      "raw": "bsControl_000.x",
+      "note": "browLowerer_R"
+    },
+    {
+      "name": "browInnerUp.L",
+      "raw": "bsControl_008.x",
+      "note": "innerBrowRaiser_L"
+    },
+    {
+      "name": "browInnerUp.R",
+      "raw": "bsControl_007.z",
+      "note": "innerBrowRaiser_R"
+    },
+    {
+      "name": "browOuterUp.L",
+      "raw": "bsControl_021.z",
+      "note": "outerBrowRaiser_L"
+    },
+    {
+      "name": "browOuterUp.R",
+      "raw": "bsControl_021.y",
+      "note": "outerBrowRaiser_R"
+    },
+    {
+      "name": "sneer.L",
+      "raw": "bsControl_020.y",
+      "note": "noseWrinkler_L"
+    },
+    {
+      "name": "sneer.R",
+      "raw": "bsControl_020.x",
+      "note": "noseWrinkler_R"
+    },
+    {
+      "name": "upperLipUp.L",
+      "raw": "bsControl_024.z",
+      "note": "upperLipRaiser_L"
+    },
+    {
+      "name": "upperLipUp.R",
+      "raw": "bsControl_024.y",
+      "note": "upperLipRaiser_R"
+    },
+    {
+      "name": "smileMinor.L",
+      "raw": null
+    },
+    {
+      "name": "smileMinor.R",
+      "raw": null
+    },
+    {
+      "name": "smile.L",
+      "raw": "bsControl_012.x",
+      "note": "lipCornerPuller_L"
+    },
+    {
+      "name": "smile.R",
+      "raw": "bsControl_011.z",
+      "note": "lipCornerPuller_R"
+    },
+    {
+      "name": "dimple.L",
+      "raw": "bsControl_003.y",
+      "note": "dimpler_L"
+    },
+    {
+      "name": "dimple.R",
+      "raw": "bsControl_003.x",
+      "note": "dimpler_R"
+    },
+    {
+      "name": "stretch.L",
+      "raw": "bsControl_014.x",
+      "note": "lipStretcher_L"
+    },
+    {
+      "name": "stretch.R",
+      "raw": "bsControl_013.z",
+      "note": "lipStretcher_R"
+    },
+    {
+      "name": "frown.L",
+      "raw": "bsControl_011.y",
+      "note": "lipCornerDepressor_L"
+    },
+    {
+      "name": "frown.R",
+      "raw": "bsControl_011.x",
+      "note": "lipCornerDepressor_R"
+    },
+    {
+      "name": "lowerLipDown.L",
+      "raw": "bsControl_016.y",
+      "note": "lowerLipDepressor_L"
+    },
+    {
+      "name": "lowerLipDown.R",
+      "raw": "bsControl_016.x",
+      "note": "lowerLipDepressor_R"
+    },
+    {
+      "name": "funnel.L",
+      "raw": "bsControl_023.z",
+      "note": "upperLipFunneler（左右共用）",
+      "guessed": true
+    },
+    {
+      "name": "funnel.R",
+      "raw": "bsControl_023.z",
+      "note": "upperLipFunneler（左右共用）",
+      "guessed": true
+    },
+    {
+      "name": "press.L",
+      "raw": "bsControl_012.y",
+      "note": "lipPressor（左右共用）"
+    },
+    {
+      "name": "press.R",
+      "raw": "bsControl_012.y",
+      "note": "lipPressor（左右共用）"
+    },
+    {
+      "name": "mouthMove.left",
+      "raw": "bsControl_018.x",
+      "note": "mouthLeft"
+    },
+    {
+      "name": "mouthMove.right",
+      "raw": "bsControl_018.y",
+      "note": "mouthRight"
+    },
+    {
+      "name": "mouthMove.up",
+      "raw": null
+    },
+    {
+      "name": "mouthMove.down",
+      "raw": null
+    },
+    {
+      "name": "chinRaise",
+      "raw": "bsControl_002.z",
+      "note": "chinRaiser"
+    },
+    {
+      "name": "jawOpen",
+      "raw": "bsControl_009.x",
+      "note": "jawOpen"
+    },
+    {
+      "name": "cheekShrink",
+      "raw": "bsControl_002.x",
+      "note": "cheekSuck_R",
+      "guessed": true
+    },
+    {
+      "name": "upperLipRoll",
+      "raw": "bsControl_025.y",
+      "note": "upperLipSuck"
+    },
+    {
+      "name": "lowerLipRoll",
+      "raw": "bsControl_017.z",
+      "note": "lowerLipSuck"
+    },
+    {
+      "name": "puff.L",
+      "raw": "bsControl_001.x",
+      "note": "cheekPuff_L"
+    },
+    {
+      "name": "puff.R",
+      "raw": "bsControl_000.z",
+      "note": "cheekPuff_R"
+    },
+    {
+      "name": "pose.01",
+      "raw": null
+    },
+    {
+      "name": "pose.02",
+      "raw": null
+    },
+    {
+      "name": "pose.03",
+      "raw": null
+    },
+    {
+      "name": "pose.04",
+      "raw": null
+    },
+    {
+      "name": "pose.05",
+      "raw": null
+    },
+    {
+      "name": "pose.06",
+      "raw": null
+    },
+    {
+      "name": "pose.07",
+      "raw": null
+    },
+    {
+      "name": "pose.08",
+      "raw": null
+    },
+    {
+      "name": "pose.09",
+      "raw": null
+    },
+    {
+      "name": "pose.10",
+      "raw": null
+    },
+    {
+      "name": "pose.11",
+      "raw": null
+    },
+    {
+      "name": "pose.12",
+      "raw": null
+    },
+    {
+      "name": "cheekSquint.L",
+      "raw": "bsControl_001.z",
+      "note": "cheekRaiser_L"
+    },
+    {
+      "name": "cheekSquint.R",
+      "raw": "bsControl_001.y",
+      "note": "cheekRaiser_R"
+    },
+    {
+      "name": "funnelTogether.L",
+      "raw": "bsControl_012.z",
+      "note": "lipPucker（左右共用）",
+      "guessed": true
+    },
+    {
+      "name": "funnelTogether.R",
+      "raw": "bsControl_012.z",
+      "note": "lipPucker（左右共用）",
+      "guessed": true
+    },
+    {
+      "name": "lipsTogether.L",
+      "raw": "bsControl_012.y",
+      "note": "lipPressor（左右共用）",
+      "guessed": true
+    },
+    {
+      "name": "lipsTogether.R",
+      "raw": "bsControl_012.y",
+      "note": "lipPressor（左右共用）",
+      "guessed": true
+    }
+  ]
+}
