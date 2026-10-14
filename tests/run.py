@@ -104,6 +104,12 @@ shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path
 L2, G2, _ = boot(data2)
 L2.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 L2.execute(open(os.path.join(HERE, "tests_fake.lua"), encoding="utf-8").read())
+# the real Onimusha adapter with a head mesh and boxed hashes in an indexed userdata container
+data3 = tempfile.mkdtemp(prefix="sks_onimusha_")
+shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path.join(data3, "ShapeKeySystem", "builtin"))
+L3, G3, _ = boot(data3)
+L3.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+L3.execute(open(os.path.join(HERE, "tests_onimusha.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))
