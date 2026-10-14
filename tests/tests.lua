@@ -459,6 +459,22 @@ Profile.load_all()
 check(Profile.registry.zz_other == nil and Profile.registry.zz_here ~= nil, "profiles tagged with another game are skipped")
 U.save_json(U.path("user", "profiles", "zz_other.json"), {})
 U.save_json(U.path("user", "profiles", "zz_here.json"), {})
+
+-- builtin data per game: only builtin/<id>/ is read, files left in the old place are ignored
+U.save_json(U.path("builtin", "signals.json"), { full = 0.01, signals = { { name = "stale", raw = 1 } } })
+local sig5 = Profile.load_signals()
+local n5 = #U.load_json(U.path("builtin", "mhwilds", "signals.json")).signals
+check(#sig5.list == n5 and sig5.by_name.stale == nil and sig5.by_name["blink.L"] ~= nil,
+    "the dictionary comes from builtin/mhwilds, a stale builtin/signals.json is ignored")
+U.save_json(U.path("builtin", "profiles", "zz_game.json"), { schema = "sks.profile/1", id = "zz_game", name = "shared", channels = {} })
+U.save_json(U.path("builtin", "mhwilds", "profiles", "zz_game.json"), { schema = "sks.profile/1", id = "zz_game", name = "game", channels = {} })
+Profile.load_all()
+local zg = Profile.registry.zz_game
+check(zg and zg.name == "game" and zg.source == "builtin", "builtin/mhwilds/profiles overrides builtin/profiles")
+U.save_json(U.path("builtin", "signals.json"), {})
+U.save_json(U.path("builtin", "profiles", "zz_game.json"), {})
+U.save_json(U.path("builtin", "mhwilds", "profiles", "zz_game.json"), {})
+Profile.load_signals()
 Profile.load_all()
 
 local Probe = require("ShapeKeySystem_Games.Wilds.Probe")

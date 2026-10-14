@@ -417,16 +417,44 @@ local function sculpt_entry_state(e)
     return { id = e.id, name = e.name, source = e.source, folder = e.folder, target_part = e.target_part }
 end
 
--- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β"), builtin/armor_names.json
--- (generated from Modding-Toolkit's mhws_armor_sets.json); nil when unknown
+-- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β") from builtin/<adapter id>/<A.model_names>
+-- (Wilds: armor_names.json, generated from Modding-Toolkit's mhws_armor_sets.json); nil when unknown
 local armor_names = nil
 local function armor_name(model)
     if armor_names == nil then
-        local d = U.load_json(U.path("builtin", "armor_names.json"))
+        local A = SKS.adapter
+        local d = A.id and A.model_names and U.load_json(U.path("builtin", A.id, A.model_names))
         armor_names = d and type(d.models) == "table" and d.models or false
     end
     local e = armor_names and model and armor_names[model]
     return e and (e.zh or e.en) or nil
+end
+
+-- "ch03_032_5012" -> "护锁刃龙 α/β", "躯干" (A.slot_names; the slot number without one); nil when
+-- the model has no readable name
+local function part_name(part)
+    local model, slot = Presets.model_of(part)
+    local name = model and armor_name(model)
+    if not name then return nil end
+    local sn = SKS.adapter.slot_names
+    return name, sn and sn[slot] or slot
+end
+
+-- labels for a key's parts: only the slots when they all belong to one named model
+local function part_labels(parts)
+    local names, slots, same = {}, {}, true
+    for i, p in ipairs(parts) do
+        local name, slot = part_name(p)
+        names[i], slots[i] = name, slot
+        if not name or name ~= names[1] then same = false end
+    end
+    local out = {}
+    for i, p in ipairs(parts) do
+        if same and slots[i] then out[i] = slots[i]
+        elseif names[i] then out[i] = names[i] .. (slots[i] and (" · " .. slots[i]) or "")
+        else out[i] = p end
+    end
+    return out
 end
 
 -- where "绑定到" writes: the binding in effect (its file base) or, without one, a model-wide
@@ -450,8 +478,13 @@ local function build_presets_state()
         list[#list + 1] = { id = e.id, name = e.name, source = e.source, extends = e.extends }
     end
     state.presets.expression = list
-    local sc = {}
-    for _, e in ipairs(Presets.sculpt_list) do sc[#sc + 1] = sculpt_entry_state(e) end
+    -- a user preset hides the mod's preset of the same name and folder (it is the one that loads);
+    -- sculpt_list has user entries first
+    local sc, taken = {}, {}
+    for _, e in ipairs(Presets.sculpt_list) do
+        local k = (e.folder or "") .. "\0" .. e.name
+        if not taken[k] then taken[k] = true; sc[#sc + 1] = sculpt_entry_state(e) end
+    end
     state.presets.sculpt = sc
     local b = C.binding
     if b then
@@ -490,13 +523,14 @@ local function build_sculpt_state()
     for i, k in ipairs(Sculpt.K.keys) do
         local o = {}
         for p, v in pairs(k.overrides) do o[p] = v end
-        keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), value = k.value,
+        keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts), value = k.value,
                     default = k.default, overrides = o, owner = k.owner,
                     locked = false, mixed = k.owner == "expression", in_preset = k.in_preset == true,
                     range = { Sculpt.RANGE[1], Sculpt.RANGE[2] } }
         local g = gi[k.group]
         if not g then
-            g = { key = k.group, name = k.group, key_indices = {} }
+            local name, slot = part_name(k.group)
+            g = { key = k.group, name = name and (name .. (slot and (" · " .. slot) or "")) or k.group, key_indices = {} }
             gi[k.group] = g; groups[#groups + 1] = g
         end
         g.key_indices[#g.key_indices + 1] = i

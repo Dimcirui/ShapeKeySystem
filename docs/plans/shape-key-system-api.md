@@ -123,7 +123,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `dirty` | bool | 是否有未保存的修改 |
 | `can_undo` / `can_redo` | bool | |
 | `preset` | `{name, source}?` | 当前捏脸配置 |
-| `groups` | list of `{key, name, key_indices}` | 自动分组 |
+| `groups` | list of `{key, name, key_indices}` | 按部件分组；`key` 是部件 id，`name` 是装备名和部位（如「护锁刃龙 α/β · 躯干」），认不出时等于 `key` |
 | `keys` | list of SculptKey | 合并后的形态键 |
 
 `SculptKey`：
@@ -131,6 +131,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 { name = "Waist_thin",
   group = "body",
   parts = { "ch03_012_0012", "ch03_012_0014" },  -- 出现在哪些部件
+  part_labels = { "躯干", "腿部" },               -- parts 的显示名；都属于同一件已知装备时只写部位，认不出的保留 id
   value = 0.30,                                  -- 合并值，0~2
   default = 0.30,                                -- mod 自带默认值，没有时为 0
   overrides = { ["ch03_012_0014"] = 0.5 },       -- 按部件单独设的值
@@ -144,7 +145,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `rev` | int | |
 | `binding` | 见下 | 当前父预设的解析结果 |
 | `expression` | list of `{name, source, extends?}` | 可选的表情配置 |
-| `sculpt` | list of `{name, source, target_part?}` | 可选的捏脸配置 |
+| `sculpt` | list of `{name, source, target_part?}` | 可选的捏脸配置；同一文件夹里和用户配置同名的 mod 配置不列出（加载的总是用户那份） |
 | `pending_delete` | `{kind, name}?` | 等待确认的删除操作 |
 
 `binding`：
@@ -295,7 +296,8 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ```
 reframework/data/ShapeKeySystem/
   settings.json
-  builtin/  profiles/*.json, signals.json, aliases.json     （随插件发布，只读）
+  builtin/  profiles/*.json, aliases.json                   （随插件发布，只读；各游戏通用）
+            <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json  （随 mod 发布，只读）
   user/     bindings/*.json, profiles/*.json, sculpt/*.json  （用户自己的，插件只写这里）
 ```
@@ -354,7 +356,7 @@ reframework/data/ShapeKeySystem/
 ```
 reframework/data/ShapeKeySystem/
   settings.json                           全局设置；增益和视线只在这里作为"没有父预设时"的兜底
-  builtin/  profiles/*.json, signals.json, aliases.json
+  builtin/  profiles/*.json, aliases.json, <游戏 id>/（见第 8 节）
   mods/ | user/                           mods/ 随 mod 发布、只读；user/ 是唯一会写的地方
     default.json                          全局默认父预设
     profiles/*.json                       表情配置

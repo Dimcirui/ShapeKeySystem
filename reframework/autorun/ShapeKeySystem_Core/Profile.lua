@@ -1,5 +1,5 @@
 -- ShapeKeySystem: expression profiles (sks.profile/1) and the signal dictionary.
--- Loads profiles from builtin/, mods/ and user/, resolves "extends", validates node trees
+-- Loads profiles from builtin/ (shared and builtin/<adapter id>/), mods/ and user/, resolves "extends", validates node trees
 -- and compiles them into per-channel evaluation closures.
 --
 -- Node forms (any node may also carry "k" = multiplier and "curve" = {deadzone, gamma, gain}):
@@ -23,7 +23,6 @@ local U = require("ShapeKeySystem_Core.Util")
 
 local P = {}
 
-local SOURCES = { "builtin", "mods", "user" }    -- later sources override earlier ones
 local NODE_KEYS = { "s", "p", "ref", "const", "eye", "sum", "mul", "max", "min", "sub" }
 local NODE_MODS = { "k", "curve", "full_deg", "axis", "sign" }
 local OPS = { sum = true, mul = true, max = true, min = true, sub = true }
@@ -33,9 +32,10 @@ P.adapter = {}   -- set by SKS.init
 P.registry = {}   -- id -> { id, name, source, path, data }
 P.list = {}       -- sorted list of registry entries (for the UI)
 
--- data: a dictionary table (tests); default builtin/signals.json
+-- data: a dictionary table (tests); default builtin/<adapter id>/signals.json, empty without an id
 function P.load_signals(data)
-    data = data or U.load_json(U.path("builtin", "signals.json")) or {}
+    local id = P.adapter.id
+    data = data or (id and U.load_json(U.path("builtin", id, "signals.json"))) or {}
     local s = { list = {}, by_name = {}, full = tonumber(data.full) or 0.01 }
     local raw = P.adapter.raw
     for i, e in ipairs(data.signals or {}) do
@@ -60,10 +60,20 @@ function P.load_signals(data)
     return s
 end
 
+-- Profile folders, later ones override earlier ones: shared builtin, this game's builtin, mods, user.
+local function profile_dirs()
+    local dirs = { { "builtin\\profiles", "builtin" } }
+    if P.adapter.id then dirs[#dirs + 1] = { "builtin\\" .. P.adapter.id .. "\\profiles", "builtin" } end
+    dirs[#dirs + 1] = { "mods\\profiles", "mods" }
+    dirs[#dirs + 1] = { "user\\profiles", "user" }
+    return dirs
+end
+
 function P.load_all()
     local reg = {}
-    for _, src in ipairs(SOURCES) do
-        for _, f in ipairs(U.list_json(src .. "\\profiles")) do
+    for _, d in ipairs(profile_dirs()) do
+        local src = d[2]
+        for _, f in ipairs(U.list_json(d[1])) do
             local data = U.load_json(f.path)
             -- REFramework 将空 Lua 表写成 JSON null；读回时恢复空通道列表，兼容已创建的空配置。
             local other_game = data and data.game ~= nil and data.game ~= P.adapter.id

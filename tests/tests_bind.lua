@@ -70,6 +70,24 @@ SKS.call("rescan"); ticks(5)
 check(st.expression.profile.id == other, "after revert the binding switches the profile")
 SKS.call("bind_config", { kind = "expression", name = cur }); SKS.call("rescan"); ticks(5)
 
+-- sculpt groups name the armour and its slot; the id stays next to the count
+local g1 = st.sculpt.groups[1]
+check(g1 and g1.key == "ch03_012_0012" and g1.name == "刺花蜘蛛 α/β · 躯干",
+    "sculpt group named by armour and slot (" .. tostring(g1 and g1.name) .. ")")
+Panel.ui.page = "sculpt"; frame()
+check(find("刺花蜘蛛 α/β · 躯干") ~= nil and find("ch03_012_0012 · ") ~= nil, "sculpt header shows the name, the id beside the count")
+
+-- a user preset hides the mod's preset of the same name and folder
+local U = require("ShapeKeySystem_Core.Util")
+local folder
+for _, e in ipairs(st.presets.sculpt) do if e.name == "Other" then folder = e.folder end end
+U.save_json(U.path("mods", folder, "sculpt", "Other.json"), { schema = "sks.sculpt/1", name = "Other", values = {} })
+SKS.call("sculpt_scan"); ticks(5)
+local n_other, src_other = 0, nil
+for _, e in ipairs(st.presets.sculpt) do if e.name == "Other" then n_other = n_other + 1; src_other = e.source end end
+check(folder ~= nil and n_other == 1 and src_other == "user", "same-name mod sculpt preset hidden behind the user one")
+U.save_json(U.path("mods", folder or "x", "sculpt", "Other.json"), {})
+
 -- 设置与调试 holds the old presets page
 Panel.ui.page = "debug"; Panel.ui.page_state.debug.files_open = true; Panel.ui.win.h = 1060; frame()
 check(not find("页面出错"), "debug page with the binding / files section draws")
