@@ -10,6 +10,10 @@ milestones) and `docs/plans/shape-key-system-api.md` (UI ↔ backend contract, c
 - Offline harness: `cd tests; python run.py` — every group prints `... FAILS: n`. Add checks to the
   matching `tests_*.lua` when changing behaviour. Two gaze checks in `tests.lua` were already failing
   at migration (2026-10-10, after the eye yaw/pitch sign fix).
+- Onimusha: Way of the Sword runs through `Core/Game.lua` (picked by `reframework:get_game_name()`,
+  MH Wilds otherwise). Its harness: `cd tests; python run.py --game onimusha` (mock_oni.lua +
+  tests_oni.lua); deploy with `SKS_GAME_REFRAMEWORK` set to the Onimusha `reframework` folder. What
+  the port found in game: `docs/plans/onimusha-port.md`.
 - Player data under `reframework/data/ShapeKeySystem` (settings.json, user/, mods/, trail.log) is
   gitignored and never deployed.
 
