@@ -45,7 +45,7 @@ local function locate()
 end
 
 function A.catalog()
-    local data = U.load_json(U.path("games", A.id, "recording_catalog.json"))
+    local data = U.load_json(U.path("builtin", A.id, "recording_catalog.json"))
     assert(data and data.schema == "sks.recording.catalog/1" and data.game == A.id and #data.params == 200,
         "荒野录制参数表缺失或不完整")
     local out, seen = {}, {}

@@ -10,8 +10,6 @@ os.makedirs(os.path.join(data, "ShapeKeySystem", "user", "conditions"), exist_ok
 shutil.copy(os.path.join(HERE, "fixtures", "ShinanoOC.json"), os.path.join(data, "ShapeKeySystem", "user", "conditions"))
 if os.path.isdir(os.path.join(GAME, "data", "ShapeKeySystem", "faces")):
     shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "faces"), os.path.join(data, "ShapeKeySystem", "faces"))
-if os.path.isdir(os.path.join(GAME, "data", "ShapeKeySystem", "games")):
-    shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "games"), os.path.join(data, "ShapeKeySystem", "games"))
 if "--legacy" in sys.argv:
     shutil.copy(os.path.join(GAME, "data", "ArkitFaceDriver.json"), data)
 

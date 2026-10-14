@@ -27,8 +27,13 @@ $owned = @(
     "autorun\ShapeKeySystem_Game", # 清理旧的播放适配器目录
     "data\ShapeKeySystem\builtin",
     "data\ShapeKeySystem\faces",
-    "data\ShapeKeySystem\games",
     "images\ShapeKeySystem"
+)
+# 仅清理迁入 builtin 的三个旧内置文件，不镜像旧 games 目录，保留玩家另外放入的录制。
+$retired = @(
+    "data\ShapeKeySystem\games\mhwilds\recording_catalog.json",
+    "data\ShapeKeySystem\games\mhwilds\recordings\Speak.json",
+    "data\ShapeKeySystem\games\mhwilds\recordings\CampMeals.json"
 )
 # REF-IME 从上游最新 Release 独立安装，见 install-ref-ime.ps1；这里仅部署 SKS 主包。
 
@@ -61,6 +66,11 @@ foreach ($rel in $owned) {
         }
     }
     foreach ($k in $b.Keys) { if (-not $a[$k]) { $remove += $k } }
+}
+if (-not $Pull) {
+    foreach ($rel in $retired) {
+        if (Test-Path -LiteralPath (Join-Path $dst $rel) -PathType Leaf) { $remove += $rel }
+    }
 }
 
 $dir = if ($Pull) { "game -> repo" } else { "repo -> game" }

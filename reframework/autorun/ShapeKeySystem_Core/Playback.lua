@@ -23,16 +23,25 @@ function R.refresh()
     s.rev = s.rev + 1
     s.files = {}
     if not adapter then return true end
-    for _, source in ipairs({ "builtin", "user" }) do
-        local dir = source == "builtin" and ("games\\" .. s.game .. "\\recordings")
-            or ("user\\games\\" .. s.game .. "\\recordings")
-        for _, file in ipairs(U.list_json(dir)) do
-            local data = U.load_json(file.path)
-            s.files[#s.files + 1] = { id = source .. ":" .. file.file, name = file.base,
-                path = file.path, source = source,
-                duration = data and Recording.finite(data.duration, 300) and data.duration or 0,
-                final = data and (data.final_scale ~= nil or (data.schema == "fcparam.recording/1"
-                    and type(data.frames) == "table" and type(data.frames[1]) == "table" and data.frames[1].final ~= nil)) or false }
+    local seen = {}
+    local dirs = {
+        { source = "builtin", path = "builtin\\" .. s.game .. "\\recordings" },
+        { source = "user", path = "user\\recordings" },
+        { source = "user", path = "user\\games\\" .. s.game .. "\\recordings" },
+    }
+    for _, dir in ipairs(dirs) do
+        for _, file in ipairs(U.list_json(dir.path)) do
+            local id = dir.source .. ":" .. file.file
+            -- 旧用户目录只作读取回退；同名录制以新目录为准，播放 ID 保持不变。
+            if not seen[id] then
+                seen[id] = true
+                local data = U.load_json(file.path)
+                s.files[#s.files + 1] = { id = id, name = file.base,
+                    path = file.path, source = dir.source,
+                    duration = data and Recording.finite(data.duration, 300) and data.duration or 0,
+                    final = data and (data.final_scale ~= nil or (data.schema == "fcparam.recording/1"
+                        and type(data.frames) == "table" and type(data.frames[1]) == "table" and data.frames[1].final ~= nil)) or false }
+            end
         end
     end
     return true

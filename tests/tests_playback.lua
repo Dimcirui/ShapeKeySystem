@@ -11,7 +11,7 @@ local function check(ok, label)
 end
 local catalog = Wilds.playback.catalog()
 for _, name in ipairs({ "Speak", "CampMeals" }) do
-    local data = U.load_json(U.path("games", "mhwilds", "recordings", name .. ".json"))
+    local data = U.load_json(U.path("builtin", "mhwilds", "recordings", name .. ".json"))
     local has_final = data.final_scale ~= nil or data.frames[1].final ~= nil
     for _, mode in ipairs(has_final and { "raw", "final" } or { "raw" }) do
         local clip = Recording.decode(data, mode, catalog, "mhwilds")
@@ -38,7 +38,11 @@ check(not pcall(Recording.decode, raw, "raw", catalog, "other"), "recordings fro
 raw.frames[2].d = { 1, 1, 1, 2 }
 check(not pcall(Recording.decode, raw, "raw", catalog, "mhwilds"), "duplicate delta columns are rejected")
 raw.frames[2].d = {}
-U.save_json(U.path("user", "games", "mhwilds", "recordings", "ClockTest.json"), raw)
+U.save_json(U.path("user", "recordings", "ClockTest.json"), raw)
+U.save_json(U.path("user", "games", "mhwilds", "recordings", "ClockTest.json"), { duration = 99 })
+U.save_json(U.path("user", "games", "mhwilds", "recordings", "LegacyTest.json"), raw)
+U.save_json(U.path("user", "games", "other", "recordings", "OtherGame.json"), raw)
+U.save_json(U.path("games", "mhwilds", "recordings", "OldBuiltin.json"), raw)
 local now, restored, injected, stale = 0, 0, nil, false
 local adapter = { raw_unit = 0.01, final_unit = 0.01, catalog = function() return catalog end,
     attach = function() end, now = function() return now end,
@@ -49,7 +53,16 @@ local adapter = { raw_unit = 0.01, final_unit = 0.01, catalog = function() retur
     matches = function(rig) return rig.primary end }
 R.init({ id = "mhwilds", name = "test", raw = Wilds.raw, playback = adapter }, nil,
     function() return { 1 } end, function() return nil, Profile.signals.list, {}, 1 end)
-check(R.state.supported and #R.state.files >= 3, "catalog includes builtin and this game's user recordings")
+check(R.state.supported and #R.state.files == 4, "lists builtin, user and legacy recordings without duplicates or other games")
+local clock, legacy
+for _, file in ipairs(R.state.files) do
+    if file.id == "user:ClockTest.json" then clock = file end
+    if file.id == "user:LegacyTest.json" then legacy = file end
+end
+check(clock and clock.path == U.path("user", "recordings", "ClockTest.json") and clock.duration == 2,
+    "canonical user directory wins over the legacy path while retaining the playback ID")
+check(legacy and legacy.path == U.path("user", "games", "mhwilds", "recordings", "LegacyTest.json"),
+    "old user recordings remain readable without moving or rewriting them")
 check(R.request("play", { id = "user:ClockTest.json", mode = "raw" }), "play accepts a registered file ID")
 R.tick(true)
 check(R.state.status == "playing" and injected == 0.01, "raw injection preserves engine units")
