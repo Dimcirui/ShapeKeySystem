@@ -63,7 +63,7 @@ local function top_bars(ctx, x, y, w)
             W.start_text(s, "profile_form", { title = "新建表情配置", confirm_text_color = 0xFFFFFFFF, on_submit = function(name)
                 if call("create_profile", { name = name }) then
                     s.pick_profile, s.mapping_draft, s.name_form, s.confirm_restore = nil, nil, nil, nil
-                    s.filter, s.only_active, s.collapsed = "", false, {}
+                    s.filter, s.only_active, s.collapsed, s.collapsed_initialized = "", false, {}, false
                     call("preview_profile", {})
                     W.reset_scroll("page:expr")
                 end
@@ -189,8 +189,15 @@ end
 
 function Page.draw(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
-    s.collapsed = s.collapsed or {}
     local ex = st.expression
+    -- 首次进入详情页默认收起所有映射分组；后续只保留用户的展开/收起操作。
+    if not s.collapsed_initialized then
+        s.collapsed = {}
+        for _, g in ipairs((ex and ex.groups) or {}) do s.collapsed[g.key] = true end
+        s.collapsed_initialized = true
+    else
+        s.collapsed = s.collapsed or {}
+    end
     local cy = y + top_bars(ctx, x, y, w) + 8
     cy = cy + Mapping.toolbar(ctx, x, cy, w)
     if s.mapping_draft and not s.browsing then

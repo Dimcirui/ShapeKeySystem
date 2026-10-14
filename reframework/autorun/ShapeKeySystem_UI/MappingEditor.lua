@@ -28,6 +28,22 @@ local OPS = { sum = true, max = true, min = true, mul = true, sub = true }
 local GROUP_KEYS, GROUP_LABELS = {}, {}
 for i, g in ipairs(Expression.GROUPS) do GROUP_KEYS[i], GROUP_LABELS[i] = g.key, g.name end
 
+-- 根据面部信号的名称给新映射选择最接近的部位；只负责初始值，用户仍可在编辑器中调整。
+local function group_for_signal(signal)
+    local n = (signal or ""):lower()
+    if n:find("brow", 1, true) then return "brow" end
+    if n:find("eye", 1, true) or n:find("blink", 1, true) then return "eye" end
+    if n:find("nose", 1, true) or n:find("cheek", 1, true) or n:find("puff", 1, true) then return "nose_cheek" end
+    if n:find("tongue", 1, true) then return "tongue" end
+    if n:find("jaw", 1, true) or n:find("chin", 1, true) or n:find("_jo", 1, true) then return "jaw" end
+    if n:find("mouth", 1, true) or n:find("lip", 1, true) or n:find("smile", 1, true)
+        or n:find("funnel", 1, true) or n:find("press", 1, true) or n:find("sneer", 1, true)
+        or n:find("frown", 1, true) or n:find("dimple", 1, true) or n:find("stretch", 1, true) then
+        return "mouth"
+    end
+    return "extra"
+end
+
 local function index_of(list, value)
     for i, v in ipairs(list) do if v == value then return i end end
     return 1
@@ -286,8 +302,9 @@ local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
 end
 
 -- 读取状态快照，草稿独立持有，取消不会改变已应用的映射。
-function E.open(ctx, name)
-    local entry = name and ctx.st.mapping.entries[name] or { name = "", group = "eye", s = "blink.L" }
+function E.open(ctx, name, signal)
+    local entry = name and ctx.st.mapping.entries[name] or {
+        name = "", group = group_for_signal(signal), s = signal or "blink.L" }
     if not entry then return end
     W.open_search = nil
     ctx.state.name_form = nil

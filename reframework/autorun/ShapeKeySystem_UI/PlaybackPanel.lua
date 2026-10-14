@@ -3,6 +3,7 @@
 local D = require("ShapeKeySystem_UI.Draw")
 local T = require("ShapeKeySystem_UI.Theme")
 local W = require("ShapeKeySystem_UI.Widgets")
+local Mapping = require("ShapeKeySystem_UI.MappingEditor")
 local P = {}
 local C = T.c
 
@@ -55,19 +56,30 @@ local function draw_analysis(ctx, x, y, w)
     for i = (page - 1) * 5 + 1, math.min(page * 5, #rows) do
         local item, rh = rows[i], 78
         local row = item.row
+        -- 右侧统计和操作共用一列，保持命中次数与“添加映射”按钮的左右边缘一致。
+        local action_w, action_x = 120, x + w - 132
         D.rrect(x + 8, cy, w - 16, rh - 4, 3, C.panel2)
         local label = item.rank .. ". " .. row.label
-        D.text_mid(label, x + 16, cy, 24, C.text, W.small(), w - 186)
-        W.tooltip(label, x + 16, cy, w - 186, 24)
+        D.text_mid(label, x + 16, cy, 24, C.text, W.small(), action_x - x - 24)
+        W.tooltip(label, x + 16, cy, action_x - x - 24, 24)
         D.text_center(string.format("%d 次 · %.1f%%", row.hits, 100 * row.hits / math.max(1, a.sampled_frames)),
-            x + w - 166, cy, 150, 24, C.brass, W.small())
+            action_x, cy, action_w, 24, C.brass, W.small())
         local names = {}
         for _, mapping in ipairs(row.mappings) do
             names[#names + 1] = mapping.name .. (mapping.present and "" or "（当前模型缺失）")
         end
         local bound = #names > 0 and ("已绑定：" .. table.concat(names, "、")) or "未绑定形态键映射"
-        D.text_mid(bound, x + 16, cy + 24, 24, #names > 0 and C.muted or C.warn, W.small(), w - 32)
-        W.tooltip(bound, x + 16, cy + 24, w - 32, 24)
+        if #names > 0 then
+            D.text_mid(bound, x + 16, cy + 24, 24, C.muted, W.small(), action_x - x - 24)
+            W.tooltip(bound, x + 16, cy + 24, action_x - x - 24, 24)
+        else
+            D.text_mid(bound, x + 16, cy + 24, 24, C.warn, W.small(), action_x - x - 24)
+            if W.button("添加映射", action_x, cy + 22, action_w, 24, { font = W.small() }) then
+                -- 复用表情映射编辑器；信号名写入新节点，用户只需选择形态键并应用。
+                Mapping.open(ctx, nil, row.signal)
+            end
+            W.tooltip("新建形态键映射，并自动使用 " .. (row.signal or row.label) .. " 作为面部信号", x + 16, cy + 24, action_x - x - 24, 24)
+        end
         local purpose = (row.guessed and "用途（推测）：" or "用途：") .. row.purpose
         D.text_mid(purpose, x + 16, cy + 48, 24, C.faint, W.small(), w - 32)
         W.tooltip(purpose, x + 16, cy + 48, w - 32, 24)
@@ -81,7 +93,7 @@ function P.draw(ctx, x, y, w)
     if not r then return 0 end
     local active = r.status ~= "stopped"
     local open = active or s.playback_open == true
-    local clicked, height = W.header("录制播放测试", x, y, w, open,
+    local clicked, height = W.header("面部动画测试", x, y, w, open,
         active and ((r.status == "paused" and "暂停" or "播放中") .. " · " .. (r.file or "")
             .. (r.mode == "final" and " · 最终信号" or " · 原版输入")) or nil)
     if clicked and not active then s.playback_open = not open end
