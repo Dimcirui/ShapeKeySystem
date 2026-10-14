@@ -131,7 +131,8 @@ function H.names_of(mesh, n, known)
     local ok, arr = pcall(mesh.call, mesh, "get_ChannelNameHash")
     if not ok or not arr then return nil end
     local ok2, elems = pcall(arr.get_elements, arr)
-    if not ok2 or type(elems) ~= "table" then return nil end
+    -- REF can expose get_elements() as an indexed userdata container instead of a Lua table.
+    if not ok2 or (type(elems) ~= "table" and type(elems) ~= "userdata") then return nil end
     local names = {}
     for i = 1, n do
         local h = unbox(elems[i])
