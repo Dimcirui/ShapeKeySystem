@@ -67,6 +67,41 @@ function A.eye_joints(face)
     return { L = jbn(face, "L_EyeJ_LOD02"), R = jbn(face, "R_EyeJ_LOD02") }
 end
 
+-- ---------------------------------------------------------------- signals
+-- Raw channels are fcParam numbers 0..200; a channel's value is the z of its fcParam_NNN joint's
+-- local position, normalised by the dictionary's `full`.
+A.raw = {
+    term = "fcParam",
+    slider = { min = 0, max = 200, fmt = "%03d" },
+    parse = function(v)
+        local n = tonumber(v)
+        if not n or n ~= n or n == math.huge or n == -math.huge then return nil, "p 必须是有限数值" end
+        if n < 0 or n > 200 then return nil, "fcParam out of range: " .. tostring(v) end
+        return math.floor(n)
+    end,
+    label = function(n) return string.format("fcParam_%03d", n) end,
+}
+
+local M_LPOS
+
+-- Returns { n1, joint1, n2, joint2, ... } and the number of joints found; missing joints are skipped.
+function A.bind(face, keys)
+    M_LPOS = M_LPOS or sdk.find_type_definition("via.Joint"):get_method("get_LocalPosition")
+    local out = {}
+    for _, n in ipairs(keys) do
+        local j = jbn(face, string.format("fcParam_%03d", n))
+        if j then out[#out + 1] = n; out[#out + 1] = j end
+    end
+    return out, #out // 2
+end
+
+function A.read(handle, P, inv_full)
+    for k = 1, #handle, 2 do
+        local p = M_LPOS:call(handle[k + 1])
+        P[handle[k]] = p and p.z * inv_full or 0
+    end
+end
+
 -- ch03_012_0014 -> "ch03_012_001", "4"; the representative is the slot-2 part of the model
 function A.model_of(part)
     if type(part) ~= "string" then return nil end

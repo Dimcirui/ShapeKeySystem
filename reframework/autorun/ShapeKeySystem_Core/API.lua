@@ -214,7 +214,14 @@ local function drop_rigs(reason, rescan_after)
     end
 end
 
--- fcParam joints / eye use per rig, limited to the channels its meshes actually have
+-- raw channel handles (the adapter's bind) / eye use per rig, limited to the channels its meshes
+-- actually have
+local function bind_raw(face, keys)
+    local bind = SKS.adapter.bind
+    if not bind then return {}, 0 end
+    return bind(face, keys)
+end
+
 local function refresh_rig_params()
     local prog = C.prog
     if not prog then return end
@@ -222,16 +229,17 @@ local function refresh_rig_params()
         local slots = {}
         for _, t in ipairs(rig.targets) do for k = 1, t.count do slots[t.slots[k]] = true end end
         local params, eyes = Profile.needs(prog, slots)
-        rig.params = Scene.joints(rig.face, params)
+        local n
+        rig.params, n = bind_raw(rig.face, params)
         rig.use_eyes = eyes
         if rig.primary then
             local union, seen = {}, {}
             for _, list in ipairs({ C.dict_params, params }) do
                 for _, p in ipairs(list) do if not seen[p] then seen[p] = true; union[#union + 1] = p end end
             end
-            rig.dict_params = Scene.joints(rig.face, union)
+            rig.dict_params = bind_raw(rig.face, union)
         end
-        rig.n_reads = #rig.params / 2 + (eyes and 2 or 0)
+        rig.n_reads = (n or 0) + (eyes and 2 or 0)
     end
 end
 
@@ -296,7 +304,7 @@ local function build_expression_state()
     for s, c in ipairs(prog.channels) do
         channels[s] = {
             slot = s, name = present[s] or c.name, canonical = c.name, group = c.group,
-            source_text = c.source_text, has_signal = c.has_signal, guessed = c.guessed,
+            source_text = c.source_text, has_signal = c.has_signal, no_signal = c.no_signal, guessed = c.guessed,
             extension = c.extension, gaze_set = c.gaze_set, note = c.note, edited = c.edited,
             gain = tonumber(eg.channel_gains[c.name]) or 1.0,
             forced = C.forced[s] == true, present = present[s] ~= nil,
@@ -360,7 +368,7 @@ function build_preview_state()
     for sl, c in ipairs(prog.channels) do
         if present[sl] then hit = hit + 1 end
         channels[sl] = { slot = sl, name = present[sl] or c.name, canonical = c.name, group = c.group,
-                         source_text = c.source_text, has_signal = c.has_signal, guessed = c.guessed,
+                         source_text = c.source_text, has_signal = c.has_signal, no_signal = c.no_signal, guessed = c.guessed,
                          extension = c.extension, note = c.note, present = present[sl] ~= nil }
         by_group[c.group] = by_group[c.group] or {}
         table.insert(by_group[c.group], sl)
@@ -382,9 +390,12 @@ local function build_mapping_state()
     local m = state.mapping
     local sigs = {}
     for i, s in ipairs(Profile.signals.list) do
-        sigs[i] = { slot = s.slot, name = s.name, param = s.param, guessed = s.guessed, note = s.note }
+        sigs[i] = { slot = s.slot, name = s.name, label = s.label, no_signal = s.no_signal,
+                    guessed = s.guessed, note = s.note }
     end
     m.signals = sigs
+    local raw = SKS.adapter.raw
+    m.raw = raw and { term = raw.term or "原始通道", slider = U.copy(raw.slider) } or nil
     local nodes, edited, entries, originals = {}, {}, {}, {}
     for _, e in ipairs(C.original_resolved and C.original_resolved.channels or {}) do originals[e.name] = e end
     if C.prog then
@@ -724,7 +735,7 @@ local function recompile(edits)
     C.prog, C.edits = prog, edits
     -- 节点由自动信号改为手动时，旧 V 值不能继续驱动网格；变更只在下一次 tick 写入。
     for _, rig in ipairs(C.rigs) do rig.V, rig.W = {}, {} end
-    refresh_rig_params()   -- an edited node may read other fcParams
+    refresh_rig_params()   -- an edited node may read other raw channels
     recompute_gains()
     build_expression_state(); build_mapping_state()
     return true
@@ -996,7 +1007,9 @@ local function update_live()
         end
         if C.want_signals then
             local sig = live.signal
-            for i, sd in ipairs(Profile.signals.list) do sig[i] = C.P[sd.param] or 0 end
+            for i, sd in ipairs(Profile.signals.list) do
+                sig[i] = sd.key ~= nil and ((C.P[sd.key] or 0) * sd.a + sd.b) or 0
+            end
         end
     end
 end
@@ -1864,7 +1877,7 @@ end
 -- adapter: the game adapter (ShapeKeySystem_Games/<Game>/Adapter.lua); its hooks are installed last
 function SKS.init(adapter)
     SKS.adapter = adapter
-    Scene.adapter, Guard.adapter, Presets.adapter = adapter, adapter, adapter
+    Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
     Cnd.install(adapter.conditions)
     Trail.open()
     load_settings()
@@ -1876,7 +1889,9 @@ function SKS.init(adapter)
     Names.load_aliases()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
-    for _, s in ipairs(sig.list) do C.dict_params[#C.dict_params + 1] = s.param end
+    for _, s in ipairs(sig.list) do
+        if s.key ~= nil then C.dict_params[#C.dict_params + 1] = s.key end
+    end
     Profile.load_all()
     Presets.load_sculpt()
     CondExpr.load_all()
@@ -1925,6 +1940,13 @@ function SKS.on_rebuilt()
     Trail.event("hook rebuilt (rigs %d)", #C.rigs)
     if #C.rigs > 0 then drop_rigs("equipment rebuilt", Guard.SETTLE_FRAMES)
     else request_rescan(Guard.SETTLE_FRAMES) end
+end
+
+-- display name of a raw channel value (a `p` node), nil when the game has no such channel
+function SKS.raw_label(v)
+    local raw = SKS.adapter.raw
+    local key = raw and raw.parse(v)
+    return key ~= nil and raw.label(key) or nil
 end
 
 -- debug: run the blendshape hash-table probe on the next stable frame

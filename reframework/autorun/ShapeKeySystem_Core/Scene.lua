@@ -9,7 +9,7 @@ local W = require("ShapeKeySystem_Core.Writer")
 local S = {}
 S.adapter = {}   -- set by SKS.init
 
-local M_JBN, M_CN, M_CNAME = W.M_JBN, W.M_CN, W.M_CNAME
+local M_CN, M_CNAME = W.M_CN, W.M_CNAME
 local clock = os.clock
 
 S.no_targets = {}   -- parent transform -> children signature known to hold no hunter mesh
@@ -107,23 +107,13 @@ local function build_target(part, index, min_hits, mesh_name_of)
              last = last, count = count, distinct = hits, ready = false, stable = 0 }
 end
 
--- fcParam joints of a face for a list of param numbers -> { n1, joint1, n2, joint2, ... }
-function S.joints(face, list)
-    local out = {}
-    for _, n in ipairs(list) do
-        local j = M_JBN:call(face, string.format("fcParam_%03d", n))
-        if j then out[#out + 1] = n; out[#out + 1] = j end
-    end
-    return out
-end
-
 -- opts = { index, scene_search (bool), min_hits }
 function S.scan(opts)
     local t0 = clock()
     local root = S.primary_root()
     local sig = S.children_signature(root)
     local faces = find_faces(root, opts.scene_search)
-    -- one face per parent: a cutscene actor can carry several transforms with fcParam joints
+    -- one face per parent: a cutscene actor can carry several transforms with driver joints
     -- (all of them would drive the same part meshes); the higher face_rank wins
     local by_parent, order = {}, {}
     for _, face in ipairs(faces) do
@@ -165,7 +155,7 @@ function S.scan(opts)
             if t then targets[#targets + 1] = t end
         end
         if #targets > 0 then
-            -- params / dict_params / use_eyes are filled in by the caller (S.joints), which knows
+            -- params / dict_params / use_eyes are filled in by the caller (the adapter's bind), which knows
             -- which channels the targets actually use
             rigs[#rigs + 1] = {
                 label = S.go_name(parent), primary = primary, face = face,
