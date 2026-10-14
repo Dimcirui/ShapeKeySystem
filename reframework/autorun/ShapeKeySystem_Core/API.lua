@@ -25,6 +25,7 @@ local SKS = { version = Version.number }
 
 local SETTINGS_PATH = U.path("settings.json")
 local LEGACY_PATH = "ArkitFaceDriver.json"
+local Perf = require("ShapeKeySystem_Core.Perf")
 local clock, max, min = os.clock, math.max, math.min
 
 -- ---------------------------------------------------------------- settings
@@ -124,7 +125,7 @@ local state = {
     conditions = { rev = 0, sets = {}, current = nil, defs = {}, binding_name = nil },
     -- face-navigator interactions: zones = { forehead = bool, cheek = bool, eye = bool, mouth = bool }
     touch = { rev = 0, zones = {} },
-    debug = { rev = 0, perf = { read = 0, compute = 0, write = 0, scan = 0, total = 0, writes = 0, skipped = 0 },
+    debug = { rev = 0, perf = { timings = Perf.metrics, read = 0, compute = 0, write = 0, scan = 0, total = 0, writes = 0, skipped = 0 },
               log = {}, status = "" },
 }
 local live = {
@@ -813,6 +814,7 @@ local function update_coverage(parts)
 end
 
 local function do_scan()
+    local scan_start = clock()
     if not C.prog then return end
     local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3 })
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
@@ -919,6 +921,7 @@ local function do_scan()
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
+    Perf.record("scan", clock() - scan_start)
 end
 
 -- ---------------------------------------------------------------- per frame
@@ -927,7 +930,8 @@ local function prof_flush()
     if n < prof.window then return end
     local a = state.debug.perf
     a.read, a.compute, a.write, a.scan = prof.read / n * 1000, prof.compute / n * 1000, prof.write / n * 1000, prof.scan / n * 1000
-    a.total = a.read + a.compute + a.write + a.scan
+    a.stages = a.read + a.compute + a.write + a.scan
+    a.total = Perf.metrics.tick and Perf.metrics.tick.avg or 0
     a.writes, a.skipped = prof.writes / n, prof.skipped / n
     prof.read, prof.compute, prof.write, prof.scan, prof.writes, prof.skipped, prof.frames = 0, 0, 0, 0, 0, 0, 0
 end
@@ -1128,7 +1132,7 @@ local function cutscene_gate(f)
     return true
 end
 
-function SKS.tick()
+local function tick()
     Playback.tick(false)
     C.frame = C.frame + 1
     local f = C.frame
@@ -1159,8 +1163,6 @@ function SKS.tick()
         local go = cutscene_gate(f)
         state.debug.status = "cutscene: " .. CS.status
         if not go then
-            prof.frames = prof.frames + 1
-            prof_flush()
             return
         end
     elseif not stable and not menu then
@@ -1174,8 +1176,6 @@ function SKS.tick()
             C.scan_at = {}
             state.debug.status = "paused: " .. why
         end
-        prof.frames = prof.frames + 1
-        prof_flush()
         return
     elseif CS.active then
         cs_end()
@@ -1259,10 +1259,18 @@ function SKS.tick()
         end
         prof.write = prof.write + (clock() - t0)
     end
-    prof.frames = prof.frames + 1
-    prof_flush()
     if C.save_at and f >= C.save_at then save_now() end
 end
+
+-- 计时覆盖提前返回和延迟保存；游戏动画回调与面板绘制另行计量。
+function SKS.tick()
+    local started = clock()
+    tick()
+    Perf.record("tick", clock() - started)
+    prof.frames = prof.frames + 1
+    prof_flush()
+end
+
 
 -- ---------------------------------------------------------------- commands
 local cmds = {}
