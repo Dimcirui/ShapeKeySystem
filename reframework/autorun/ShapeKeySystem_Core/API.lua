@@ -910,7 +910,7 @@ local function do_scan()
         for _, x in ipairs(r.targets) do t[#t + 1] = x.name .. ":" .. x.channels end
         tn[#tn + 1] = (r.primary and "*" or "") .. r.label .. "[" .. table.concat(t, ",") .. "]"
     end
-    state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  hunters=%s  scan %.2f ms", res.faces, res.skipped,
+    state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  chars=%s  scan %.2f ms", res.faces, res.skipped,
         C.preview_open and " [preview]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
     Trail.event("scan: %s", state.debug.status)
