@@ -1908,8 +1908,15 @@ function SKS.set_ui_open(open, want_signals)
 end
 
 -- ---------------------------------------------------------------- init / hooks
--- adapter: the game adapter (ShapeKeySystem_Games/<Game>/Adapter.lua); its hooks are installed last
+-- adapter: the game adapter (ShapeKeySystem_Games/<Game>/Adapter.lua). Its init runs first: when it
+-- returns false, reason (a type it needs is missing), nothing else starts and the data folder is
+-- not touched. Returns true, or false, reason.
 function SKS.init(adapter)
+    if adapter.init then
+        local ok, why = adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
+                                       menu = SKS.on_menu, preview = SKS.on_preview })
+        if ok == false then return false, why end
+    end
     SKS.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
     Cnd.install(adapter.conditions)
@@ -1943,10 +1950,7 @@ function SKS.init(adapter)
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
     C.publish_api()
-    if adapter.init then
-        adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
-                       menu = SKS.on_menu, preview = SKS.on_preview })
-    end
+    return true
 end
 
 -- skip / stop / unload (pre-hook): let go before the game destroys the cutscene actors

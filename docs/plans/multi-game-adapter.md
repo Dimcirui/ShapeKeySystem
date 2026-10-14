@@ -283,29 +283,32 @@ faces/、images/                 通用
 ```lua
 -- ShapeKeySystem.lua
 local Games = require("ShapeKeySystem_Games.Registry")   -- 加载时 require 全部适配器
-local game = reframework.get_game_name()                 -- 静态调用，不是 reframework:get_game_name()
-local A = Games.pick(game)
-if not A then
+local game = Games.game_name()
+local Game = Games.pick(game)
+local ok, why = false, "暂不支持当前游戏（" .. tostring(game) .. "）"
+if Game then ok, why = SKS.init(Game) end    -- 先调用 A.init(events)，返回 false 时其余都不做
+if not ok then
     re.on_draw_ui(function()
         if imgui.tree_node("ShapeKeySystem") then
-            imgui.text("ShapeKeySystem 暂不支持当前游戏（" .. tostring(game) .. "）")
+            imgui.text("ShapeKeySystem 没有启动：" .. tostring(why))
             imgui.tree_pop()
         end
     end)
-    return                                               -- 不注册任何钩子，也不读写数据目录
+    return                                     -- 不注册任何钩子，也不读写数据目录
 end
-SKS.init(A)    -- 内部调用 A.init(events)，然后按 A.caps 建立状态
 ```
 
-- `Registry.lua` 是一个列表 `{ Wilds, Oni, ... }`，`pick` 按 `id` 匹配。
+- `Registry.lua` 是一个列表 `{ Wilds, ... }`，`pick` 按 `id` 匹配。`game_name` 先试静态调用
+  `reframework.get_game_name()`，失败再试 `reframework:get_game_name()`；哪种写法可用以实测为准。
 - 运行时识别只在这里做一次；Core 和 UI 里不出现 `if game == ...`，只看 `A.caps` 和接口是否存在。
-- `A.init` 会校验它需要的类型（例如 `app.PlayerManager`）是否存在；缺了就返回 `false, 原因`，入口按「不支持」处理，
-  并把原因显示出来（游戏更新后类型被改名时有用）。
+- `A.init` 先校验它离不开的类型（荒野是 `app.PlayerManager`），缺了就返回 `false, 原因`；`SKS.init` 在注入适配器、
+  读设置和数据之前调用它，失败时直接返回，入口按「不支持」处理并显示原因（游戏更新后类型被改名时有用）。
 
 ## 6. 测试和验收
 
 - 现有的 mock（`tests/mock_sks.lua`）是按类型名模拟 `sdk` 的（`app.DemoMediator`、`app.PlayerManager` ……），
   荒野适配器在 mock 下照常运行，所以现有的检查不需要改，只要在 mock 里加上 `reframework.get_game_name = function() return "mhwilds" end`。
+- 下面这些检查在 `tests/tests_games.lua`（选择、入口、静态检查、D6）和 `tests/tests_fake.lua`（假适配器，单独的 Lua 运行环境）里。
 - 新增检查：
   - 静态检查：`ShapeKeySystem_Core/` 和 `ShapeKeySystem_UI/` 的代码里（不算注释）不出现 `app.`、`fcParam_`、`ch02`、`ch03`；
   - 未知游戏：`pick` 返回 nil，不注册任何钩子；
