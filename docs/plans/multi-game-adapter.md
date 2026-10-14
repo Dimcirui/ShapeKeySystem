@@ -100,15 +100,17 @@ A.scene_search_type     = "via.motion.Motion"    -- 全场景搜索其他角色�
 
 ```lua
 A.raw = {
-    parse = function(v) -> key | nil, err,   -- profile 的 "p" 值 -> 内部 key（整数）
-    label = function(key) -> string,         -- 界面显示，荒野 "fcParam_033"
-    list  = function() -> {key...} | nil,    -- 映射编辑器里可选的全部原始通道
+    term   = "fcParam",                      -- 界面上原始通道的叫法
+    slider = { min = 0, max = 200, fmt = "%03d" },   -- 映射编辑器里 p 节点的取值范围；nil 时只显示不编辑
+    parse  = function(v) -> key | nil, err,  -- profile 的 "p" 值或字典的 "raw" 值 -> 内部 key
+    label  = function(key) -> string,        -- 界面显示，荒野 "fcParam_033"
 }
-A.bind(face, keys)          -> handle        -- 扫描时调用一次：找到这些通道对应的关节
-A.read(handle, P, inv_full)                  -- 每帧调用：P[key] = 归一化后的值
+A.bind(face, keys)          -> handle, n     -- 扫描时调用一次：找到这些通道对应的关节，n = 找到的个数
+A.read(handle, P, inv_full)                  -- 每帧调用：P[key] = 原始值 / full
 ```
 
-- **key 是整数**，`P` 保持为数组下标访问（每帧热路径不能用字符串拼接）。
+- **key 由适配器决定**，荒野是整数；`P` 按 key 直接索引（每帧热路径不能用字符串拼接）。
+- 每个信号的 `lo` / `hi` 在 `Profile.load_signals` 里换算成 `P[key] * a + b`，`A.read` 不需要知道。
 - 荒野：`parse` 接受 0..200 的整数，key = 编号；`bind` 返回现在的 `{n1, joint1, n2, joint2, ...}`；`read` 就是现在
   `X.read` 里的循环（读 z）。
 - 鬼武者（推测，待 #7 实测）：`p` 写成 `"bsControl_012.y"`，key = 关节号 × 3 + 轴；`read` 按轴取 x/y/z。
@@ -124,7 +126,7 @@ A.read(handle, P, inv_full)                  -- 每帧调用：P[key] = 归一�
 
 ```lua
 A.eye_joints(face)  -> { L = joint|nil, R = joint|nil }
-A.eye_angles(joint) -> yaw, pitch    -- SKS 约定：+yaw = 脸自己的右侧，+pitch = 向上，单位是度
+A.eye_angles(joint) -> yaw, pitch    -- SKS 约定：+yaw = 脸自己的右侧，+pitch = 向上，单位是度；可选，不提供时 Core 用 LocalRotation 换算
 ```
 
 - 荒野：`L_EyeJ_LOD02` / `R_EyeJ_LOD02`（`Scene.lua:174`），角度换算就是现在的 `quat_to_yaw_pitch`（`Expression.lua:33`）。

@@ -99,7 +99,7 @@ local function draw_mapping(st, live)
     table.sort(act, function(a, b) return a[2] > b[2] end)
     for i = 1, math.min(#act, 24) do
         local sd, v = act[i][1], act[i][2]
-        imgui.text(string.format("  %-18s fc%03d  %.2f  %s%s", sd.name, sd.param, v, sd.note, sd.guessed and " [推测]" or ""))
+        imgui.text(string.format("  %-18s %s  %.2f  %s%s", sd.name, sd.label, v, sd.note, sd.guessed and " [推测]" or ""))
     end
 end
 

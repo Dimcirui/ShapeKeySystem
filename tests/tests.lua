@@ -419,6 +419,48 @@ DEMO.busy = true; ticks(1)
 check(st.debug.status:find("paused") ~= nil, "switch off: cutscenes pause again")
 DEMO.busy = false; ticks(130)
 
+-- signal layer: dictionary raw / param / lo / hi / no_signal, p through the adapter, game tags
+local Profile = require("ShapeKeySystem_Core.Profile")
+local U = require("ShapeKeySystem_Core.Util")
+Profile.load_signals({ full = 0.01, signals = {
+    { name = "a", raw = 1 }, { name = "b", raw = 2, lo = 0.002, hi = 0.006 },
+    { name = "gone" }, { name = "old", param = 3 } } })
+local tp = Profile.compile({ id = "t", name = "t", aliases = {}, channels = {
+    { name = "A", s = "a" }, { name = "B", s = "b" }, { name = "G", s = "gone" },
+    { name = "O", s = "old" }, { name = "R", p = 120 } } })
+local tctx = { P = { [1] = 0.5, [2] = 0.4, [3] = 0.7, [120] = 0.9 }, A = {}, V = {} }
+check(tp ~= nil, "dictionary test profile compiles")
+tp = tp or { channels = {} }
+local function tv(i) local c = tp.channels[i]; return c and c.fn and c.fn(tctx) end
+check(tv(1) == 0.5 and not tp.channels[1].no_signal, "signal without lo / hi reads raw / full")
+check(math.abs((tv(2) or 0) - 0.5) < 1e-9, "lo / hi: raw 0.004 in 0.002..0.006 -> 0.5")
+check(tp.channels[3] and tp.channels[3].no_signal and tv(3) == 0, "signal without raw: no_signal, reads 0")
+check(tv(4) == 0.7, "sks.signals/1 `param` still read")
+check(tp.channels[5] and tp.channels[5].source_text == "fcParam_120" and tv(5) == 0.9, "p node parsed and labelled by the adapter")
+local _, tcode = Profile.compile({ id = "t", name = "t", aliases = {}, channels = { { name = "X", s = "typo" } } })
+check(tcode == "E_NODE_INVALID", "a name missing from the dictionary is still an error")
+local _, tcode2, tmsg2 = Profile.compile({ id = "t", name = "t", aliases = {}, channels = { { name = "X", p = 300 } } })
+check(tcode2 == "E_NODE_INVALID" and tostring(tmsg2):find("out of range", 1, true) ~= nil, "p outside the game's range is an error")
+local with_p = { id = "t", aliases = {}, channels = { { name = "R", sum = { { s = "a" }, { p = 120 } } } } }
+check(Profile.to_json(with_p, {}, "t", "t").game == "mhwilds", "a saved profile using p is tagged with the game")
+check(Profile.to_json({ id = "t", aliases = {}, channels = { { name = "A", s = "a" } } }, {}, "t", "t").game == nil,
+    "a saved profile using only s stays game-neutral")
+Profile.load_signals()
+for _, e in ipairs(Profile.list) do
+    if e.source == "builtin" then
+        local r = Profile.resolve(e.id)
+        local pr, _, m = r and Profile.compile(r, {})
+        check(pr ~= nil, "builtin profile compiles against the dictionary: " .. e.id .. " " .. tostring(m or ""))
+    end
+end
+U.save_json(U.path("user", "profiles", "zz_other.json"), { schema = "sks.profile/1", id = "zz_other", game = "other", channels = {} })
+U.save_json(U.path("user", "profiles", "zz_here.json"), { schema = "sks.profile/1", id = "zz_here", game = "mhwilds", channels = {} })
+Profile.load_all()
+check(Profile.registry.zz_other == nil and Profile.registry.zz_here ~= nil, "profiles tagged with another game are skipped")
+U.save_json(U.path("user", "profiles", "zz_other.json"), {})
+U.save_json(U.path("user", "profiles", "zz_here.json"), {})
+Profile.load_all()
+
 local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 MM3 = Probe.murmur3("eyeBlinkLeft")
 ticks(70)

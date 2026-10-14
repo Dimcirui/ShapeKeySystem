@@ -24,36 +24,45 @@ X.GROUPS = {
 X.REGION_OF = {}
 for _, g in ipairs(X.GROUPS) do X.REGION_OF[g.key] = g.region end
 
-local M_LPOS, M_LROT = W.M_LPOS, W.M_LROT
+local M_LROT = W.M_LROT
 local deg, atan, asin = math.deg, math.atan, math.asin
 
 -- Eye joint local rotation -> SKS gaze convention (+yaw = the face's own right, +pitch = up), the
 -- same one gaze_hold and the profiles' `sign` use. RE Engine is right-handed, Y up, face toward +Z
 -- (+X = the face's left), so a positive turn about +Y looks left and about +X looks down: both negated.
-local function quat_to_yaw_pitch(q)
+function X.quat_to_yaw_pitch(q)
     local pitch = deg(atan(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y)))
     local s = 2 * (q.w * q.y - q.z * q.x)
     if s > 1 then s = 1 elseif s < -1 then s = -1 end
     return -deg(asin(s)), -pitch
 end
 
--- Read fcParams into P (normalised by full) and eye angles into rig.angles.
--- eyes = state.eyes (neutral / invert); read_eyes = profile has eye nodes.
+local quat_to_yaw_pitch = X.quat_to_yaw_pitch
+
+-- eye joint -> yaw, pitch in the SKS convention; the adapter's eye_angles replaces it when its
+-- game's eye axes differ
+local function eye_angles(j)
+    local q = M_LROT:call(j)
+    if q then return quat_to_yaw_pitch(q) end
+    return nil
+end
+
+X.adapter = {}   -- set by SKS.init
+
+-- Read the raw channels into P (the adapter's read, normalised by full) and eye angles into
+-- rig.angles. eyes = state.eyes (neutral / invert); read_eyes = profile has eye nodes.
 function X.read(rig, P, inv_full, use_dict, eyes, read_eyes)
-    local params = use_dict and rig.dict_params or rig.params
-    for k = 1, #params, 2 do
-        local p = M_LPOS:call(params[k + 1])
-        P[params[k]] = p and p.z * inv_full or 0
-    end
+    local A = X.adapter
+    if A.read then A.read(use_dict and rig.dict_params or rig.params, P, inv_full) end
     if not read_eyes then return end
+    local angles_of = A.eye_angles or eye_angles
     local ang = rig.angles
     local iy = eyes.invert.yaw and -1 or 1
     local ip = eyes.invert.pitch and -1 or 1
     for side, j in pairs(rig.eyes) do
         if j then
-            local q = M_LROT:call(j)
-            if q then
-                local yaw, pitch = quat_to_yaw_pitch(q)
+            local yaw, pitch = angles_of(j)
+            if yaw then
                 local n = eyes.neutral[side]
                 local a = ang[side]
                 a[1] = (yaw - n.yaw) * iy

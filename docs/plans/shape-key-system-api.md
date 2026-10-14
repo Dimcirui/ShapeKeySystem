@@ -84,6 +84,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
   group = "mouth",
   source_text = "smile.L + smileMinor.L×0.5",  -- 来源摘要，显示用
   has_signal = true,             -- false 表示没有游戏信号，只能手动或捏脸
+  no_signal = false,             -- true 表示用到的信号本游戏没有，值恒为 0
   guessed = false,               -- 映射是否来自推测
   gain = 1.0,
   forced = false,                -- 是否处于"测试"状态（强制为 1）
@@ -104,10 +105,13 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 |---|---|---|
 | `rev` | int | |
 | `signals` | list of Signal | 信号词典 |
+| `raw` | `{term, slider = {min, max, fmt}}` 或 nil | 本游戏原始通道（`p` 节点）的名称和编辑范围；nil 表示没有原始通道 |
 | `nodes` | map 通道名 → Node | 当前配置里各通道的节点树（结构同配置 JSON，见计划文档 5.1） |
 | `edited` | set of 通道名 | 改过、还没保存的通道 |
 
-`Signal`：`{ slot = 3, name = "smile.L", param = 33, guessed = false, note = "颧大肌" }`。实时值在 `live.signal[slot]`。
+`Signal`：`{ slot = 3, name = "smile.L", label = "fcParam_033", no_signal = false, guessed = false, note = "颧大肌" }`。
+`label` 是适配器给出的原始通道名；`no_signal` 为 true 时本游戏没有这个信号，实时值恒为 0。实时值在 `live.signal[slot]`，
+已按信号自己的 `lo` / `hi` 归一化。`p` 节点的显示名用 `SKS.raw_label(v)` 取得。
 
 ### 3.6 `state.sculpt`
 | 字段 | 类型 | 说明 |
