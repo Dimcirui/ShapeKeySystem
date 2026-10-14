@@ -144,12 +144,15 @@ function P.resolve_binding(part, only_source, fingerprint)
     if rep and rep ~= part then steps[#steps + 1] = { base = rep, level = "model" } end
     steps[#steps + 1] = { base = "default", level = "default" }
     local res = { part = part, chain = {} }
-    local listed = {}
+    local listed, reads = {}, {}
     local sources = only_source and { only_source } or { "user", "mods" }
     for _, step in ipairs(steps) do
         for _, source in ipairs(sources) do
             local path, shown = binding_file(source, step.base)
-            local data = live_json(path)
+            -- 代表部件可能同时出现在 global、own 和 model 步骤；只在本次解析复用读取。
+            local data = reads[path]
+            if data == nil then data = live_json(path) or false; reads[path] = data end
+            if data == false then data = nil end
             local entry = { path = shown, exists = data ~= nil, hit = false, level = step.level }
             if step.need_global and not (data and data.global == true) then
                 entry = nil   -- not a global preset: it is listed again at its own / model step
