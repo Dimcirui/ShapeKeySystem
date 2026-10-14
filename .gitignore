@@ -16,6 +16,7 @@ addons/WildsChineseInput/
 toys/SKS_Mocap/live.json
 
 # harness / tool output
+local/performance/
 tests/out.txt
 tests/shots/
 tests/preview_shot.png

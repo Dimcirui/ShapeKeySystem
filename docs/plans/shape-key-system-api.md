@@ -167,7 +167,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ### 3.9 `state.debug`
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `perf` | `{read, compute, write, scan, total, writes, skipped}` | 最近 60 帧平均，单位 ms |
+| `perf` | `{read, compute, write, scan, stages, total, writes, skipped, timings}` | 分类按最近 60 帧平均，单位 ms；`total` 为完整 SKS 更新，`stages` 为分类之和 |
 | `log` | 环形缓冲，最多 200 条 `{time, text}` | |
 
 ## 4. 实时数值（`SKS.live`）
@@ -298,8 +298,10 @@ reframework/data/ShapeKeySystem/
   settings.json
   builtin/  profiles/*.json, aliases.json                   （随插件发布，只读；各游戏通用）
             <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
+                       recording_catalog.json, recordings/*.json       （内置面部动画测试数据）
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
   user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
+            recordings/*.json                             （用户面部动画录制）
 ```
 
 `names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有 `getBlendShapeChannelName` 时用到（鬼武者）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
@@ -541,3 +543,52 @@ end)
 - **装备名**：`builtin/armor_names.json`（418 个模型编号，由 Modding-Toolkit 的 `assets/mhws/armor_sets/mhws_armor_sets.json` 生成）。显示优先级：绑定文件里的 `name` > 原版装备名 > 模型编号。
 - **页面调整**：「预设」页从导航移除，内容放进「设置与调试」底部可折叠的"绑定与配置文件"区，给排查问题用。查找过程里，整套共用的绑定不再重复列出。「视线」页并进了表情详情底部的「视线设置」区。
 - **捏脸**：新增 `reset_sculpt_all`（重置）、`zero_sculpt_all`（归零），各算一步撤销。新增「隐藏非预设通道」（`SculptKey.in_preset`），「A/B 对比」改名为「对比初始」。
+
+## 15. 面部动画测试
+
+### 目录与所有权
+
+- 内置录制：`builtin/<游戏 id>/recordings/*.json`；参数表：`builtin/<游戏 id>/recording_catalog.json`，随主包发布、只读。
+- 用户录制：`user/recordings/*.json`。每个游戏有自己的安装目录，用户数据不再按游戏分层。
+- 兼容读取旧 `user/games/<当前游戏 id>/recordings/`，同名文件优先使用新目录；内置与用户文件分别使用
+  `builtin:<文件名>.json`、`user:<文件名>.json` 作为播放 ID，迁移不改变 ID。
+- 旧内置 `games/mhwilds/` 不再读取。部署只清理其中的参数表及 `Speak.json`、`CampMeals.json`，保留其他文件和全部用户数据。
+
+### 录制格式
+
+`Recording.decode` 接受 `fcparam.recording/1` 和 `fcparam.recording/2`。参数表使用 `sks.recording.catalog/1`，
+包含 `game` 和 `params = [{param, hash, source}]`；荒野表中的 `source` 是对应的骨骼名。
+
+| 字段 | 约束 |
+|---|---|
+| `game` | 可省略；存在时必须等于当前适配器 ID |
+| `duration` | 有限数值，大于 0、不超过 300 秒 |
+| `params` | 1～200 项，每项包含唯一参数编号 `param` 和名称哈希 `hash`；必须与当前游戏参数表一致 |
+| `frames` | 2～9001 帧；`t` 有限、非负、严格递增，最后一帧时间等于 `duration` |
+| `/1` 帧 | 每帧提供完整 `raw` 数组；如有 `final`，每帧也必须提供完整数组，长度与 `params` 一致 |
+| `/2` 编码 | `encoding = "quantized-delta"`，`raw_scale = 10000000`；存在最终轨时 `final_scale = 100000` |
+| `/2` 首帧 | `raw` 及已声明的 `final` 使用完整整数数组，解码时除以对应比例 |
+| `/2` 后续帧 | `d` 为 raw 差分，`df` 为 final 差分；形如 `[列号, 新绝对值, ...]`，列号为 `params` 的一基下标且严格递增 |
+
+差分值替换前一帧的对应列，不是增量相加；缺失或空差分保留前一帧。解码同时校验已声明的两条轨道，
+再在相邻帧间线性插值。raw 解码结果为引擎输入单位，不能再乘信号字典的 `full`。
+final 解码结果经适配器的 `final_unit / 字典 full` 换算后用于 SKS 求值，只作用于匹配会话的主角色；缺失参数和眼球角度置零。
+
+### 命令与状态
+
+UI 通过 `SKS.call("playback", args)` 提交命令，`args.action` 为 `refresh`、`play`、`pause`、`resume`、
+`stop`、`seek` 或 `options`。`play` 指定已登记的 `id` 和 `mode = "raw" | "final"`；`seek` 指定秒数 `time`；
+`options` 接受 `speed`（0.25～2）和布尔值 `loop`。只有 `refresh` 立即更新文件列表，其余操作按顺序在游戏更新回调执行。
+
+`state.playback` 提供录制列表、支持状态、播放状态、时间、速度、循环选项、提示及 `analysis`。
+播放状态为 `stopped`、`preparing`、`playing` 或 `paused`。准备阶段分片完成全量校验及分析，
+`preparation_progress` 为当前阶段的 0～1 进度；所有轨道校验通过后才连接游戏对象。
+准备时允许停止、重新播放和调整选项；跳转必须等待准备完成。暂停命令在准备结束后生效。
+文件读取及 JSON 解析仍同步执行。解码快照只读，连续空差分共享同一快照；采样结果独立于快照。
+
+`debug.perf.timings` 按最近 60 次调用提供 `avg`、`max`、`last`、`p95` 和 `count`，耗时单位为 ms。
+分类包括 `tick`、`scan`、`ui`、`playback_load`、`playback_prepare`、`playback_tick` 和 `raw_inject`；
+各分类会重叠，不得相加。P95 每 60 次调用更新，首次调用也提供初值。
+分析按实际经过的录制帧统计绝对幅值超过 1% 的信号，raw 用适配器的 `raw_unit` 判断，final 用归一化幅值判断。
+暂停不累计，循环累计，跳转只计目标显示帧；同命中数按参数编号排序。
+绑定从当前已应用配置的完整依赖树计算，包含原始通道和间接引用；停止保留统计并可刷新绑定，重新播放清零。

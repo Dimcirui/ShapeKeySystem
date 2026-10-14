@@ -31,6 +31,7 @@ local function find(t) for _, d in ipairs(DRAWS) do if d.s:find(t, 1, true) then
 local function tick_ok() return not tostring(st.debug.status):find("tick error", 1, true) end
 
 check(SKS.adapter == Fake and next(HOOKS) == nil, "the fake adapter is in use, no hooks")
+check(not st.playback.supported and st.playback.game == "fake", "no playback adapter: animation tests stay unavailable")
 ticks(60)
 check(tick_ok(), "ticks run (" .. tostring(st.debug.status) .. ")")
 local ex = st.expression

@@ -59,6 +59,11 @@ def boot(data):
                 if rx.fullmatch(rel): out[i] = rel; i += 1
         return out
 
+    # REF 的 io 相对路径属于数据目录；绝对源码路径供离线 loadfile/源码检查使用。
+    G.test_io_path = lambda p: p if os.path.isabs(p) else os.path.join(data, p)
+    L.execute('local native_open = io.open; io.open = function(path, mode) '
+              'return native_open(test_io_path(path), mode) end')
+
     G.json = L.table_from({"load_file": load_file, "dump_file": dump_file, "load_string": load_string})
     G.fs = L.table_from({"glob": glob})
     G.package.path = os.path.join(GAME, "autorun", "?.lua").replace("\\", "/")
@@ -90,12 +95,17 @@ L.execute(open(os.path.join(HERE, "tests_ui.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_api.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_cond.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_touch.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_target_lookup.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_bind.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_json.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_preview.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_shinano.lua"), encoding="utf-8").read())
 G.MMD_NAMES = to_lua(json.load(open(os.path.join(HERE, "mmd_names.json"), encoding="utf-8")))
 G.VRC_FACES = to_lua(json.load(open(os.path.join(HERE, "vrc_faces.json"), encoding="utf-8")))
 L.execute(open(os.path.join(HERE, "tests_mmd.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_playback_analysis.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_playback.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_playback_adapter.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_games.lua"), encoding="utf-8").read())
 
 # a second runtime with a minimal made-up adapter (no signals, hooks, conditions or input)

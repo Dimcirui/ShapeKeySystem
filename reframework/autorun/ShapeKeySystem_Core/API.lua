@@ -1,7 +1,8 @@
--- ShapeKeySystem: backend entry point. The UI reads SKS.state / SKS.live and changes things
--- only through SKS.call(cmd, args). Engine writes happen only in SKS.tick (LateUpdateBehavior).
--- Contract: docs/plans/shape-key-system-api.md (v0.1). M1: runtime, scene, expression, eyes,
--- mapping, debug. M2: parent presets (bindings, per part ID) and the sculpt layer.
+-- 管理运行状态、配置和形态键驱动。
+--
+-- UI 读取 `SKS.state` / `SKS.live`，通过 `SKS.call` 提交修改，不直接写引擎。
+-- 网格权重在 `SKS.tick`（LateUpdateBehavior）写入；录制 raw 输入由游戏适配器的更新和面部回调注入。
+-- 接口与文件格式见 docs/plans/shape-key-system-api.md。
 
 local U       = require("ShapeKeySystem_Core.Util")
 local Names   = require("ShapeKeySystem_Core.Names")
@@ -17,6 +18,7 @@ local Ext     = require("ShapeKeySystem_Core.External")
 local Cnd     = require("ShapeKeySystem_Core.Conditions")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch   = require("ShapeKeySystem_Core.Touch")
+local Playback = require("ShapeKeySystem_Core.Playback")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
 
 local Version = require("ShapeKeySystem_Core.Version")
@@ -24,6 +26,7 @@ local SKS = { version = Version.number }
 
 local SETTINGS_PATH = U.path("settings.json")
 local LEGACY_PATH = "ArkitFaceDriver.json"
+local Perf = require("ShapeKeySystem_Core.Perf")
 local clock, max, min = os.clock, math.max, math.min
 
 -- ---------------------------------------------------------------- settings
@@ -123,7 +126,7 @@ local state = {
     conditions = { rev = 0, sets = {}, current = nil, defs = {}, binding_name = nil },
     -- face-navigator interactions: zones = { forehead = bool, cheek = bool, eye = bool, mouth = bool }
     touch = { rev = 0, zones = {} },
-    debug = { rev = 0, perf = { read = 0, compute = 0, write = 0, scan = 0, total = 0, writes = 0, skipped = 0 },
+    debug = { rev = 0, perf = { timings = Perf.metrics, read = 0, compute = 0, write = 0, scan = 0, total = 0, writes = 0, skipped = 0 },
               log = {}, status = "" },
 }
 local live = {
@@ -131,6 +134,7 @@ local live = {
     eye_angle = { L = { yaw = 0, pitch = 0 }, R = { yaw = 0, pitch = 0 } },
 }
 SKS.state, SKS.live = state, live
+state.playback = Playback.state
 
 -- ---------------------------------------------------------------- internal
 local C = {
@@ -204,6 +208,7 @@ end
 local MENU_SCAN_FRAMES = 180
 
 local function drop_rigs(reason, rescan_after)
+    Playback.stop(false, "角色或场景变化，录制播放已停止：" .. tostring(reason))
     if #C.rigs > 0 or #C.pending_zero > 0 then log("released rigs: %s", reason) end
     C.rigs, C.parts, C.instances, C.pending_zero = {}, {}, {}, {}
     Sculpt.clear_targets()
@@ -841,6 +846,7 @@ local function known_names()
 end
 
 local function do_scan()
+    local scan_start = clock()
     if not C.prog then return end
     local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
                              known = not Writer.M_CNAME and known_names() or nil })
@@ -948,6 +954,7 @@ local function do_scan()
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
+    Perf.record("scan", clock() - scan_start)
 end
 
 -- ---------------------------------------------------------------- per frame
@@ -956,7 +963,8 @@ local function prof_flush()
     if n < prof.window then return end
     local a = state.debug.perf
     a.read, a.compute, a.write, a.scan = prof.read / n * 1000, prof.compute / n * 1000, prof.write / n * 1000, prof.scan / n * 1000
-    a.total = a.read + a.compute + a.write + a.scan
+    a.stages = a.read + a.compute + a.write + a.scan
+    a.total = Perf.metrics.tick and Perf.metrics.tick.avg or 0
     a.writes, a.skipped = prof.writes / n, prof.skipped / n
     prof.read, prof.compute, prof.write, prof.scan, prof.writes, prof.skipped, prof.frames = 0, 0, 0, 0, 0, 0, 0
 end
@@ -998,6 +1006,10 @@ local function drive(rig, primary)
     local t0 = clock()
     local P = primary and C.P or C.Pbuf
     X.read(rig, P, C.inv_full, primary and C.want_signals and state.runtime.ui_open, cfg.eyes, rig.use_eyes)
+    -- 播放、循环和跳转改变 `Playback.epoch`，主角色不得沿用此前的平滑缓存。
+    if rig.primary and rig.playback_epoch ~= Playback.epoch then
+        rig.W, rig.V, rig.playback_epoch = {}, {}, Playback.epoch
+    end
     -- panel gaze drag: both eyes look at the held angle instead of following the game
     local gh = C.gaze_hold
     if gh then
@@ -1009,6 +1021,7 @@ local function drive(rig, primary)
         end
     end
     local t1 = clock()
+    Playback.apply(rig, P, C.inv_full)
     local s = cfg.expression.smoothing
     local alpha = (s > 0) and (1 - min(s, 1) * 0.9) or 1
     X.compute(prog, rig, P, C.gains, C.forced, cfg.clamp, alpha, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch)
@@ -1152,7 +1165,8 @@ local function cutscene_gate(f)
     return true
 end
 
-function SKS.tick()
+local function tick()
+    Playback.tick(false)
     C.frame = C.frame + 1
     local f = C.frame
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
@@ -1182,8 +1196,6 @@ function SKS.tick()
         local go = cutscene_gate(f)
         state.debug.status = "cutscene: " .. CS.status
         if not go then
-            prof.frames = prof.frames + 1
-            prof_flush()
             return
         end
     elseif not stable and not menu then
@@ -1197,8 +1209,6 @@ function SKS.tick()
             C.scan_at = {}
             state.debug.status = "paused: " .. why
         end
-        prof.frames = prof.frames + 1
-        prof_flush()
         return
     elseif CS.active then
         cs_end()
@@ -1282,10 +1292,18 @@ function SKS.tick()
         end
         prof.write = prof.write + (clock() - t0)
     end
-    prof.frames = prof.frames + 1
-    prof_flush()
     if C.save_at and f >= C.save_at then save_now() end
 end
+
+-- 计时覆盖提前返回和延迟保存；游戏动画回调与面板绘制另行计量。
+function SKS.tick()
+    local started = clock()
+    tick()
+    Perf.record("tick", clock() - started)
+    prof.frames = prof.frames + 1
+    prof_flush()
+end
+
 
 -- ---------------------------------------------------------------- commands
 local cmds = {}
@@ -1304,9 +1322,16 @@ end
 function cmds.set_enabled(a)
     if type(a.on) ~= "boolean" then return false, "E_BAD_ARGS", "on must be boolean" end
     cfg.enabled = a.on
+    if not a.on then Playback.request("stop") end
     if not a.on then queue_zero_all(); zero_sculpt() else Sculpt.mark_dirty(); request_rescan(1) end
     build_settings_state(); save_soon()
     return true
+end
+
+-- 绘制回调只提交播放命令，引擎操作由更新回调执行。
+function cmds.playback(a)
+    if a.action == "play" and not cfg.enabled then return false, "E_BAD_ARGS", "请先启用 ShapeKeySystem" end
+    return Playback.request(a.action, a)
 end
 
 local SETTING_TYPES = {
@@ -1955,6 +1980,10 @@ function SKS.init(adapter)
     Cnd.install(adapter.conditions)
     Trail.open()
     load_settings()
+    Playback.init(adapter, log, function() return C.prog and C.prog.params or {} end, function()
+        return C.prog, Profile.signals.list, state.expression.channels,
+            state.mapping.rev .. ":" .. state.expression.rev .. ":" .. state.scene.rev
+    end)
     if hotkey_migrated_now then
         notice("info", "打开面板的按键改成了 Delete（End 是游戏的暂停键，Home 和 ArmorVariantManager 冲突），可在设置里修改")
         save_soon()
@@ -2039,6 +2068,7 @@ function SKS.on_preview(open)
 end
 
 function SKS.shutdown()
+    Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
     C.unpublish_api()
     if not C.paused then

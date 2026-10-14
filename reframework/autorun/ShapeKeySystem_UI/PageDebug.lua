@@ -95,7 +95,8 @@ end
 local function perf_card(ctx, x, y, w)
     local st = ctx.st
     local a = st.debug.perf or {}
-    local h = 200
+    local details = ctx.state.perf_details == true
+    local h = details and 426 or 200
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
@@ -103,12 +104,31 @@ local function perf_card(ctx, x, y, w)
     D.text(string.format("写入 %.1f / 跳过 %.1f 每帧", a.writes or 0, a.skipped or 0), rx + 60, cy + 3, C.muted, W.small(), rw - 60)
     cy = cy + 30
     local total = max(0.3, a.total or 0)
-    for _, k in ipairs({ { "read", "读取" }, { "compute", "计算" }, { "write", "写入" }, { "scan", "扫描" }, { "total", "合计" } }) do
+    for _, k in ipairs({ { "read", "读取" }, { "compute", "计算" }, { "write", "写入" }, { "scan", "扫描读取" }, { "total", "完整更新" } }) do
         local v = a[k[1]] or 0
         D.text_mid(k[2], rx, cy, 22, C.text, W.small(), 60)
         W.meter(rx + 60, cy + 6, rw - 140, 10, v / total, C.brass)
         D.text_mid(string.format("%.3f ms", v), rx + rw - 72, cy, 22, C.text, W.mono())
         cy = cy + 26
+    end
+    if W.button(details and "收起耗时详情" or "展开耗时详情", rx, cy, 128, 26, { font = W.small(), kind = "ghost" }) then
+        ctx.state.perf_details = not details
+    end
+    W.tooltip("上方按 60 帧显示分类均值。完整更新包含 SKS 的播放、条件、扫描和保存；绘制与游戏动画回调另外计量。", rx + 140, cy, rw - 140, 26)
+    if details then
+        cy = cy + 32
+        D.text_mid("最近 60 次：平均 / 最大 / P95（毫秒）", rx, cy, 22, C.muted, W.small(), rw)
+        cy = cy + 24
+        for _, item in ipairs({ { "tick", "完整更新" }, { "scan", "完整扫描" }, { "ui", "面板绘制" },
+            { "playback_load", "文件读取" }, { "playback_prepare", "准备分片" },
+            { "playback_tick", "播放更新" }, { "raw_inject", "原版注入" } }) do
+            local metric = (a.timings or {})[item[1]] or {}
+            D.text_mid(item[2], rx, cy, 22, C.text, W.small(), 82)
+            local text = string.format("%.3f / %.3f / %.3f", metric.avg or 0, metric.max or 0, metric.p95 or 0)
+            D.text_mid(text, rx + 86, cy, 22, C.text, W.mono(), rw - 86)
+            W.tooltip(item[2] .. "：" .. text .. " ms。分类存在重叠，不相加；P95 每 60 次调用更新。", rx, cy, rw, 22)
+            cy = cy + 24
+        end
     end
     return h
 end

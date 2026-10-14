@@ -9,7 +9,27 @@ function U.path(...)
     return U.ROOT .. table.concat({ ... }, "\\")
 end
 
+-- 只读检查使用 REF 的数据目录，不缓存缺失结果；调用结束前释放文件句柄。
+function U.file_exists(path)
+    if type(path) ~= "string" or path == "" then return false end
+    -- Windows 的 Lua 文件打开可能按本地编码解析名称；非 ASCII 名称交给目录枚举。
+    if not path:find("[\128-\255]") and io and type(io.open) == "function" then
+        local ok, file = pcall(io.open, path, "rb")
+        if ok then
+            if not file then return false end
+            file:close()
+            return true
+        end
+    end
+    -- 未提供 `io.open` 的框架使用精确路径匹配，避免文件名中的正则符号扩大匹配范围。
+    local pattern = path:gsub("/", "\\"):gsub("([\\%.%[%]%(%)%{%}%*%+%?%^%$%|])", "\\%1")
+    local ok, files = pcall(fs.glob, pattern)
+    return ok and type(files) == "table" and next(files) ~= nil
+end
+
+-- 可选文件缺失时不进入 JSON 解析；实际文件仍交给 REF 解析并报告格式错误。
 function U.load_json(path)
+    if not U.file_exists(path) then return nil end
     local ok, data = pcall(json.load_file, path)
     if ok and type(data) == "table" then return data end
     return nil
