@@ -167,7 +167,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ### 3.9 `state.debug`
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `perf` | `{read, compute, write, scan, total, writes, skipped}` | 最近 60 帧平均，单位 ms |
+| `perf` | `{read, compute, write, scan, stages, total, writes, skipped, timings}` | 分类按最近 60 帧平均，单位 ms；`total` 为完整 SKS 更新，`stages` 为分类之和 |
 | `log` | 环形缓冲，最多 200 条 `{time, text}` | |
 
 ## 4. 实时数值（`SKS.live`）
@@ -579,6 +579,14 @@ UI 通过 `SKS.call("playback", args)` 提交命令，`args.action` 为 `refresh
 `options` 接受 `speed`（0.25～2）和布尔值 `loop`。只有 `refresh` 立即更新文件列表，其余操作按顺序在游戏更新回调执行。
 
 `state.playback` 提供录制列表、支持状态、播放状态、时间、速度、循环选项、提示及 `analysis`。
+播放状态为 `stopped`、`preparing`、`playing` 或 `paused`。准备阶段分片完成全量校验及分析，
+`preparation_progress` 为当前阶段的 0～1 进度；所有轨道校验通过后才连接游戏对象。
+准备时允许停止、重新播放和调整选项；跳转必须等待准备完成。暂停命令在准备结束后生效。
+文件读取及 JSON 解析仍同步执行。解码快照只读，连续空差分共享同一快照；采样结果独立于快照。
+
+`debug.perf.timings` 按最近 60 次调用提供 `avg`、`max`、`last`、`p95` 和 `count`，耗时单位为 ms。
+分类包括 `tick`、`scan`、`ui`、`playback_load`、`playback_prepare`、`playback_tick` 和 `raw_inject`；
+各分类会重叠，不得相加。P95 每 60 次调用更新，首次调用也提供初值。
 分析按实际经过的录制帧统计绝对幅值超过 1% 的信号，raw 用适配器的 `raw_unit` 判断，final 用归一化幅值判断。
 暂停不累计，循环累计，跳转只计目标显示帧；同命中数按参数编号排序。
 绑定从当前已应用配置的完整依赖树计算，包含原始通道和间接引用；停止保留统计并可刷新绑定，重新播放清零。
