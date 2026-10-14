@@ -1,0 +1,273 @@
+{
+  "schema": "sks.signals/1",
+  "full": 0.01,
+  "note": "Onimusha: Way of the Sword. Every name of signals.json stays declared and reads 0 (no fcParams, no Wilds face bones); these entries wire names to Onimusha face_joint bones (translation only, in the Head's frame: +x = the face's left, +y up, +z forward). Measured on kevin's probe recordings 2026-10-14 (3-min idle, Musashi talking, a boss fight; Onimusha/work/probes): rest_mm = idle median, full_mm = travel to the 1st/99th percentile.",
+  "signals": [
+    {
+      "name": "eyeClose.L",
+      "bone": "face_joint343",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 8.0,
+      "rest_mm": -0.8,
+      "deadzone": 0.05,
+      "note": "骨骼：左上眼睑下移闭眼。游戏眨眼约 8.7mm（3 段录像的 1%）",
+      "note_en": "bone: left upper lid down (eye closes). A game blink travels about 8.7 mm (1st percentile of 3 recordings)"
+    },
+    {
+      "name": "eyeClose.R",
+      "bone": "face_joint342",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 7.0,
+      "rest_mm": -1.2,
+      "deadzone": 0.05,
+      "note": "骨骼：右上眼睑下移闭眼。约 7.5mm",
+      "note_en": "bone: right upper lid down (eye closes). About 7.5 mm"
+    },
+    {
+      "name": "eyeWiden.L",
+      "bone": "face_joint343",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 2.5,
+      "rest_mm": -0.8,
+      "deadzone": 0.2,
+      "note": "骨骼：左上眼睑比待机更高（睁大眼）。约 2.8mm",
+      "note_en": "bone: left upper lid above idle (eyes wide). About 2.8 mm"
+    },
+    {
+      "name": "eyeWiden.R",
+      "bone": "face_joint342",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 2.5,
+      "rest_mm": -1.2,
+      "deadzone": 0.2,
+      "note": "骨骼：右上眼睑比待机更高（睁大眼）。约 3.0mm",
+      "note_en": "bone: right upper lid above idle (eyes wide). About 3.0 mm"
+    },
+    {
+      "name": "lowerLidRaise.L",
+      "bone": "face_joint278",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 3.5,
+      "rest_mm": 1.2,
+      "deadzone": 0.2,
+      "note": "骨骼：左下眼睑上提。约 3.4mm",
+      "note_en": "bone: left lower lid rises. About 3.4 mm"
+    },
+    {
+      "name": "lowerLidRaise.R",
+      "bone": "face_joint179",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 3.5,
+      "rest_mm": 1.2,
+      "deadzone": 0.2,
+      "note": "骨骼：右下眼睑上提。约 3.9mm",
+      "note_en": "bone: right lower lid rises. About 3.9 mm"
+    },
+    {
+      "name": "cheekRaise.L",
+      "bone": "face_joint64",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 5.0,
+      "rest_mm": 1.7,
+      "deadzone": 0.2,
+      "note": "骨骼：左脸颊上提。约 4.7mm",
+      "note_en": "bone: left cheek up. About 4.7 mm"
+    },
+    {
+      "name": "cheekRaise.R",
+      "bone": "face_joint196",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 5.0,
+      "rest_mm": 0.9,
+      "deadzone": 0.2,
+      "note": "骨骼：右脸颊上提。约 5.5mm",
+      "note_en": "bone: right cheek up. About 5.5 mm"
+    },
+    {
+      "name": "browRaise.L",
+      "bone": "face_joint276",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 6.0,
+      "rest_mm": -1.2,
+      "deadzone": 0.2,
+      "note": "骨骼：左眉上移。约 6.3mm",
+      "note_en": "bone: left brow up. About 6.3 mm"
+    },
+    {
+      "name": "browRaise.R",
+      "bone": "face_joint324",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 6.0,
+      "rest_mm": -2.4,
+      "deadzone": 0.2,
+      "note": "骨骼：右眉上移。约 6.4mm",
+      "note_en": "bone: right brow up. About 6.4 mm"
+    },
+    {
+      "name": "browLower.L",
+      "bone": "face_joint276",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 4.0,
+      "rest_mm": -1.2,
+      "deadzone": 0.25,
+      "note": "骨骼：左眉下压。约 4.5mm",
+      "note_en": "bone: left brow down. About 4.5 mm"
+    },
+    {
+      "name": "browLower.R",
+      "bone": "face_joint324",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 4.0,
+      "rest_mm": -2.4,
+      "deadzone": 0.25,
+      "note": "骨骼：右眉下压。约 3.7mm",
+      "note_en": "bone: right brow down. About 3.7 mm"
+    },
+    {
+      "name": "browInnerDown.L",
+      "bone": "face_joint7",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 4.5,
+      "rest_mm": -3.3,
+      "deadzone": 0.2,
+      "note": "骨骼：左眉头下压（皱眉）。约 4.5mm",
+      "note_en": "bone: left inner brow down (frown). About 4.5 mm"
+    },
+    {
+      "name": "browInnerDown.R",
+      "bone": "face_joint160",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 4.5,
+      "rest_mm": -3.3,
+      "deadzone": 0.2,
+      "note": "骨骼：右眉头下压（皱眉）。约 5.0mm",
+      "note_en": "bone: right inner brow down (frown). About 5.0 mm"
+    },
+    {
+      "name": "browInnerUp.L",
+      "bone": "face_joint7",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 5.0,
+      "rest_mm": -3.3,
+      "deadzone": 0.2,
+      "note": "骨骼：左眉头上提。约 5.6mm",
+      "note_en": "bone: left inner brow up. About 5.6 mm"
+    },
+    {
+      "name": "browInnerUp.R",
+      "bone": "face_joint160",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 5.0,
+      "rest_mm": -3.3,
+      "deadzone": 0.2,
+      "note": "骨骼：右眉头上提。约 6.0mm",
+      "note_en": "bone: right inner brow up. About 6.0 mm"
+    },
+    {
+      "name": "jawDrop",
+      "bone": "face_joint80",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 13.0,
+      "rest_mm": -1.9,
+      "deadzone": 0.25,
+      "note": "骨骼：下巴下移（张嘴）。说话与战斗时约 12-15mm",
+      "note_en": "bone: chin down (mouth open). Talking and combat about 12-15 mm"
+    },
+    {
+      "name": "lowerLipDrop",
+      "bone": "face_joint101",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 20.0,
+      "rest_mm": -0.8,
+      "deadzone": 0.2,
+      "note": "骨骼：下唇中下移（张嘴）。约 22mm",
+      "note_en": "bone: lower lip centre down (mouth open). About 22 mm"
+    },
+    {
+      "name": "mouthCornerUp.L",
+      "bone": "face_joint82",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 5.0,
+      "rest_mm": -2.3,
+      "deadzone": 0.2,
+      "note": "骨骼：左嘴角上提（笑）。录像里几乎没有笑，幅度为推测",
+      "note_en": "bone: left mouth corner up (smile). The recordings hold almost no smiles: the range is a guess",
+      "guessed": true
+    },
+    {
+      "name": "mouthCornerUp.R",
+      "bone": "face_joint232",
+      "axis": "y",
+      "sign": 1,
+      "full_mm": 5.0,
+      "rest_mm": -2.1,
+      "deadzone": 0.2,
+      "note": "骨骼：右嘴角上提（笑）。幅度为推测",
+      "note_en": "bone: right mouth corner up (smile). The range is a guess",
+      "guessed": true
+    },
+    {
+      "name": "mouthCornerDown.L",
+      "bone": "face_joint82",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 5.5,
+      "rest_mm": -2.3,
+      "deadzone": 0.35,
+      "note": "骨骼：左嘴角下拉。张嘴时也会下移，死区较大。约 5.8mm",
+      "note_en": "bone: left mouth corner down. It also drops when the jaw opens, hence the larger deadzone. About 5.8 mm"
+    },
+    {
+      "name": "mouthCornerDown.R",
+      "bone": "face_joint232",
+      "axis": "y",
+      "sign": -1,
+      "full_mm": 5.5,
+      "rest_mm": -2.1,
+      "deadzone": 0.35,
+      "note": "骨骼：右嘴角下拉。约 5.0mm",
+      "note_en": "bone: right mouth corner down. About 5.0 mm"
+    },
+    {
+      "name": "mouthCornerOut.L",
+      "bone": "face_joint82",
+      "axis": "x",
+      "sign": 1,
+      "full_mm": 5.5,
+      "rest_mm": 1.7,
+      "deadzone": 0.35,
+      "note": "骨骼：左嘴角外拉（嘴变宽）。约 5.2mm",
+      "note_en": "bone: left mouth corner outward (wider mouth). About 5.2 mm"
+    },
+    {
+      "name": "mouthCornerOut.R",
+      "bone": "face_joint232",
+      "axis": "x",
+      "sign": -1,
+      "full_mm": 5.5,
+      "rest_mm": -1.4,
+      "deadzone": 0.35,
+      "note": "骨骼：右嘴角外拉（嘴变宽）。约 6.1mm",
+      "note_en": "bone: right mouth corner outward (wider mouth). About 6.1 mm"
+    }
+  ]
+}

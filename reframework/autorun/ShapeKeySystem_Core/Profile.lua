@@ -16,6 +16,7 @@
 -- Names.build_index. A channel with no node keys has no game signal (manual / sculpt only).
 
 local U = require("ShapeKeySystem_Core.Util")
+local Game = require("ShapeKeySystem_Core.Game")
 
 local P = {}
 
@@ -40,12 +41,43 @@ P.list = {}       -- sorted list of registry entries (for the UI)
 P.BONE_BASE = 1000
 local AXES = { x = 1, y = 2, z = 3 }
 
+-- The signal entries of this game (Game.signals). In a game without fcParams or Wilds' face bones
+-- (Onimusha) every name of signals.json stays declared but unwired ({name, unwired = true}: reads
+-- 0), so every profile still compiles; the overlay file then wires names to that game's bones (an
+-- overlay entry replaces the base entry of the same name, or is added).
+local function signal_entries(spec)
+    local data = U.load_json(U.path("builtin", spec.file)) or {}
+    local entries, pos = {}, {}
+    for _, e in ipairs(data.signals or {}) do
+        if spec.unwire_base and type(e) == "table" then
+            e = { name = e.name, unwired = true, note = e.note, note_en = e.note_en }
+        end
+        entries[#entries + 1] = e
+        if type(e) == "table" and type(e.name) == "string" then pos[e.name] = #entries end
+    end
+    local full = data.full
+    if spec.overlay then
+        local ov = U.load_json(U.path("builtin", spec.overlay)) or {}
+        full = ov.full or full
+        for _, e in ipairs(ov.signals or {}) do
+            if type(e) == "table" and type(e.name) == "string" then
+                if pos[e.name] then entries[pos[e.name]] = e
+                else entries[#entries + 1] = e; pos[e.name] = #entries end
+            end
+        end
+    end
+    return entries, full
+end
+
 function P.load_signals()
-    local data = U.load_json(U.path("builtin", "signals.json")) or {}
-    local s = { list = {}, by_name = {}, by_param = {}, full = tonumber(data.full) or 0.01 }
-    for i, e in ipairs(data.signals or {}) do
+    local entries, full = signal_entries(Game.signals)
+    local s = { list = {}, by_name = {}, by_param = {}, full = tonumber(full) or 0.01 }
+    for i, e in ipairs(entries) do
         local sig
-        if type(e.name) == "string" and tonumber(e.param) then
+        if type(e.name) == "string" and e.unwired then
+            sig = { slot = i, name = e.name, param = P.BONE_BASE + i, kind = "none",
+                    note = e.note or "", note_en = e.note_en }
+        elseif type(e.name) == "string" and tonumber(e.param) then
             sig = { slot = i, name = e.name, param = math.floor(tonumber(e.param)),
                     guessed = e.guessed == true, note = e.note or "", note_en = e.note_en }
         elseif type(e.name) == "string" and type(e.bone) == "string" then
@@ -89,6 +121,32 @@ function P.load_all()
     table.sort(list, function(a, b) return a.name < b.name end)
     P.list = list
     return reg
+end
+
+-- Every channel name SKS could look for: the profiles' channel names, their `any` alternates and
+-- aliases, and the alias sets of builtin/aliases.json. A game that gives only channel name hashes
+-- (Onimusha) is matched against these (Scene.set_known_names).
+function P.known_names()
+    local out = {}
+    local function add(v)
+        if type(v) == "string" then
+            out[#out + 1] = v
+        elseif type(v) == "table" then
+            for k, x in pairs(v) do
+                if type(k) == "string" then out[#out + 1] = k end
+                add(x)
+            end
+        end
+    end
+    for _, e in pairs(P.registry) do
+        for _, ch in ipairs(e.data.channels or {}) do
+            if type(ch) == "table" then add(ch.name); add(ch.any) end
+        end
+        add(e.data.aliases)
+    end
+    local data = U.load_json(U.path("builtin", "aliases.json"))
+    if data then add(data.sets) end
+    return out
 end
 
 -- Resolve "extends" into one flat definition: { id, name, source, aliases, channels = {entry...} }.

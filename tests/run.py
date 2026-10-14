@@ -69,6 +69,13 @@ package.searchers[2] = function(name)
     return file_searcher(name)
 end''')
 L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+# --game onimusha: the same plugin on an Onimusha: Way of the Sword world (tests_oni.lua only)
+ONIMUSHA = "--game" in sys.argv and sys.argv[sys.argv.index("--game") + 1] == "onimusha"
+if ONIMUSHA:
+    sys.path.insert(0, HERE)
+    from mm3ref import mm3 as _mm3
+    G.py_mm3 = lambda s: _mm3((s or "").encode("utf-16-le"))  # reference hash for the Onimusha mocks/tests
+    L.execute(open(os.path.join(HERE, "mock_oni.lua"), encoding="utf-8").read())
 from render_ui import font as _pil_font
 def py_measure(family, size, s):
     f = _pil_font(family, size)
@@ -80,6 +87,9 @@ L.execute('dofile("%s")' % os.path.join(GAME, "autorun", "ShapeKeySystem.lua").r
 L.execute('package.searchers[2] = function(name) return "autorun module after load: " .. name end')
 G.TESTS_DIR = HERE.replace("\\", "/")
 G.AUTORUN_DIR = os.path.join(GAME, "autorun").replace("\\", "/")
+if ONIMUSHA:
+    L.execute(open(os.path.join(HERE, "tests_oni.lua"), encoding="utf-8").read())
+    sys.exit(0)
 L.execute(open(os.path.join(HERE, "tests.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_ui.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_api.lua"), encoding="utf-8").read())

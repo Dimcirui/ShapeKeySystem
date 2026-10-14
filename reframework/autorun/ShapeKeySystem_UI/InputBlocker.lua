@@ -32,6 +32,7 @@
 --     restore of a wrong saved state by the other side)
 
 local I18n = require("ShapeKeySystem_Core.I18n")
+local Game = require("ShapeKeySystem_Core.Game")
 
 local B = {
     enabled = false, installed = false, failed = {}, last_error = nil,
@@ -218,6 +219,8 @@ end
 function B.install()
     if B.installed then return end
     B.installed = true
+    -- the hooked types are MH Wilds'; another game's types of the same name do other things
+    if not Game.hooks then B.failed[#B.failed + 1] = "game input hooks: MH Wilds only"; return end
     local td = sdk.find_type_definition("app.GameInputManager")
     if not td then B.failed[#B.failed + 1] = "app.GameInputManager"; return end
     for _, e in ipairs({ { "updatePlayerInput()", true }, { "updateUIInput()", false } }) do

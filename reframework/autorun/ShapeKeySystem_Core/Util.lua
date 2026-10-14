@@ -137,4 +137,65 @@ function U.clamp(v, lo, hi)
     return v
 end
 
+-- UTF-8 -> UTF-16LE code units
+function U.utf16(s)
+    local units = {}
+    for _, c in utf8.codes(s) do
+        if c >= 0x10000 then
+            c = c - 0x10000
+            units[#units + 1] = 0xD800 + (c >> 10)
+            units[#units + 1] = 0xDC00 + (c & 0x3FF)
+        else
+            units[#units + 1] = c
+        end
+    end
+    return units
+end
+
+-- murmur3 x86 32-bit over the UTF-16LE bytes, seed 0xFFFFFFFF
+function U.murmur3(s)
+    local u = U.utf16(s)
+    local bytes = {}
+    for _, x in ipairs(u) do bytes[#bytes + 1] = x & 0xFF; bytes[#bytes + 1] = (x >> 8) & 0xFF end
+    local M = 0xFFFFFFFF
+    local function mul(a, b) return (a * b) & M end
+    local function rotl(x, r) return ((x << r) | (x >> (32 - r))) & M end
+    local c1, c2 = 0xcc9e2d51, 0x1b873593
+    local h = 0xFFFFFFFF
+    local n = #bytes
+    local i = 1
+    while i + 3 <= n do
+        local k = bytes[i] | (bytes[i + 1] << 8) | (bytes[i + 2] << 16) | (bytes[i + 3] << 24)
+        k = mul(rotl(mul(k, c1), 15), c2)
+        h = rotl(h ~ k, 13)
+        h = (mul(h, 5) + 0xe6546b64) & M
+        i = i + 4
+    end
+    local k, rem = 0, n - i + 1
+    if rem >= 3 then k = k ~ (bytes[i + 2] << 16) end
+    if rem >= 2 then k = k ~ (bytes[i + 1] << 8) end
+    if rem >= 1 then
+        k = k ~ bytes[i]
+        k = mul(rotl(mul(k, c1), 15), c2)
+        h = h ~ k
+    end
+    h = h ~ n
+    h = h ~ (h >> 16); h = mul(h, 0x85ebca6b)
+    h = h ~ (h >> 13); h = mul(h, 0xc2b2ae35)
+    h = h ~ (h >> 16)
+    return h
+end
+
+-- A number from a managed value: Lua numbers as they are, boxed ones (elements of a System.UInt32[]
+-- such as Onimusha's get_ChannelNameHash) through ToString, which is the read that worked in game.
+function U.unbox(v)
+    if type(v) == "number" then return v end
+    for _, m in ipairs({ "ToString", "ToString()" }) do
+        local ok, s = pcall(function() return v:call(m) end)
+        local n = ok and tonumber(s)
+        if n then return n end
+    end
+    return nil
+end
+
 return U

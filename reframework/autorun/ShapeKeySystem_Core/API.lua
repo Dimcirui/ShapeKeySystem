@@ -190,6 +190,12 @@ local function notice(level, key, args)
 end
 
 local function save_soon() C.save_at = C.frame + 60 end
+
+-- (re)load the profiles, and the names a hash-only game's channels are matched against
+local function reload_profiles()
+    Profile.load_all()
+    Scene.set_known_names(Profile.known_names())
+end
 -- gains as saved, for one trail line per save naming what changed (kevin, 2026-10-13: the master
 -- and mouth gains were found at 0 with no idea how; a drag saves once, ~1 s after it stops)
 local function gains_of(e)
@@ -248,7 +254,7 @@ local function bone_sigs(ids)
     local out = {}
     for _, p in ipairs(ids) do
         local sig = p >= Profile.BONE_BASE and Profile.signals.by_param[p]
-        if sig then out[#out + 1] = sig end
+        if sig and sig.bone then out[#out + 1] = sig end   -- unwired signals read nothing
     end
     return out
 end
@@ -1165,7 +1171,8 @@ function SKS.tick()
         cs_end()
         if C.paused ~= why then
             C.paused = why
-            if not was_cs then zero_ready_targets(why) end
+            -- "gone" (Onimusha, no player): the meshes may already be torn down, never touch them
+            if not was_cs and kind ~= "gone" then zero_ready_targets(why) end
             drop_rigs(why, nil)
             C.scan_at = {}
             state.debug.status = "paused: " .. why
@@ -1469,7 +1476,7 @@ function cmds.save_profile(a)
     if not U.save_json(U.path("user", "profiles", id .. ".json"), data) then
         return false, "E_IO", "write failed"
     end
-    Profile.load_all()
+    reload_profiles()
     build_presets_state()
     local ok, code, msg = apply_profile(id, true)
     if not ok then return false, code, msg end
@@ -1800,7 +1807,7 @@ function cmds.confirm_delete()
         ok = Presets.tombstone_binding(d.base)
     else
         ok = U.save_json(U.path("user", "profiles", d.base .. ".json"), { deleted = true })
-        Profile.load_all()
+        reload_profiles()
     end
     if not ok then return false, "E_IO", "write failed" end
     request_rescan(1)
@@ -1821,7 +1828,7 @@ function cmds.import_preset(a)
     if not kind or type(a.path) ~= "string" then return false, "E_BAD_ARGS", "kind / path" end
     local ok, code, msg, res = Presets.import(kind, a.path, a.name)
     if not ok then return false, code, msg end
-    if kind == "profiles" then Profile.load_all() end
+    if kind == "profiles" then reload_profiles() end
     build_presets_state()
     request_rescan(1)
     return true, nil, nil, res
@@ -1861,7 +1868,7 @@ function SKS.init()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
     for _, s in ipairs(sig.list) do C.dict_params[#C.dict_params + 1] = s.param end
-    Profile.load_all()
+    reload_profiles()
     Presets.load_sculpt()
     CondExpr.load_all()
     if cfg.conditions ~= "" then CondExpr.select(cfg.conditions) end

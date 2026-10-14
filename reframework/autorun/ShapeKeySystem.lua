@@ -14,8 +14,10 @@ re.on_application_entry("LateUpdateBehavior", function()
     if not ok then SKS.state.debug.status = "tick error: " .. tostring(err) end
 end)
 
--- the guild card preview hunter spawns some time after onOpen
+-- the guild card preview hunter spawns some time after onOpen (MH Wilds only)
+local Game = require("ShapeKeySystem_Core.Game")
 pcall(function()
+    if not Game.hooks then return end
     local gc = sdk.find_type_definition("app.GUI040200")
     local open_m, close_m = gc:get_method("onOpen"), gc:get_method("onClose")
     if open_m then sdk.hook(open_m, nil, function(r) SKS.on_guild_card(true); return r end) end

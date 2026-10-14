@@ -8,6 +8,7 @@
 -- (and collected) the moment any of that changes.
 
 local W = require("ShapeKeySystem_Core.Writer")
+local Game = require("ShapeKeySystem_Core.Game")
 
 local G = {}
 
@@ -52,7 +53,16 @@ end
 -- Game-level gate. Returns ok, reason. The player object is only looked at every 10 frames
 -- while it is not set up (it may be mid-rebuild).
 local setup = false
+-- Onimusha: no cutscene or player-setup types are known there yet, so the gate is only "is there a
+-- controlling player". Without one (title, loading) the meshes we held may already be gone:
+-- kind "gone" lets go of them without a last write.
+local function onimusha_stable()
+    if Game.master_root() then return true end
+    return false, "no player", "gone"
+end
+
 function G.game_stable(frame)
+    if Game.id == "onimusha" then return onimusha_stable() end
     local dm = sdk.get_managed_singleton("app.DemoMediator")   -- persistent manager, safe to poll
     local busy = dm and call(M_DEMO_BUSY, dm) or false
     local load = dm and call(M_DEMO_LOAD, dm) or false
@@ -80,6 +90,7 @@ function G.release_refs() collectgarbage("collect") end
 --   on_release(reason): skip / stop requested, or the cutscene unloads (unload runs twice)
 --   on_segment(index):  onPlayStartTimeline(i), the start of each cutscene segment
 function G.hook_cutscene(on_release, on_segment)
+    if not Game.hooks then return end
     if not T_DEMO then return end
     for _, name in ipairs({ "requestSkip", "execSkip", "requestStop(ace.DemoMediatorBase.cParamBase)",
                             "requestForceStop", "unload(ace.DemoMediatorBase.cParamBase)" }) do
@@ -103,6 +114,7 @@ end
 -- Calls on_rebuild() after any hunter finishes building its equipment (the meshes we hold may
 -- have been replaced even when the part names did not change).
 function G.hook_equip_build(on_rebuild)
+    if not Game.hooks then return end
     pcall(function()
         local m = sdk.find_type_definition("app.HunterCharacter"):get_method("onEquipBuildEnd")
         if m then sdk.hook(m, nil, function(r) pcall(on_rebuild); return r end) end
@@ -112,6 +124,7 @@ end
 -- Title / save-select screens (post-hooks): on_menu(name, open). The preview hunters are built
 -- around these, so every open / close drops our references and schedules rescans.
 function G.hook_menus(on_menu)
+    if not Game.hooks then return end
     -- GUI010100 onClose runs many times per frame on the title screen (froze the game
     -- 2026-10-09): title GUIs hook onOpen only, as lua bone system does
     local list = { { "app.GUI010100", { "onOpen" } }, { "app.GUI010101", { "onOpen" } },

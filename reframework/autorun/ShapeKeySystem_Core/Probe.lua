@@ -9,60 +9,9 @@ local W = require("ShapeKeySystem_Core.Writer")
 
 local R = {}
 
--- UTF-8 -> UTF-16LE code units
-local function utf16(s)
-    local units = {}
-    for _, c in utf8.codes(s) do
-        if c >= 0x10000 then
-            c = c - 0x10000
-            units[#units + 1] = 0xD800 + (c >> 10)
-            units[#units + 1] = 0xDC00 + (c & 0x3FF)
-        else
-            units[#units + 1] = c
-        end
-    end
-    return units
-end
-
--- murmur3 x86 32-bit over the UTF-16LE bytes, seed 0xFFFFFFFF
-function R.murmur3(s)
-    local u = utf16(s)
-    local bytes = {}
-    for _, x in ipairs(u) do bytes[#bytes + 1] = x & 0xFF; bytes[#bytes + 1] = (x >> 8) & 0xFF end
-    local M = 0xFFFFFFFF
-    local function mul(a, b) return (a * b) & M end
-    local function rotl(x, r) return ((x << r) | (x >> (32 - r))) & M end
-    local c1, c2 = 0xcc9e2d51, 0x1b873593
-    local h = 0xFFFFFFFF
-    local n = #bytes
-    local i = 1
-    while i + 3 <= n do
-        local k = bytes[i] | (bytes[i + 1] << 8) | (bytes[i + 2] << 16) | (bytes[i + 3] << 24)
-        k = mul(rotl(mul(k, c1), 15), c2)
-        h = rotl(h ~ k, 13)
-        h = (mul(h, 5) + 0xe6546b64) & M
-        i = i + 4
-    end
-    local k, rem = 0, n - i + 1
-    if rem >= 3 then k = k ~ (bytes[i + 2] << 16) end
-    if rem >= 2 then k = k ~ (bytes[i + 1] << 8) end
-    if rem >= 1 then
-        k = k ~ bytes[i]
-        k = mul(rotl(mul(k, c1), 15), c2)
-        h = h ~ k
-    end
-    h = h ~ n
-    h = h ~ (h >> 16); h = mul(h, 0x85ebca6b)
-    h = h ~ (h >> 13); h = mul(h, 0xc2b2ae35)
-    h = h ~ (h >> 16)
-    return h
-end
-
-local function unbox(v)
-    if type(v) == "number" then return v end
-    local ok, s = pcall(function() return v:call("ToString()") end)
-    return ok and tonumber(s) or nil
-end
+local U = require("ShapeKeySystem_Core.Util")
+R.murmur3 = U.murmur3   -- murmur3 x86 32-bit over the UTF-16LE bytes, seed 0xFFFFFFFF (Util)
+local unbox = U.unbox
 
 -- Entries of a managed Dictionary as { {key, value} }, trying the usual internal layouts.
 local function dict_entries(d, out_log)
@@ -104,7 +53,8 @@ function R.run(path)
             local n = mesh and (W.M_CN:call(mesh) or 0) or 0
             if n > 0 then
                 local names = {}
-                for i = 0, n - 1 do names[i] = W.M_CNAME:call(mesh, i) or "" end
+                local listed = Scene.channel_names(mesh)
+                for i = 0, n - 1 do names[i] = listed[i + 1] or "" end
                 parts[#parts + 1] = { id = name, names = names, n = n }
             end
             c = c:call("get_Next")
