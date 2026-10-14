@@ -15,61 +15,67 @@ if os.path.isdir(os.path.join(GAME, "data", "ShapeKeySystem", "games")):
 if "--legacy" in sys.argv:
     shutil.copy(os.path.join(GAME, "data", "ArkitFaceDriver.json"), data)
 
-L = lupa.LuaRuntime(unpack_returned_tuples=True)
-G = L.globals()
+# one Lua runtime with the REFramework mock's file layer over data_dir (json / fs from Python)
+def boot(data):
+    L = lupa.LuaRuntime(unpack_returned_tuples=True)
+    G = L.globals()
 
-def to_lua(v):
-    if isinstance(v, dict):
-        t = L.table()
-        for k, x in v.items(): t[k] = to_lua(x)
-        return t
-    if isinstance(v, list):
-        t = L.table()
-        for i, x in enumerate(v): t[i + 1] = to_lua(x)
-        return t
-    return v
+    def to_lua(v):
+        if isinstance(v, dict):
+            t = L.table()
+            for k, x in v.items(): t[k] = to_lua(x)
+            return t
+        if isinstance(v, list):
+            t = L.table()
+            for i, x in enumerate(v): t[i + 1] = to_lua(x)
+            return t
+        return v
 
-def to_py(v):
-    if lupa.lua_type(v) == "table":
-        keys = list(v.keys())
-        if keys and all(isinstance(k, int) for k in keys) and sorted(keys) == list(range(1, len(keys) + 1)):
-            return [to_py(v[k]) for k in sorted(keys)]
-        return {str(k): to_py(v[k]) for k in keys}
-    return v
+    def to_py(v):
+        if lupa.lua_type(v) == "table":
+            keys = list(v.keys())
+            if keys and all(isinstance(k, int) for k in keys) and sorted(keys) == list(range(1, len(keys) + 1)):
+                return [to_py(v[k]) for k in sorted(keys)]
+            return {str(k): to_py(v[k]) for k in keys}
+        return v
 
-def load_file(p):
-    fp = os.path.join(data, p)
-    if not os.path.isfile(fp): return None
-    with open(fp, encoding="utf-8") as f: return to_lua(json.load(f))
+    def load_file(p):
+        fp = os.path.join(data, p)
+        if not os.path.isfile(fp): return None
+        with open(fp, encoding="utf-8") as f: return to_lua(json.load(f))
 
-def dump_file(p, t, indent=None):
-    fp = os.path.join(data, p)
-    os.makedirs(os.path.dirname(fp), exist_ok=True)
-    with open(fp, "w", encoding="utf-8") as f: json.dump(to_py(t), f, ensure_ascii=False, indent=2)
-    return True
+    def dump_file(p, t, indent=None):
+        fp = os.path.join(data, p)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "w", encoding="utf-8") as f: json.dump(to_py(t), f, ensure_ascii=False, indent=2)
+        return True
 
-def load_string(s): return to_lua(json.loads(s))
+    def load_string(s): return to_lua(json.loads(s))
 
-def glob(pattern, *_):
-    out = L.table(); i = 1
-    rx = re.compile(pattern)
-    for d, _, files in os.walk(data):
-        for fn in files:
-            rel = os.path.relpath(os.path.join(d, fn), data)
-            if rx.fullmatch(rel): out[i] = rel; i += 1
-    return out
+    def glob(pattern, *_):
+        out = L.table(); i = 1
+        rx = re.compile(pattern)
+        for d, _, files in os.walk(data):
+            for fn in files:
+                rel = os.path.relpath(os.path.join(d, fn), data)
+                if rx.fullmatch(rel): out[i] = rel; i += 1
+        return out
 
-G.json = L.table_from({"load_file": load_file, "dump_file": dump_file, "load_string": load_string})
-G.fs = L.table_from({"glob": glob})
-G.package.path = os.path.join(GAME, "autorun", "?.lua").replace("\\", "/")
-# REFramework only finds modules one folder below autorun ("A.B"); refuse deeper names like it does
-L.execute('''
-local file_searcher = package.searchers[2]
-package.searchers[2] = function(name)
-    local _, dots = name:gsub("%.", "")
-    if dots > 1 then return "REFramework cannot load nested module " .. name end
-    return file_searcher(name)
-end''')
+    G.json = L.table_from({"load_file": load_file, "dump_file": dump_file, "load_string": load_string})
+    G.fs = L.table_from({"glob": glob})
+    G.package.path = os.path.join(GAME, "autorun", "?.lua").replace("\\", "/")
+    G.ENTRY = os.path.join(GAME, "autorun", "ShapeKeySystem.lua").replace("\\", "/")
+
+    def lua_files(sub):   # every .lua under autorun/<sub>
+        out = L.table(); i = 1
+        for d, _, files in os.walk(os.path.join(GAME, "autorun", sub)):
+            for fn in sorted(files):
+                if fn.endswith(".lua"): out[i] = os.path.join(d, fn).replace("\\", "/"); i += 1
+        return out
+    G.lua_files = lua_files
+    return L, G, to_lua
+
+L, G, to_lua = boot(data)
 L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 from render_ui import font as _pil_font
 def py_measure(family, size, s):
@@ -94,6 +100,15 @@ G.VRC_FACES = to_lua(json.load(open(os.path.join(HERE, "vrc_faces.json"), encodi
 L.execute(open(os.path.join(HERE, "tests_mmd.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_playback_analysis.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_playback.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_playback_adapter.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_games.lua"), encoding="utf-8").read())
+
+# a second runtime with a minimal made-up adapter (no signals, hooks, conditions or input)
+data2 = tempfile.mkdtemp(prefix="sks_fake_")
+shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path.join(data2, "ShapeKeySystem", "builtin"))
+L2, G2, _ = boot(data2)
+L2.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+L2.execute(open(os.path.join(HERE, "tests_fake.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))

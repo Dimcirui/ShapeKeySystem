@@ -17,8 +17,9 @@
 --   DEALINGS IN THE SOFTWARE.
 --
 -- What it does while enabled:
---   * post-hooks app.GameInputManager updatePlayerInput / updateUIInput and clears those inputs
---   * before UpdateMotionFrame: reads the wheel, zeroes the mouse deltas (camera stays still)
+--   * the adapter's `input.install` hooks clear the game's own inputs
+--   * before UpdateMotionFrame: the adapter's `input.capture_mouse` reads the wheel and zeroes the
+--     mouse deltas (camera stays still)
 --   * puts via.hid.Mouse into absolute mode with the game's cursor hidden (the panel draws its
 --     own); the previous mode is restored when disabled
 -- No UI DLL: AVM's bridge (custom cursor / IME) is not used.
@@ -96,8 +97,7 @@ end
 -- follows the virtual cursor driven by the game's own mouse deltas, which capture_and_clear_mouse
 -- then zeroes so the camera stays still. Only the game's cursor image is hidden (we draw ours).
 local function set_mouse_mode(blocked)
-    -- nothing to set any more: the cursor is freed through app.GUIManager.isMouseCursorAvailable
-    -- (see B.install); kept so the enable / restore flow stays the same
+    -- nothing to set any more: the adapter's input hooks free the cursor (see B.install); kept so the enable / restore flow stays the same
     if not blocked then B.applied = false else B.applied = true end
 end
 
@@ -126,15 +126,6 @@ local function point_xy(p)
     if type(x) ~= "number" then pcall(function() x, y = p.x, p.y end) end
     if type(x) ~= "number" or type(y) ~= "number" then return nil end
     return x, y
-end
-
-local function zero_field(obj, name)
-    pcall(function()
-        local f = obj:get_type_definition():get_field(name)
-        if not f then return end
-        local off, size = f:get_offset_from_base(), f:get_type():get_valuetype_size()
-        for i = 0, size - 1 do obj:write_byte(off + i, 0) end
-    end)
 end
 
 -- the game pins the OS cursor to the screen centre while it owns the mouse (REFramework frees
@@ -180,71 +171,27 @@ function B.device_delta()
 end   -- set by the panel (d2d surface size)
 
 local function capture_and_clear_mouse()
+    local game = B.game
+    if not (game and game.capture_mouse) then return end
     pcall(function()
-        local mgr = sdk.get_managed_singleton("app.AppMouseKeyboardManager")
-        local mk = mgr and mgr:call("get_MainMouseKeyboard")
-        if not mk then return end
-        local w = mk:call("get_MouseWheelDelta")
-        if type(w) == "number" and w ~= 0 then B.wheel = B.wheel + w end
-        local p = mk:call("get_MouseDeltaPos")
-        local dx, dy
-        if p then dx, dy = point_xy(p) end
+        local dx, dy, w = game.capture_mouse()
+        if w == nil then return end
+        if w ~= 0 then B.wheel = B.wheel + w end
         if not dx or (dx == 0 and dy == 0) then dx, dy = B.device_delta() end
         local sw, sh = B.surface()
         move_cursor(dx, dy, sw, sh)
-        pcall(function() mk:call("clear") end)
-        zero_field(mk, "_MouseDeltaPos")
-        zero_field(mk, "_MouseMovePos")
-        zero_field(mk, "_MouseRawDeltaPos")
-        pcall(function() mk:set_field("_MouseWheel", 0) end)
-        pcall(function() mk:set_field("_MouseWheelDelta", 0) end)
     end)
 end
 
-local function clear_game_inputs(player)
-    pcall(function()
-        local m = sdk.get_managed_singleton("app.GameInputManager")
-        if not m then return end
-        local a, b
-        if player then a, b = m:call("get_PcPlayerInput"), m:call("get_PlayerInput")
-        else a, b = m:call("get_PcUIInput"), m:call("get_UIInput") end
-        if a then pcall(function() a:call("clear") end) end
-        if b then pcall(function() b:call("clear") end) end
-    end)
-end
-
+-- game hooks come from the adapter (`B.game` = A.input, set by Panel.attach)
 function B.install()
     if B.installed then return end
     B.installed = true
-    local td = sdk.find_type_definition("app.GameInputManager")
-    if not td then B.failed[#B.failed + 1] = "app.GameInputManager"; return end
-    for _, e in ipairs({ { "updatePlayerInput()", true }, { "updateUIInput()", false } }) do
-        local m = td:get_method(e[1])
-        if m then
-            local player = e[2]
-            local ok, e2 = pcall(sdk.hook, m, nil, function(r)
-                if B.enabled then clear_game_inputs(player) end
-                return r
-            end)
-            if not ok then B.failed[#B.failed + 1] = e[1] .. " " .. tostring(e2) end
-        else
-            B.failed[#B.failed + 1] = e[1]
-        end
-    end
-    -- Measured 2026-10-10: in the field the game keeps the mouse relative and pulls the OS cursor
-    -- back to the screen centre every frame; via.hid.Mouse setters do not stick. In its menus the
-    -- cursor is free, decided by app.GUIManager.isMouseCursorAvailable(). While the panel is open
-    -- that answers true, so the game itself lets the cursor go.
-    local gm = sdk.find_type_definition("app.GUIManager")
-    local m = gm and gm:get_method("isMouseCursorAvailable()")
-    if m then
-        local ok, e2 = pcall(sdk.hook, m, nil, function(r)
-            if B.enabled then B.forced = B.forced + 1; return sdk.to_ptr(true) end
-            return r
-        end)
-        if not ok then B.failed[#B.failed + 1] = "isMouseCursorAvailable " .. tostring(e2) end
-    else
-        B.failed[#B.failed + 1] = "app.GUIManager.isMouseCursorAvailable"
+    local game = B.game
+    if game and game.install then
+        game.install(function() return B.enabled end,
+            function(text) B.failed[#B.failed + 1] = text end,
+            function() B.forced = B.forced + 1 end)
     end
     re.on_pre_application_entry("UpdateMotionFrame", function() if B.enabled then capture_and_clear_mouse() end end)
 end

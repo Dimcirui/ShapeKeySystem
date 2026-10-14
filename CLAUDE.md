@@ -13,8 +13,12 @@ milestones) and `docs/plans/shape-key-system-api.md` (UI ↔ backend contract, c
 - Player data under `reframework/data/ShapeKeySystem` (settings.json, user/, mods/, trail.log) is
   gitignored and never deployed.
 
+## Writing
+- Comments, commit messages, release notes and issue comments follow `docs/writing/`
+  (index: `docs/writing/README.md`). Read the guideline for the kind of text before writing it.
+
 ## REFramework rules learned the hard way
-- `require` resolves only `Folder.Module` one level under autorun, and only while scripts load —
+- `require` resolves dotted names under autorun (`A.B.C` included), but only while scripts load —
   require everything at load time, never lazily from a frame/d2d callback.
 - A Lua integer passed to a `System.Single` parameter arrives as raw bits (1 -> 1.4e-45): always
   `v + 0.0` before engine calls.

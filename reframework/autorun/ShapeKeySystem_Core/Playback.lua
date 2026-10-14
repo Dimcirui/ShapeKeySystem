@@ -2,7 +2,6 @@
 -- UI 只提交命令，连接/恢复和推进仅在游戏更新回调执行；final 仅覆盖主角色的计算输入。
 local U = require("ShapeKeySystem_Core.Util")
 local Recording = require("ShapeKeySystem_Core.Recording")
-local Games = require("ShapeKeySystem_Game.Registry")
 local Analysis = require("ShapeKeySystem_Core.PlaybackAnalysis")
 local R = { state = { rev = 0, files = {}, status = "stopped", elapsed = 0, duration = 0,
     speed = 1, loop = false, mode = "raw", message = "", supported = false }, epoch = 0 }
@@ -112,7 +111,7 @@ local function start(a)
     local s = R.state
     s.status, s.elapsed, s.duration, s.mode, s.file, s.file_id = "playing", 0, decoded.duration, decoded.track, file.name, file.id
     s.channels, s.frames, s.missing = decoded.n, #decoded.frames, table.concat(missing, ", ")
-    analysis = Analysis.new(decoded, decoded.track == "raw" and adapter.raw_unit or 1, file.name)
+    analysis = Analysis.new(decoded, decoded.track == "raw" and adapter.raw_unit or 1, file.name, R.raw_label)
     s.analysis = analysis.state
     update_analysis_bindings()
     s.message = decoded.track == "raw" and "重播原版输入，SKS 读取游戏求值后的信号"
@@ -198,13 +197,12 @@ function R.apply(rig, P, inv_full)
 end
 
 -- 注册在脚本加载阶段，满足 REF 的 require 限制；未知游戏不安装荒野回调。
-function R.init(log, params, context)
+function R.init(game, log, params, context)
     R.log, R.params, R.context = log, params, context
-    local game, message
-    adapter, game, message = Games.load()
-    R.state.game = game
-    if not adapter then R.state.message = message; return end
-    R.state.game_name = adapter.name
+    adapter = game.playback
+    R.raw_label = game.raw and game.raw.label or tostring
+    R.state.game, R.state.game_name, R.state.supported = game.id, game.name, false
+    if not adapter then R.state.message = "当前游戏尚未提供面部动画测试适配器：" .. game.id; return end
     local ok, result = pcall(adapter.catalog)
     if not ok then R.state.message = tostring(result); adapter = nil; return end
     catalog = result

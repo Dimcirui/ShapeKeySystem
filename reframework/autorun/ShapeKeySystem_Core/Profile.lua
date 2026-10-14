@@ -1,10 +1,10 @@
 -- ShapeKeySystem: expression profiles (sks.profile/1) and the signal dictionary.
--- Loads profiles from builtin/, mods/ and user/, resolves "extends", validates node trees
+-- Loads profiles from builtin/ (shared and builtin/<adapter id>/), mods/ and user/, resolves "extends", validates node trees
 -- and compiles them into per-channel evaluation closures.
 --
 -- Node forms (any node may also carry "k" = multiplier and "curve" = {deadzone, gamma, gain}):
 --   { "s": "smile.L" }        signal from the dictionary, normalised 0..1
---   { "p": 33 }               raw fcParam number, normalised 0..1
+--   { "p": 33 }               raw channel of the game (the adapter's raw.parse), normalised by full
 --   { "ref": "jawOpen" }      another channel's value (before gains)
 --   { "const": 0.5 }
 --   { "eye": "L", "axis": "pitch", "sign": 1 }   eye angle / full_deg, clamped 0..1
@@ -12,26 +12,47 @@
 -- A channel entry is itself a node plus name / group / gaze_set / extension / note, and
 -- optionally any (more mesh names, best first) / unless (channels that disable it), see
 -- Names.build_index. A channel with no node keys has no game signal (manual / sculpt only).
+--
+-- Signal dictionary (sks.signals/2): every entry names a raw channel (`raw`, `param` in /1) or
+-- none (`raw` null or absent: the game lacks it, the node reads 0 and the channel is flagged
+-- no_signal). `lo` / `hi` give the raw range mapped to 0..1, default 0..full. A name the
+-- dictionary does not list is a compile error, so typos are not mistaken for missing signals.
+-- A game with no dictionary at all (no builtin/<id>/signals.json) has no signals: every name
+-- compiles as no_signal.
+-- A profile that uses `p` carries `game` (the adapter id); profiles of other games are skipped.
 
 local U = require("ShapeKeySystem_Core.Util")
 
 local P = {}
 
-local SOURCES = { "builtin", "mods", "user" }    -- later sources override earlier ones
 local NODE_KEYS = { "s", "p", "ref", "const", "eye", "sum", "mul", "max", "min", "sub" }
 local NODE_MODS = { "k", "curve", "full_deg", "axis", "sign" }
 local OPS = { sum = true, mul = true, max = true, min = true, sub = true }
 
 P.signals = { list = {}, by_name = {}, full = 0.01 }
+P.adapter = {}   -- set by SKS.init
 P.registry = {}   -- id -> { id, name, source, path, data }
 P.list = {}       -- sorted list of registry entries (for the UI)
 
-function P.load_signals()
-    local data = U.load_json(U.path("builtin", "signals.json")) or {}
-    local s = { list = {}, by_name = {}, full = tonumber(data.full) or 0.01 }
+-- data: a dictionary table (tests); default builtin/<adapter id>/signals.json, empty without an id
+function P.load_signals(data)
+    local id = P.adapter.id
+    data = data or (id and U.load_json(U.path("builtin", id, "signals.json"))) or {}
+    local s = { list = {}, by_name = {}, full = tonumber(data.full) or 0.01, none = data.signals == nil }
+    local raw = P.adapter.raw
     for i, e in ipairs(data.signals or {}) do
-        if type(e.name) == "string" and tonumber(e.param) then
-            local sig = { slot = i, name = e.name, param = math.floor(tonumber(e.param)),
+        local v = e.raw
+        if v == nil then v = e.param end
+        local key
+        if v ~= nil and raw then key = raw.parse(v) end
+        -- a value the game cannot parse drops the entry; a game without raw channels has no signal at all
+        if type(e.name) == "string" and (v == nil or key ~= nil or not raw) then
+            -- P holds raw / full; (raw - lo) / (hi - lo) = P * a + b
+            local lo, hi = tonumber(e.lo) or 0, tonumber(e.hi) or s.full
+            local a, b = 1, 0
+            if hi > lo and (lo ~= 0 or hi ~= s.full) then a, b = s.full / (hi - lo), -lo / (hi - lo) end
+            local sig = { slot = i, name = e.name, key = key, no_signal = key == nil,
+                          label = key ~= nil and raw.label(key) or "无信号", a = a, b = b,
                           guessed = e.guessed == true, note = e.note or "" }
             s.list[#s.list + 1] = sig
             s.by_name[e.name] = sig
@@ -41,13 +62,24 @@ function P.load_signals()
     return s
 end
 
+-- Profile folders, later ones override earlier ones: shared builtin, this game's builtin, mods, user.
+local function profile_dirs()
+    local dirs = { { "builtin\\profiles", "builtin" } }
+    if P.adapter.id then dirs[#dirs + 1] = { "builtin\\" .. P.adapter.id .. "\\profiles", "builtin" } end
+    dirs[#dirs + 1] = { "mods\\profiles", "mods" }
+    dirs[#dirs + 1] = { "user\\profiles", "user" }
+    return dirs
+end
+
 function P.load_all()
     local reg = {}
-    for _, src in ipairs(SOURCES) do
-        for _, f in ipairs(U.list_json(src .. "\\profiles")) do
+    for _, d in ipairs(profile_dirs()) do
+        local src = d[2]
+        for _, f in ipairs(U.list_json(d[1])) do
             local data = U.load_json(f.path)
             -- REFramework 将空 Lua 表写成 JSON null；读回时恢复空通道列表，兼容已创建的空配置。
-            if data and data.schema == "sks.profile/1" and (type(data.channels) == "table" or data.channels == nil) then
+            local other_game = data and data.game ~= nil and data.game ~= P.adapter.id
+            if data and not other_game and data.schema == "sks.profile/1" and (type(data.channels) == "table" or data.channels == nil) then
                 data.channels = data.channels or {}
                 local id = type(data.id) == "string" and data.id or f.base
                 reg[id] = { id = id, name = data.name or id, source = src, path = f.path,
@@ -117,7 +149,7 @@ local function compile_node(node, env, depth)
     local count = 0
     for _, key in ipairs(NODE_KEYS) do if node[key] ~= nil then count = count + 1 end end
     if count ~= 1 then error("每个节点必须且只能选择一种输入或混合操作") end
-    for _, key in ipairs({ "k", "const", "p", "full_deg", "sign" }) do
+    for _, key in ipairs({ "k", "const", "full_deg", "sign" }) do
         if node[key] ~= nil then
             local n = tonumber(node[key])
             if not n or n ~= n or n == math.huge or n == -math.huge then error(key .. " 必须是有限数值") end
@@ -127,19 +159,28 @@ local function compile_node(node, env, depth)
     local fn, text
     if node.s ~= nil then
         local sig = env.signals.by_name[node.s]
+        if not sig and env.signals.none then sig = { name = tostring(node.s), no_signal = true } end
         if not sig then error("unknown signal: " .. tostring(node.s)) end
-        local p = sig.param
-        env.params[p] = true
         if sig.guessed then env.guessed = true end
-        fn = function(ctx) return ctx.P[p] or 0 end
-        text = sig.name
+        if sig.no_signal then
+            env.no_signal = true
+            fn = function() return 0 end
+            text = sig.name .. "（本游戏没有这个信号）"
+        else
+            local p, a, b = sig.key, sig.a, sig.b
+            env.params[p] = true
+            if a == 1 and b == 0 then fn = function(ctx) return ctx.P[p] or 0 end
+            else fn = function(ctx) return (ctx.P[p] or 0) * a + b end end
+            text = sig.name
+        end
     elseif node.p ~= nil then
-        local p = tonumber(node.p)
-        if not p or p < 0 or p > 200 then error("fcParam out of range: " .. tostring(node.p)) end
-        p = math.floor(p)
+        local raw = P.adapter.raw
+        if not raw then error("本游戏没有原始通道") end
+        local p, err = raw.parse(node.p)
+        if p == nil then error(err or ("invalid raw channel: " .. tostring(node.p))) end
         env.params[p] = true
         fn = function(ctx) return ctx.P[p] or 0 end
-        text = string.format("fcParam_%03d", p)
+        text = raw.label(p)
     elseif node.ref ~= nil then
         local slot = env.slot_of[node.ref]
         if not slot then error("ref to unknown channel: " .. tostring(node.ref)) end
@@ -231,8 +272,8 @@ end
 -- Compile a resolved profile. edits: channel name -> replacement node (mapping editor).
 -- Returns prog or nil, err_code, message.
 --   prog.channels[slot] = { slot, name, group, gaze_set, extension, note, has_signal, guessed,
---                           source_text, fn, node, params (own fcParams), deps (ref slots), is_eye }
---   prog.order = slot evaluation order (refs first), prog.params = sorted fcParam list,
+--                           no_signal, source_text, fn, node, params (own raw keys), deps (ref slots), is_eye }
+--   prog.order = slot evaluation order (refs first), prog.params = sorted raw key list,
 --   prog.has_eye, prog.n, prog.slot_of, prog.names
 function P.compile(resolved, edits)
     edits = edits or {}
@@ -253,13 +294,14 @@ function P.compile(resolved, edits)
                     source_text = "—", fn = nil, node = node, edited = edits[entry.name] ~= nil }
         if has_node(node) then
             local env = { signals = P.signals, slot_of = prog.slot_of, params = {}, deps = {},
-                          guessed = false, eye = false }
+                          guessed = false, eye = false, no_signal = false }
             local ok, fn, text = pcall(compile_node, node, env, 0)
             if not ok then
                 return nil, "E_NODE_INVALID", entry.name .. ": " .. tostring(fn):gsub("^.-:%d+: ", "")
             end
             c.fn, c.source_text, c.has_signal = fn, text, true
             c.guessed = c.guessed or env.guessed
+            c.no_signal = env.no_signal
             if env.eye then prog.has_eye = true; c.is_eye = true end
             deps_of[i] = env.deps
             c.deps = env.deps
@@ -291,7 +333,7 @@ function P.compile(resolved, edits)
     return prog
 end
 
--- fcParams (sorted list) and eye use needed to evaluate the given slots, following refs.
+-- Raw keys (sorted list) and eye use needed to evaluate the given slots, following refs.
 function P.needs(prog, slots)
     local params, seen, eyes = {}, {}, false
     local visited = {}
@@ -311,6 +353,14 @@ function P.needs(prog, slots)
     return params, eyes
 end
 
+-- a `p` node anywhere in the tree ties the profile to the current game
+local function uses_p(t)
+    if type(t) ~= "table" then return false end
+    if t.p ~= nil then return true end
+    for _, v in pairs(t) do if type(v) == "table" and uses_p(v) then return true end end
+    return false
+end
+
 -- Profile JSON for saving: the resolved channels with edits applied, no "extends".
 function P.to_json(resolved, edits, id, name)
     local channels = {}
@@ -326,6 +376,7 @@ function P.to_json(resolved, edits, id, name)
         channels[#channels + 1] = out
     end
     return { schema = "sks.profile/1", id = id, name = name, based_on = resolved.id,
+             game = uses_p(channels) and P.adapter.id or nil,
              aliases = U.copy(resolved.aliases), channels = channels }
 end
 

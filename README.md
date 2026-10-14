@@ -12,7 +12,9 @@
 | `reframework/autorun/ShapeKeySystem.lua` | 入口 |
 | `reframework/autorun/ShapeKeySystem_Core/` | 后端：扫描、写入、表情、捏脸、预设、条件、API |
 | `reframework/autorun/ShapeKeySystem_UI/` | 面板（d2d / ImGui 两种绘制后端，见 `Draw.lua`） |
-| `reframework/data/ShapeKeySystem/builtin/` | 内置 profile、别名表、装备名、信号 |
+| `reframework/autorun/ShapeKeySystem_Games/` | 游戏注册表与各游戏适配器，当前提供 `Wilds/` |
+| `reframework/data/ShapeKeySystem/builtin/` | 通用 profile、别名表；`<游戏 ID>/` 下放信号字典、装备名与专属 profile |
+| `reframework/data/ShapeKeySystem/games/<游戏 ID>/` | 面部动画测试录制及参数表 |
 | `reframework/data/ShapeKeySystem/faces/` + `reframework/images/ShapeKeySystem/` | 面部导航图样式 |
 | `tools/install-ref-ime.ps1` | 从 REF-IME 最新 Release 安装输入法依赖，可指定其他 RE 游戏目录 |
 | `tests/` | 离线测试（Python lupa 跑 Lua 5.4 + REFramework mock） |
@@ -61,7 +63,7 @@ python run.py --shots   # 另外把面板各页渲染成 PNG（tests/shots/）
 
 ## 表情详情里的映射编辑
 
-「表情详情」底部的「视线设置」下方提供可折叠的「面部动画测试」，内置荒野的 `Speak`、`CampMeals` 原版输入重播，支持暂停、循环、调速和跳转。下方分析日志按本次信号命中次数排序，显示用途与当前形态键绑定，支持分页、未绑定筛选和直接添加映射。录制和参数表放在 `data/ShapeKeySystem/games/mhwilds/`，自有录制放在 `user/games/mhwilds/recordings/`；新增功能按 REF 游戏标识选择独立适配器。
+「表情详情」底部的「视线设置」下方提供可折叠的「面部动画测试」，内置荒野的 `Speak`、`CampMeals` 原版输入重播，支持暂停、循环、调速和跳转。下方分析日志按本次信号命中次数排序，显示用途与当前形态键绑定，支持分页、未绑定筛选和直接添加映射。录制和参数表放在 `data/ShapeKeySystem/games/mhwilds/`，自有录制放在 `user/games/mhwilds/recordings/`。播放器通过当前游戏适配器的可选 `playback` 接口运行；未实现该接口的游戏显示不可用提示，不安装荒野的播放回调。
 
 打开「进阶 → 表情详情」，点击形态键名称可展开配置；「＋ 新建映射」可从已扫描网格选择形态键，也可直接输入名称。部位可选眉、眼、视线、鼻·颊、嘴、下颌、舌或扩展。
 

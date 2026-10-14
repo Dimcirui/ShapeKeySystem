@@ -31,7 +31,7 @@ SOFTWARE.
 
 ## Data
 
-`reframework/data/ShapeKeySystem/builtin/armor_names.json` is generated from Modding-Toolkit's
+`reframework/data/ShapeKeySystem/builtin/mhwilds/armor_names.json` is generated from Modding-Toolkit's
 `assets/mhws/armor_sets/mhws_armor_sets.json`.
 
 ## Runtime dependencies (not included)

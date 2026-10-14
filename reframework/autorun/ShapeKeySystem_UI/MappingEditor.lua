@@ -12,7 +12,7 @@ local C = T.c
 local min, max = math.min, math.max
 local TYPES = { "none", "s", "sum", "max", "min", "mul", "sub", "ref", "p", "const", "eye" }
 local LABELS = { "无自动信号（手动）", "面部信号", "求和（sum）", "取最大值（max）", "取最小值（min）",
-    "相乘（mul）", "相减（sub）", "引用映射", "原始 fcParam", "常量", "眼球旋转" }
+    "相乘（mul）", "相减（sub）", "引用映射", "原始通道", "常量", "眼球旋转" }
 local HELP = { none = "不读取自动信号，可由捏脸、条件表情或外部插件控制。",
     s = "读取游戏面部动画信号，按 SKS 信号词典归一化。",
     sum = "将所有输入相加；可以超过 1，最终是否截断由全局设置决定。",
@@ -21,9 +21,9 @@ local HELP = { none = "不读取自动信号，可由捏脸、条件表情或外
     mul = "将所有输入相乘，适合组合修正，例如张嘴 × 微笑。",
     sub = "第一个输入减去第二个输入；负值是否截断由全局设置决定。",
     ref = "引用另一映射在增益之前的值；不允许循环引用。",
-    p = "直接读取 fcParam 编号；用途不明确时请先实测。优先使用有语义的面部信号。",
+    p = "直接读取游戏的原始通道；用途不明确时请先实测。优先使用有语义的面部信号。",
     const = "输出固定数值，不随面部动画变化。",
-    eye = "读取眼球骨骼角度，除以满权重角度并截到 0～1；不属于 fcParam 信号。" }
+    eye = "读取眼球骨骼角度，除以满权重角度并截到 0～1；不属于面部信号。" }
 local OPS = { sum = true, max = true, min = true, mul = true, sub = true }
 local GROUP_KEYS, GROUP_LABELS = {}, {}
 for i, g in ipairs(Expression.GROUPS) do GROUP_KEYS[i], GROUP_LABELS[i] = g.key, g.name end
@@ -77,6 +77,12 @@ end
 
 local function mark(draft) draft.dirty = true end
 
+-- 信号的显示名：语义名 · 原始通道名；本游戏没有的信号标出来
+local function signal_title(sd)
+    local label = sd.no_signal and "本游戏没有" or sd.label
+    return sd.name == label and label or (sd.name .. " · " .. label)
+end
+
 -- 节点摘要只读，不把 JSON 元数据当成指令；用于总览、路径和折叠后的辨认。
 function E.summary(ctx, node)
     local kind = E.node_type(node)
@@ -85,8 +91,7 @@ function E.summary(ctx, node)
     if kind == "s" then
         for _, sd in ipairs(ctx.st.mapping.signals or {}) do
             if sd.name == node.s then
-                local param_name = string.format("fcParam_%03d", sd.param)
-                label = sd.name == param_name and param_name or (sd.name .. " · " .. param_name)
+                label = signal_title(sd)
                 detail = sd.note .. (sd.guessed and "（推测）" or "")
                 break
             end
@@ -102,7 +107,7 @@ function E.summary(ctx, node)
         end
         detail = table.concat(parts, kind == "sum" and " + " or " / ")
     elseif kind == "ref" then detail = "引用：" .. (node.ref or "未选择")
-    elseif kind == "p" then label = string.format("fcParam_%03d", node.p or 0)
+    elseif kind == "p" then label = (ctx.SKS and ctx.SKS.raw_label(node.p)) or ("原始通道 · " .. tostring(node.p))
     elseif kind == "const" then label = "常量 · " .. tostring(node.const)
     elseif kind == "eye" then
         label = (node.eye == "R" and "右眼" or "左眼") .. (node.axis == "pitch" and " · 垂直" or " · 水平")
@@ -185,29 +190,20 @@ local function slider(draft, id, label, x, y, w, value, lo, hi, step, fmt)
     return v, y + 34
 end
 
--- 信号选择器在节点下展开；可按语义名、fcParam 名或用途搜索，完整词典通过滚动浏览。
+-- 信号选择器在节点下展开；可按语义名、原始通道名或用途搜索，完整词典通过滚动浏览。
 local function signal_picker(ctx, draft, node, id, x, y, w)
     local signals = ctx.st.mapping.signals or {}
     local selected
     for _, sd in ipairs(signals) do if sd.name == node.s then selected = sd end end
-    local title
-    if selected then
-        local param_name = string.format("fcParam_%03d", selected.param)
-        title = selected.name == param_name and param_name or (selected.name .. " · " .. param_name)
-    else
-        title = node.s or "选择信号"
-    end
+    local title = selected and signal_title(selected) or (node.s or "选择信号")
     local items = {}
     for _, sd in ipairs(signals) do
-        local param_name = string.format("fcParam_%03d", sd.param)
-        local name_label = sd.name == param_name and param_name or (sd.name .. " · " .. param_name)
         items[#items + 1] = { value = sd.name,
-            label = string.format("%s · %s%s", name_label, sd.note,
-                sd.guessed and "（推测）" or "") }
+            label = string.format("%s · %s%s", signal_title(sd), sd.note, sd.guessed and "（推测）" or "") }
     end
     draft.search = draft.search or {}
     local changed, value, height = W.search_select(draft.search, "map_signal_search:" .. id, x, y, w,
-        items, title, { selected = node.s, placeholder = "搜索别名、fcParam 或用途…" })
+        items, title, { selected = node.s, placeholder = "搜索别名、通道名或用途…" })
     if changed then
         node.s = value; mark(draft)
         for _, sd in ipairs(signals) do if sd.name == value then selected = sd; break end end
@@ -218,7 +214,8 @@ local function signal_picker(ctx, draft, node, id, x, y, w)
         local purpose = "用途：" .. (selected.note ~= "" and selected.note or "用途尚未整理")
         if side then purpose = purpose .. (side == "L" and " · 角色左侧" or " · 角色右侧") end
         if selected.guessed then purpose = purpose .. " · 推测，需实测确认" end
-        y = line(purpose, x, y, w, selected.guessed and C.warn or C.muted)
+        if selected.no_signal then purpose = purpose .. " · 本游戏没有这个信号，值恒为 0" end
+        y = line(purpose, x, y, w, (selected.guessed or selected.no_signal) and C.warn or C.muted)
         local value = ctx.live.signal[selected.slot] or 0
         D.text_mid("实时信号：", x, y, 22, C.signal, W.small(), 72)
         D.text_mid(string.format("%.3f", value), x + 76, y, 22, C.signal, W.mono(), w - 76)
@@ -246,7 +243,13 @@ local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
     if kind == "s" then
         cy = signal_picker(ctx, draft, node, id, x, cy, w)
     elseif kind == "p" then
-        node.p, cy = slider(draft, "map_param:" .. id, "fcParam 编号", x, cy, w, node.p or 1, 0, 200, 1, "%03d")
+        local raw = ctx.st.mapping.raw
+        local sl = raw and raw.slider
+        if sl then
+            node.p, cy = slider(draft, "map_param:" .. id, raw.term .. " 编号", x, cy, w, tonumber(node.p) or sl.min, sl.min, sl.max, 1, sl.fmt)
+        else
+            cy = line(raw and ("原始通道：" .. tostring(node.p)) or "本游戏没有原始通道", x, cy, w, raw and C.muted or C.warn)
+        end
     elseif kind == "const" then
         node.const, cy = slider(draft, "map_const:" .. id, "固定数值", x, cy, w, node.const or 0, -5, 5, 0.01)
     elseif kind == "ref" then

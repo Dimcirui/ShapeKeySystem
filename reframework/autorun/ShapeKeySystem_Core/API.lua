@@ -11,7 +11,6 @@ local Scene   = require("ShapeKeySystem_Core.Scene")
 local Writer  = require("ShapeKeySystem_Core.Writer")
 local X       = require("ShapeKeySystem_Core.Expression")
 local Guard   = require("ShapeKeySystem_Core.Guard")
-local Probe   = require("ShapeKeySystem_Core.Probe")
 local Trail   = require("ShapeKeySystem_Core.Trail")
 local Presets = require("ShapeKeySystem_Core.Presets")
 local Sculpt  = require("ShapeKeySystem_Core.Sculpt")
@@ -140,7 +139,7 @@ local C = {
     prog = nil, resolved = nil, original_resolved = nil, edits = {}, index = {},
     gains = {}, forced = {},
     rigs = {}, parts = {}, sig = "", cov_key = nil,
-    frame = 0, scan_at = { 1 }, next_periodic = 0, gc_open = false,
+    frame = 0, scan_at = { 1 }, next_periodic = 0, preview_open = false,
     pending_zero = {}, save_at = nil,
     P = {}, Pbuf = {}, inv_full = 100, dict_params = {},
     want_signals = false,
@@ -219,7 +218,14 @@ local function drop_rigs(reason, rescan_after)
     end
 end
 
--- fcParam joints / eye use per rig, limited to the channels its meshes actually have
+-- raw channel handles (the adapter's bind) / eye use per rig, limited to the channels its meshes
+-- actually have
+local function bind_raw(face, keys)
+    local bind = SKS.adapter.bind
+    if not bind then return {}, 0 end
+    return bind(face, keys)
+end
+
 local function refresh_rig_params()
     local prog = C.prog
     if not prog then return end
@@ -227,16 +233,17 @@ local function refresh_rig_params()
         local slots = {}
         for _, t in ipairs(rig.targets) do for k = 1, t.count do slots[t.slots[k]] = true end end
         local params, eyes = Profile.needs(prog, slots)
-        rig.params = Scene.joints(rig.face, params)
+        local n
+        rig.params, n = bind_raw(rig.face, params)
         rig.use_eyes = eyes
         if rig.primary then
             local union, seen = {}, {}
             for _, list in ipairs({ C.dict_params, params }) do
                 for _, p in ipairs(list) do if not seen[p] then seen[p] = true; union[#union + 1] = p end end
             end
-            rig.dict_params = Scene.joints(rig.face, union)
+            rig.dict_params = bind_raw(rig.face, union)
         end
-        rig.n_reads = #rig.params / 2 + (eyes and 2 or 0)
+        rig.n_reads = (n or 0) + (eyes and 2 or 0)
     end
 end
 
@@ -301,7 +308,7 @@ local function build_expression_state()
     for s, c in ipairs(prog.channels) do
         channels[s] = {
             slot = s, name = present[s] or c.name, canonical = c.name, group = c.group,
-            source_text = c.source_text, has_signal = c.has_signal, guessed = c.guessed,
+            source_text = c.source_text, has_signal = c.has_signal, no_signal = c.no_signal, guessed = c.guessed,
             extension = c.extension, gaze_set = c.gaze_set, note = c.note, edited = c.edited,
             gain = tonumber(eg.channel_gains[c.name]) or 1.0,
             forced = C.forced[s] == true, present = present[s] ~= nil,
@@ -365,7 +372,7 @@ function build_preview_state()
     for sl, c in ipairs(prog.channels) do
         if present[sl] then hit = hit + 1 end
         channels[sl] = { slot = sl, name = present[sl] or c.name, canonical = c.name, group = c.group,
-                         source_text = c.source_text, has_signal = c.has_signal, guessed = c.guessed,
+                         source_text = c.source_text, has_signal = c.has_signal, no_signal = c.no_signal, guessed = c.guessed,
                          extension = c.extension, note = c.note, present = present[sl] ~= nil }
         by_group[c.group] = by_group[c.group] or {}
         table.insert(by_group[c.group], sl)
@@ -387,9 +394,12 @@ local function build_mapping_state()
     local m = state.mapping
     local sigs = {}
     for i, s in ipairs(Profile.signals.list) do
-        sigs[i] = { slot = s.slot, name = s.name, param = s.param, guessed = s.guessed, note = s.note }
+        sigs[i] = { slot = s.slot, name = s.name, label = s.label, no_signal = s.no_signal,
+                    guessed = s.guessed, note = s.note }
     end
     m.signals = sigs
+    local raw = SKS.adapter.raw
+    m.raw = raw and { term = raw.term or "原始通道", slider = U.copy(raw.slider) } or nil
     local nodes, edited, entries, originals = {}, {}, {}, {}
     for _, e in ipairs(C.original_resolved and C.original_resolved.channels or {}) do originals[e.name] = e end
     if C.prog then
@@ -411,16 +421,44 @@ local function sculpt_entry_state(e)
     return { id = e.id, name = e.name, source = e.source, folder = e.folder, target_part = e.target_part }
 end
 
--- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β"), builtin/armor_names.json
--- (generated from Modding-Toolkit's mhws_armor_sets.json); nil when unknown
+-- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β") from builtin/<adapter id>/<A.model_names>
+-- (Wilds: armor_names.json, generated from Modding-Toolkit's mhws_armor_sets.json); nil when unknown
 local armor_names = nil
 local function armor_name(model)
     if armor_names == nil then
-        local d = U.load_json(U.path("builtin", "armor_names.json"))
+        local A = SKS.adapter
+        local d = A.id and A.model_names and U.load_json(U.path("builtin", A.id, A.model_names))
         armor_names = d and type(d.models) == "table" and d.models or false
     end
     local e = armor_names and model and armor_names[model]
     return e and (e.zh or e.en) or nil
+end
+
+-- "ch03_032_5012" -> "护锁刃龙 α/β", "躯干" (A.slot_names; the slot number without one); nil when
+-- the model has no readable name
+local function part_name(part)
+    local model, slot = Presets.model_of(part)
+    local name = model and armor_name(model)
+    if not name then return nil end
+    local sn = SKS.adapter.slot_names
+    return name, sn and sn[slot] or slot
+end
+
+-- labels for a key's parts: only the slots when they all belong to one named model
+local function part_labels(parts)
+    local names, slots, same = {}, {}, true
+    for i, p in ipairs(parts) do
+        local name, slot = part_name(p)
+        names[i], slots[i] = name, slot
+        if not name or name ~= names[1] then same = false end
+    end
+    local out = {}
+    for i, p in ipairs(parts) do
+        if same and slots[i] then out[i] = slots[i]
+        elseif names[i] then out[i] = names[i] .. (slots[i] and (" · " .. slots[i]) or "")
+        else out[i] = p end
+    end
+    return out
 end
 
 -- where "绑定到" writes: the binding in effect (its file base) or, without one, a model-wide
@@ -444,8 +482,13 @@ local function build_presets_state()
         list[#list + 1] = { id = e.id, name = e.name, source = e.source, extends = e.extends }
     end
     state.presets.expression = list
-    local sc = {}
-    for _, e in ipairs(Presets.sculpt_list) do sc[#sc + 1] = sculpt_entry_state(e) end
+    -- a user preset hides the mod's preset of the same name and folder (it is the one that loads);
+    -- sculpt_list has user entries first
+    local sc, taken = {}, {}
+    for _, e in ipairs(Presets.sculpt_list) do
+        local k = (e.folder or "") .. "\0" .. e.name
+        if not taken[k] then taken[k] = true; sc[#sc + 1] = sculpt_entry_state(e) end
+    end
     state.presets.sculpt = sc
     local b = C.binding
     if b then
@@ -484,13 +527,14 @@ local function build_sculpt_state()
     for i, k in ipairs(Sculpt.K.keys) do
         local o = {}
         for p, v in pairs(k.overrides) do o[p] = v end
-        keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), value = k.value,
+        keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts), value = k.value,
                     default = k.default, overrides = o, owner = k.owner,
                     locked = false, mixed = k.owner == "expression", in_preset = k.in_preset == true,
                     range = { Sculpt.RANGE[1], Sculpt.RANGE[2] } }
         local g = gi[k.group]
         if not g then
-            g = { key = k.group, name = k.group, key_indices = {} }
+            local name, slot = part_name(k.group)
+            g = { key = k.group, name = name and (name .. (slot and (" · " .. slot) or "")) or k.group, key_indices = {} }
             gi[k.group] = g; groups[#groups + 1] = g
         end
         g.key_indices[#g.key_indices + 1] = i
@@ -729,7 +773,7 @@ local function recompile(edits)
     C.prog, C.edits = prog, edits
     -- 节点由自动信号改为手动时，旧 V 值不能继续驱动网格；变更只在下一次 tick 写入。
     for _, rig in ipairs(C.rigs) do rig.V, rig.W = {}, {} end
-    refresh_rig_params()   -- an edited node may read other fcParams
+    refresh_rig_params()   -- an edited node may read other raw channels
     recompute_gains()
     build_expression_state(); build_mapping_state()
     return true
@@ -770,7 +814,7 @@ end
 
 local function do_scan()
     if not C.prog then return end
-    local res = Scene.scan({ index = C.index, scene_search = C.gc_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3 })
+    local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3 })
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
     -- rescans neither pause writing nor rewrite every channel
     local old = {}
@@ -794,7 +838,7 @@ local function do_scan()
     C.next_periodic = C.frame + (C.menu and MENU_SCAN_FRAMES or max(1, cfg.periodic_scan_sec) * 60)
     prof.scan = prof.scan + res.ms / 1000
     local sc = state.scene
-    sc.last_scan = { time = os.time(), ms = res.ms, faces = res.faces, cached_skip = res.skipped, guild_card = C.gc_open }
+    sc.last_scan = { time = os.time(), ms = res.ms, faces = res.faces, cached_skip = res.skipped, preview = C.preview_open }
     local rigs = {}
     for i, r in ipairs(res.rigs) do
         local ts = {}
@@ -870,8 +914,8 @@ local function do_scan()
         for _, x in ipairs(r.targets) do t[#t + 1] = x.name .. ":" .. x.channels end
         tn[#tn + 1] = (r.primary and "*" or "") .. r.label .. "[" .. table.concat(t, ",") .. "]"
     end
-    state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  hunters=%s  scan %.2f ms", res.faces, res.skipped,
-        C.gc_open and " [guild card]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
+    state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  chars=%s  scan %.2f ms", res.faces, res.skipped,
+        C.preview_open and " [preview]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
@@ -1006,14 +1050,16 @@ local function update_live()
         end
         if C.want_signals then
             local sig = live.signal
-            for i, sd in ipairs(Profile.signals.list) do sig[i] = C.P[sd.param] or 0 end
+            for i, sd in ipairs(Profile.signals.list) do
+                sig[i] = sd.key ~= nil and ((C.P[sd.key] or 0) * sd.a + sd.b) or 0
+            end
         end
     end
 end
 
 -- ---------------------------------------------------------------- experimental cutscene mode
 -- While a cutscene plays (IsBusy, not IsBusyLoad) and cfg.cutscene_drive is on, the hunter is
--- driven like in gameplay. Segment boundaries come from app.DemoMediator hooks (Guard):
+-- driven like in gameplay. Segment boundaries come from the adapter events (MH Wilds hooks):
 --   onPlayStartTimeline(i)            a segment starts: drop everything, settle, search the whole
 --                                     scene (the visible hunter is often the cutscene copy Pl000_00)
 --   requestSkip / requestStop / unload  drop everything at once (pre-hook, before the game tears
@@ -1036,7 +1082,7 @@ local function zero_ready_targets(why)
     end
 end
 
--- a non-primary rig (guild card / save select / cutscene hunter) whose parent's children changed:
+-- a non-primary rig (preview / save select / cutscene character) whose parent's children changed:
 -- its parts are being rebuilt or torn down
 local function parents_changed()
     for _, r in ipairs(C.rigs) do
@@ -1167,11 +1213,11 @@ function SKS.tick()
         C.pending_zero = {}
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
-    if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.master_root()) ~= C.sig then
+    if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("hunter parts changed", Guard.SETTLE_FRAMES)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
         drop_rigs("preview hunter changed", Guard.SETTLE_FRAMES)
-    elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.master_root()) ~= C.sig then
+    elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         request_rescan(Guard.SETTLE_FRAMES)
     end
     local due = false
@@ -1181,7 +1227,8 @@ function SKS.tick()
     if due or ((C.menu or cfg.periodic_scan_sec > 0) and f >= C.next_periodic) then do_scan() end
     if C.probe_pending then
         C.probe_pending = false
-        state.debug.probe = Probe.run("ShapeKeySystem\\hash_probe.txt")
+        local probe = SKS.adapter.probe
+        state.debug.probe = probe and probe("ShapeKeySystem\\hash_probe.txt") or { "no probe for this game" }
         bump("debug")
     end
 
@@ -1878,10 +1925,21 @@ function SKS.set_ui_open(open, want_signals)
 end
 
 -- ---------------------------------------------------------------- init / hooks
-function SKS.init()
+-- adapter: the game adapter (ShapeKeySystem_Games/<Game>/Adapter.lua). Its init runs first: when it
+-- returns false, reason (a type it needs is missing), nothing else starts and the data folder is
+-- not touched. Returns true, or false, reason.
+function SKS.init(adapter)
+    if adapter.init then
+        local ok, why = adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
+                                       menu = SKS.on_menu, preview = SKS.on_preview })
+        if ok == false then return false, why end
+    end
+    SKS.adapter = adapter
+    Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
+    Cnd.install(adapter.conditions)
     Trail.open()
     load_settings()
-    Playback.init(log, function() return C.prog and C.prog.params or {} end, function()
+    Playback.init(adapter, log, function() return C.prog and C.prog.params or {} end, function()
         return C.prog, Profile.signals.list, state.expression.channels,
             state.mapping.rev .. ":" .. state.expression.rev .. ":" .. state.scene.rev
     end)
@@ -1893,7 +1951,9 @@ function SKS.init()
     Names.load_aliases()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
-    for _, s in ipairs(sig.list) do C.dict_params[#C.dict_params + 1] = s.param end
+    for _, s in ipairs(sig.list) do
+        if s.key ~= nil then C.dict_params[#C.dict_params + 1] = s.key end
+    end
     Profile.load_all()
     Presets.load_sculpt()
     CondExpr.load_all()
@@ -1911,10 +1971,11 @@ function SKS.init()
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
     C.publish_api()
+    return true
 end
 
 -- skip / stop / unload (pre-hook): let go before the game destroys the cutscene actors
-function SKS.on_cutscene_stop(reason)
+function SKS.on_release(reason)
     Trail.event("hook %s (cs active %s, released %s, rigs %d)", tostring(reason), tostring(CS.active), tostring(CS.released), #C.rigs)
     zero_ready_targets(reason)   -- the meshes are still valid in the pre-hook
     CS.released, CS.released_at = true, C.frame
@@ -1925,35 +1986,43 @@ function SKS.on_cutscene_stop(reason)
     if not CS.active then request_rescan(Guard.SETTLE_FRAMES * 4) end
 end
 
--- a cutscene segment starts (pre-hook of onPlayStartTimeline)
-function SKS.on_cutscene_segment(index)
-    Trail.event("hook onPlayStartTimeline(%s) (cs active %s, released %s, rigs %d)", tostring(index), tostring(CS.active), tostring(CS.released), #C.rigs)
+-- a cutscene segment starts (pre-hook)
+function SKS.on_segment(index)
+    Trail.event("hook segment(%s) (cs active %s, released %s, rigs %d)", tostring(index), tostring(CS.active), tostring(CS.released), #C.rigs)
     zero_ready_targets("segment start")
     CS.seg, CS.seg_t0, CS.released, CS.scanned = index, C.frame, false, false
     drop_rigs("cutscene segment " .. tostring(index), nil)
     C.scan_at = {}
 end
 
-function SKS.on_equip_build()
-    Trail.event("hook onEquipBuildEnd (rigs %d)", #C.rigs)
+function SKS.on_rebuilt()
+    Trail.event("hook rebuilt (rigs %d)", #C.rigs)
     if #C.rigs > 0 then drop_rigs("equipment rebuilt", Guard.SETTLE_FRAMES)
     else request_rescan(Guard.SETTLE_FRAMES) end
+end
+
+-- display name of a raw channel value (a `p` node), nil when the game has no such channel
+function SKS.raw_label(v)
+    local raw = SKS.adapter.raw
+    local key = raw and raw.parse(v)
+    return key ~= nil and raw.label(key) or nil
 end
 
 -- debug: run the blendshape hash-table probe on the next stable frame
 function SKS.request_probe() C.probe_pending = true end
 
--- title / save-select GUI opened or closed: the preview hunters are (re)built around it.
--- Only a flag here: the game calls some of these every frame, many times per frame (GUI010100
--- onClose froze the title screen when each call dropped refs + ran a full GC). tick() handles
+-- title / save-select GUI opened or closed: the preview characters are (re)built around it.
+-- Only a flag here: the game may call these many times per frame (a hook that dropped refs and
+-- ran a full GC on every call froze the title screen). tick() handles
 -- the flag at most once per frame and only when it changes.
 function SKS.on_menu(name, open)
     C.menu_event = name .. (open and " open" or " close")
 end
 
-function SKS.on_guild_card(open)
-    if C.gc_open == open then return end   -- repeated calls: nothing new
-    C.gc_open = open
+-- the preview character screen (guild card) opened or closed
+function SKS.on_preview(open)
+    if C.preview_open == open then return end   -- repeated calls: nothing new
+    C.preview_open = open
     if open then request_rescan(10, 30, 60, 120, 240, 480) else request_rescan(5, 60) end
 end
 

@@ -3,11 +3,14 @@
 -- Question it answers before M2 relies on it: is the key murmur3 of the short channel name
 -- ("eyeBlinkLeft") or of the full "node.target" name, and does the index agree with the mesh?
 -- Writes reframework/data/ShapeKeySystem/hash_probe.txt. Read-only: nothing is written to the game.
-
-local Scene = require("ShapeKeySystem_Core.Scene")
-local W = require("ShapeKeySystem_Core.Writer")
+-- Type lookups happen in R.run, not at load (adapter files do not call sdk at load).
 
 local R = {}
+
+local function go_name(transform)
+    local ok, n = pcall(function() return transform:call("get_GameObject"):call("get_Name") end)
+    return ok and n or "?"
+end
 
 -- UTF-8 -> UTF-16LE code units
 local function utf16(s)
@@ -92,19 +95,23 @@ function R.run(path)
     local log = {}
     local function p(fmt, ...) log[#log + 1] = select("#", ...) > 0 and string.format(fmt, ...) or fmt end
     local ok, err = pcall(function()
-        local root = Scene.master_root()
+        local root = sdk.get_managed_singleton("app.PlayerManager"):call("getMasterPlayer"):call("get_Object"):call("get_Transform")
         if not root then p("no master player"); return end
+        local T_MESH = sdk.find_type_definition("via.render.Mesh")
+        local MESH_TYPE = sdk.typeof("via.render.Mesh")
+        local M_CN = T_MESH:get_method("get_BlendShapeChannelNum")
+        local M_CNAME = T_MESH:get_method("getBlendShapeChannelName(System.UInt32)")
         -- our view of the hunter parts: name -> { names, n }
         local parts = {}
         local c = root:call("get_Child")
         while c do
-            local name = Scene.go_name(c)
+            local name = go_name(c)
             local mesh
-            pcall(function() mesh = c:call("get_GameObject"):call("getComponent(System.Type)", W.MESH_TYPE) end)
-            local n = mesh and (W.M_CN:call(mesh) or 0) or 0
+            pcall(function() mesh = c:call("get_GameObject"):call("getComponent(System.Type)", MESH_TYPE) end)
+            local n = mesh and (M_CN:call(mesh) or 0) or 0
             if n > 0 then
                 local names = {}
-                for i = 0, n - 1 do names[i] = W.M_CNAME:call(mesh, i) or "" end
+                for i = 0, n - 1 do names[i] = M_CNAME:call(mesh, i) or "" end
                 parts[#parts + 1] = { id = name, names = names, n = n }
             end
             c = c:call("get_Next")

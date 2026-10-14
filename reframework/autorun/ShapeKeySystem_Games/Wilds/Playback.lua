@@ -4,8 +4,7 @@
 local U = require("ShapeKeySystem_Core.Util")
 local Recording = require("ShapeKeySystem_Core.Recording")
 local A = { id = "mhwilds", name = "怪物猎人：荒野", final_unit = 0.01, raw_unit = 0.01 }
-local facial = sdk.find_type_definition("app.FacialController")
-local app_type = sdk.find_type_definition("via.Application")
+local facial, app_type
 local session, callbacks, installed
 
 function A.now()
@@ -130,6 +129,8 @@ end
 function A.attach(cb)
     callbacks = cb
     if installed then return end
+    facial = sdk.find_type_definition("app.FacialController")
+    app_type = sdk.find_type_definition("via.Application")
     installed = true
     re.on_pre_application_entry("UpdateMotion", function() callbacks.tick(true) end)
     local method = facial and facial:get_method("updateAfterMotion(via.motion.Motion, via.motion.TreeLayer)")

@@ -23,7 +23,8 @@ $owned = @(
     "autorun\ShapeKeySystem.lua",
     "autorun\ShapeKeySystem_Core",
     "autorun\ShapeKeySystem_UI",
-    "autorun\ShapeKeySystem_Game",
+    "autorun\ShapeKeySystem_Games",
+    "autorun\ShapeKeySystem_Game", # 清理旧的播放适配器目录
     "data\ShapeKeySystem\builtin",
     "data\ShapeKeySystem\faces",
     "data\ShapeKeySystem\games",

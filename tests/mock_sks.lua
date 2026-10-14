@@ -59,6 +59,7 @@ local function mk_tr(name, joints, m)
     return tr
 end
 local root = mk_tr("MasterPlayer")
+ROOT = root
 local face = mk_tr("Player_Face", face_joints)
 local armor = mk_tr("ch03_012_0012", nil, mesh)
 ARMOR = armor
@@ -173,7 +174,9 @@ imgui.input_text = function(label, v)
 end
 imgui.is_item_active = function() return input_id ~= nil and INPUT_ACTIVE == input_id end
 Vector2f = { new = function(x, y) return { x = x, y = y } end }
-reframework = { is_key_down = function(_, vk) return KEYS[vk] == true end }
+GAME_NAME = "mhwilds"
+reframework = { is_key_down = function(_, vk) return KEYS[vk] == true end,
+                get_game_name = function() return GAME_NAME end }
 re.on_pre_application_entry = function() end
 local font_mt = { __index = { measure = function(self, s)
     if py_measure then return py_measure(self.family, self.size, tostring(s)) end

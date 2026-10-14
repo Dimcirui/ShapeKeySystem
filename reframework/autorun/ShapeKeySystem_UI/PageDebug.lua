@@ -120,7 +120,7 @@ local function scene_card(ctx, x, y, w)
     local ls = sc.last_scan
     if ls then
         lines[#lines + 1] = string.format("最近扫描 %s · %.1f ms · 脸 %d（缓存跳过 %d）%s", os.date("%H:%M:%S", ls.time or 0),
-            ls.ms or 0, ls.faces or 0, ls.cached_skip or 0, ls.guild_card and " · 名片" or "")
+            ls.ms or 0, ls.faces or 0, ls.cached_skip or 0, ls.preview and " · 名片" or "")
     end
     for _, r in ipairs(sc.rigs or {}) do
         local t = {}

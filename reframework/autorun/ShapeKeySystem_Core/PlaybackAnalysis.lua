@@ -73,13 +73,13 @@ function A:bindings(prog, signals, channels, revision)
     for param, row in pairs(self.by_param) do
         local aliases, notes, guessed = {}, {}, false
         for _, sig in ipairs(signals or {}) do
-            if sig.param == param then
+            if not sig.no_signal and sig.key == param then
                 aliases[#aliases + 1] = sig.name
                 if sig.note and sig.note ~= "" then notes[#notes + 1] = sig.note end
                 guessed = guessed or sig.guessed == true
             end
         end
-        local param_name = string.format("fcParam_%03d", param)
+        local param_name = self.label(param)
         -- 通用 fcParam 名称只是补全编号，不重复显示为“fcParam · fcParam”。
         local semantic = {}
         for _, alias in ipairs(aliases) do if alias ~= param_name then semantic[#semantic + 1] = alias end end
@@ -113,14 +113,14 @@ function A:finish()
 end
 
 -- raw 的幅值单位由游戏适配器给出，仅用于活跃判定；这一步不把 raw 当成 final 信号。
-function A.new(clip, unit, file)
+function A.new(clip, unit, file, label)
     assert(type(unit) == "number" and unit > 0 and unit < math.huge, "播放分析缺少游戏信号幅值单位")
-    local self = setmetatable({ clip = clip, unit = unit, cursor = 2, by_param = {}, totals = {},
+    local self = setmetatable({ clip = clip, unit = unit, label = label or tostring, cursor = 2, by_param = {}, totals = {},
         state = { rev = 0, file = file, mode = clip.track, sampled_frames = 0, threshold = THRESHOLD,
             rows = {}, active_signals = 0, bound_signals = 0, unbound_signals = 0 } }, A)
     for param, column in pairs(clip.map) do
         self.by_param[param] = { param = param, hits = 0, mappings = {}, present_count = 0,
-            label = string.format("fcParam_%03d", param), purpose = "词典尚未标注用途" }
+            label = self.label(param), purpose = "词典尚未标注用途" }
         local total = 0
         for _, frame in ipairs(clip.frames) do if hit(frame.values[column], unit) then total = total + 1 end end
         self.totals[param] = total

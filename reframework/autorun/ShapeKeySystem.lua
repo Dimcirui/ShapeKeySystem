@@ -1,12 +1,32 @@
--- ShapeKeySystem for MH Wilds
--- Drives armour mesh shape keys from the hunter's facial animation (expression system) and,
--- from M2 on, holds static sculpt values. Backend: ShapeKeySystem_Core/API.lua.
+-- ShapeKeySystem
+-- Drives outfit mesh shape keys from the character's facial animation (expression system) and
+-- holds static sculpt values. Backend: ShapeKeySystem_Core/API.lua; the game adapter is picked
+-- from ShapeKeySystem_Games/Registry.lua.
 -- Data: reframework/data/ShapeKeySystem/{settings.json, builtin/, mods/, user/}
 
 local SKS = require("ShapeKeySystem_Core.API")
 local DebugUI = require("ShapeKeySystem_Core.DebugUI")
+local Games = require("ShapeKeySystem_Games.Registry")
+local D = require("ShapeKeySystem_UI.Draw")
+local Panel = require("ShapeKeySystem_UI.Panel")
 
-SKS.init()
+-- an unsupported game (or an adapter whose types are gone after a game update) only gets a line
+-- in the REFramework menu: no hooks, no callbacks, the data folder is not touched
+local game = Games.game_name()
+local Game = Games.pick(game)
+local ok, why = false, "暂不支持当前游戏（" .. tostring(game) .. "）"
+-- also installs the adapter's hooks (write safety: release on cutscene skip / stop, rescan after
+-- equipment rebuilds and menus)
+if Game then ok, why = SKS.init(Game) end
+if not ok then
+    re.on_draw_ui(function()
+        if imgui.tree_node("ShapeKeySystem") then
+            imgui.text("ShapeKeySystem 没有启动：" .. tostring(why))
+            imgui.tree_pop()
+        end
+    end)
+    return
+end
 DebugUI.attach(SKS)
 
 re.on_application_entry("LateUpdateBehavior", function()
@@ -14,26 +34,9 @@ re.on_application_entry("LateUpdateBehavior", function()
     if not ok then SKS.state.debug.status = "tick error: " .. tostring(err) end
 end)
 
--- the guild card preview hunter spawns some time after onOpen
-pcall(function()
-    local gc = sdk.find_type_definition("app.GUI040200")
-    local open_m, close_m = gc:get_method("onOpen"), gc:get_method("onClose")
-    if open_m then sdk.hook(open_m, nil, function(r) SKS.on_guild_card(true); return r end) end
-    if close_m then sdk.hook(close_m, nil, function(r) SKS.on_guild_card(false); return r end) end
-end)
-
--- write safety: release everything the moment a cutscene skip / stop is requested, and rescan
--- after any hunter rebuilds its equipment (ShapeKeySystem_Core/Guard.lua)
-local Guard = require("ShapeKeySystem_Core.Guard")
-Guard.hook_cutscene(SKS.on_cutscene_stop, SKS.on_cutscene_segment)
-Guard.hook_equip_build(SKS.on_equip_build)
-Guard.hook_menus(SKS.on_menu)
-
 -- standalone panel (M3), drawn with reframework-d2d when it is installed, else with REFramework's
 -- own ImGui draw list (settings.ui_backend: auto / d2d / imgui, see ShapeKeySystem_UI/Draw.lua).
 -- With neither only the imgui debug panel exists.
-local D = require("ShapeKeySystem_UI.Draw")
-local Panel = require("ShapeKeySystem_UI.Panel")
 Panel.attach(SKS)
 local last_err
 local function draw_panel(backend)

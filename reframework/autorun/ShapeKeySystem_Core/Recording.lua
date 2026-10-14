@@ -40,7 +40,7 @@ function R.decode(data, track, catalog, game)
         assert(type(row) == "table" and R.finite(row.param, 200, true) and row.param >= 1 and not map[row.param],
             "录制包含无效或重复参数编号")
         assert(R.finite(row.hash, 4294967295, true) and row.hash >= 0, "录制参数哈希无效")
-        assert(catalog and catalog[row.param] == row.hash, string.format("fcParam_%03d 名称哈希与当前游戏不匹配", row.param))
+        assert(catalog and catalog[row.param] == row.hash, string.format("参数 %03d 名称哈希与当前游戏不匹配", row.param))
         map[row.param], hashes[i] = i, row.hash
     end
     local count = array(data.frames, 9001, "frames")
