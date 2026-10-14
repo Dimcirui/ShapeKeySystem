@@ -4,6 +4,7 @@
 --   re.on_frame  -> Panel.frame() / draw_inputs()  hotkey, input sampling, inline ImGui fields
 --   d2d draw / re.on_frame (imgui) -> Panel.draw()   layout + widgets (only while open)
 
+local Perf = require("ShapeKeySystem_Core.Perf")
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
@@ -252,7 +253,7 @@ end
 function Panel.ui_open() return Panel.open, Panel.open and ui.want_signals end
 
 -- active backend's draw callback (d2d draw / re.on_frame for ImGui)
-function Panel.draw()
+local function draw()
     TextInput.begin_layout()
     if not Panel.open then return end
     local st, live = SKS.state, SKS.live
@@ -333,6 +334,15 @@ function Panel.attach(sks)
     SKS = sks
     Blocker.surface = D.surface_pixels
     Blocker.game = sks.adapter and sks.adapter.input
+end
+
+-- 绘制失败也记录耗时并向上层传递错误，两种后端共用同一计量入口。
+function Panel.draw()
+    if not Panel.open then return end
+    local started = os.clock()
+    local ok, err = pcall(draw)
+    Perf.record("ui", os.clock() - started)
+    if not ok then error(err, 0) end
 end
 
 return Panel

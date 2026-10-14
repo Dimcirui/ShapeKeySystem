@@ -20,6 +20,7 @@
 
 local U = require("ShapeKeySystem_Core.Util")
 local Cnd = require("ShapeKeySystem_Core.Conditions")
+local TargetIndex = require("ShapeKeySystem_Core.TargetIndex")
 
 local E = {}
 
@@ -36,7 +37,8 @@ E.animating = false     -- some weight is moving (sculpt keys need rewriting)
 local last_clock = nil
 local slot_cache, slot_cache_for = nil, nil
 
-local function norm(name) return (tostring(name):gsub("[%s_%-%.]", ""):lower()) end
+local active_list, active_data, active_dirty = {}, nil, true
+local target_indexes = {}
 
 -- ---------------------------------------------------------------- files
 function E.validate(d)
@@ -181,6 +183,7 @@ end
 -- once per update. live: conditions may be evaluated (gameplay, gate open, master hunter);
 -- otherwise everything fades out. Returns true when any weight changed.
 function E.update(live)
+    active_dirty = true
     local now = os.clock()
     local dt = last_clock and math.min(0.1, math.max(0, now - last_clock)) or 0
     last_clock = now
@@ -223,6 +226,7 @@ function E.update(live)
 end
 
 function E.reset()
+    active_dirty = true
     for k in pairs(alpha) do alpha[k] = nil end
     E.playing = nil
     last_clock = nil
@@ -231,10 +235,15 @@ end
 function E.alpha(id) return alpha[id] or 0 end
 
 -- clips with weight, fading ones first, the playing one last
-local active_list = {}
+-- 更新回调内复用活跃顺序；配置工作副本替换时同时放掉旧名称索引。
 local function active_clips()
-    for i = #active_list, 1, -1 do active_list[i] = nil end
     local data = E.current and E.current.data
+    if active_data ~= data then
+        active_data, target_indexes, active_dirty = data, {}, true
+    end
+    if not active_dirty then return active_list end
+    active_dirty = false
+    for i = #active_list, 1, -1 do active_list[i] = nil end
     if not data then return active_list end
     for id, a in pairs(alpha) do
         if a > 0 and id ~= E.playing and data.clips[id] then active_list[#active_list + 1] = id end
@@ -267,18 +276,18 @@ function E.apply(prog, resolve, W)
     end
 end
 
--- keys the expression profile does not drive: the expression-layer value e after the clips,
--- starting from e (0 for these keys). The caller mixes it with the sculpt value (Sculpt.mix).
+-- 捏脸键复用归一化目标索引；渐出片段先混合，当前片段最后混合。
 function E.for_key(key_name, e)
-    local data = E.current and E.current.data
-    if not data or not E.any() then return e end
-    local n = norm(key_name)
-    local v = e
-    for _, id in ipairs(active_clips()) do
-        local a = alpha[id]
-        for key, target in pairs(data.clips[id].values) do
-            if norm(key) == n then v = v * (1 - a) + target * a end
+    local ids = active_clips()
+    if #ids == 0 then return e end
+    local n, v = TargetIndex.norm(key_name), e
+    for _, id in ipairs(ids) do
+        local index = target_indexes[id]
+        if not index then
+            index = TargetIndex.build(active_data.clips[id].values)
+            target_indexes[id] = index
         end
+        v = TargetIndex.blend(index, n, v, alpha[id])
     end
     return v
 end

@@ -1,4 +1,6 @@
--- 表情详情：共用两种绘制后端，按部位显示实时权重；映射草稿由 MappingEditor 编辑和提交。
+-- 绘制表情详情与实时权重。
+--
+-- 映射草稿归 `MappingEditor` 管理；两种后端共用页面，绘制只提交命令，不写引擎。
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -6,6 +8,7 @@ local W = require("ShapeKeySystem_UI.Widgets")
 local Eyes = require("ShapeKeySystem_UI.PageEyes")   -- gaze settings, drawn as a section here
 local Mapping = require("ShapeKeySystem_UI.MappingEditor")
 local I = require("ShapeKeySystem_UI.Input")
+local PlaybackPanel = require("ShapeKeySystem_UI.PlaybackPanel")
 
 local Page = {}
 local C = T.c
@@ -62,7 +65,7 @@ local function top_bars(ctx, x, y, w)
             W.start_text(s, "profile_form", { title = "新建表情配置", confirm_text_color = 0xFFFFFFFF, on_submit = function(name)
                 if call("create_profile", { name = name }) then
                     s.pick_profile, s.mapping_draft, s.name_form, s.confirm_restore = nil, nil, nil, nil
-                    s.filter, s.only_active, s.collapsed = "", false, {}
+                    s.filter, s.only_active, s.collapsed, s.collapsed_initialized = "", false, {}, false
                     call("preview_profile", {})
                     W.reset_scroll("page:expr")
                 end
@@ -188,8 +191,15 @@ end
 
 function Page.draw(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
-    s.collapsed = s.collapsed or {}
     local ex = st.expression
+    -- 折叠状态只初始化一次，后续绘制保留玩家操作。
+    if not s.collapsed_initialized then
+        s.collapsed = {}
+        for _, g in ipairs((ex and ex.groups) or {}) do s.collapsed[g.key] = true end
+        s.collapsed_initialized = true
+    else
+        s.collapsed = s.collapsed or {}
+    end
     local cy = y + top_bars(ctx, x, y, w) + 8
     cy = cy + Mapping.toolbar(ctx, x, cy, w)
     if s.mapping_draft and not s.browsing then
@@ -202,7 +212,7 @@ function Page.draw(ctx, x, y, w)
     local filter = (s.filter or ""):lower()
     local pv = s.browsing
     local src = pv or ex
-    -- 以同一份通道/分组快照完成本次绘制，避免应用或删除映射时新旧 slot 混用。
+    -- 本次绘制使用同一份通道和分组快照，避免命令生效后混用新旧 `slot`。
     local channels, groups = src.channels, src.groups
     for _, g in ipairs(groups or {}) do
         local rows = {}
@@ -237,6 +247,8 @@ function Page.draw(ctx, x, y, w)
     if clicked then s.gaze_open = not gopen end
     cy = cy + hh + 6
     if gopen then cy = cy + Eyes.draw(ctx, x, cy, w) end
+    cy = cy + 10
+    cy = cy + PlaybackPanel.draw(ctx, x, cy, w)
     return cy - y
 end
 

@@ -270,6 +270,8 @@ builtin/profiles/*.json         通用 profile（只用 s 节点）
 builtin/<id>/signals.json       信号字典
 builtin/<id>/armor_names.json   模型显示名（由 A.model_names 指定文件名）
 builtin/<id>/profiles/*.json    游戏专属 profile（用了 p 或眼球节点的特定写法）
+builtin/<id>/recording_catalog.json  录制参数编号与名称哈希表
+builtin/<id>/recordings/*.json       内置面部动画录制
 faces/、images/                 通用
 ```
 
@@ -355,3 +357,22 @@ RE4R（游戏没装，现成的参考实现是 [RE4R-ShapeKey-System](https://gi
 2. `terms` 只覆盖调试页和状态行里出现的「猎人 / 名片」（目前 3 处）；条件的中文标签已经放进 `A.conditions.defs`，不另做本地化。
 3. 其他玩家：荒野现在靠全场景搜索（`scene_search_always`）找到，没有专门的接口。如果别的游戏需要按玩家列表找，
    再加一个可选的 `A.other_roots()`，现在不加。
+
+## 10. 面部动画测试的可选接口
+
+`A.playback` 提供录制测试，入口将选中的同一个适配器传给 `Playback.init`，不另设游戏注册表。
+适配器未提供该接口时，测试区显示不可用提示；捏脸和预设仍按原有能力运行。
+
+- `catalog()` 返回录制参数编号与名称哈希的对应表；`raw_unit`、`final_unit` 提供幅值单位。
+- `attach(callbacks)` 在加载阶段安装当前游戏的回调；`callbacks.tick(true)` 推进时钟并注入样本，
+  `callbacks.inject()` 只注入已有样本，`callbacks.fail(reason)` 停止测试。
+- `now()`、`connect(clip)`、`healthy(track)` 管理游戏时钟和会话验证；`inject(values)` 写入原版输入。
+- `matches(rig)` 限定最终信号覆盖的角色；`stop(restore)` 释放引擎引用，只在对象和参数索引仍有效时恢复。
+
+荒野实现放在 `ShapeKeySystem_Games/Wilds/Playback.lua`，引擎类型查询推迟到所选适配器的 `attach`，
+模块加载时不调用 SDK。内置录制放在 `builtin/<id>/recordings/`，参数表放在 `builtin/<id>/recording_catalog.json`。
+用户录制放在 `user/recordings/`，按 D7 依靠游戏安装目录隔离，不再套一层游戏 ID。
+旧的 `user/games/<当前游戏 id>/recordings/` 只作读取回退，同名文件优先读取新目录；不改写或移动用户文件。
+旧内置 `games/<id>/` 不再读取，部署只清理荒野的参数表、`Speak.json`、`CampMeals.json`，保留其他文件。
+目前的录制格式为 `fcparam.recording/1`、`fcparam.recording/2`；新游戏使用其他格式时需增加对应解码支持。
+分析绑定使用字典的 `key`，显示名称使用 `A.raw.label`，Core 和 UI 不构造游戏专属骨骼名称。

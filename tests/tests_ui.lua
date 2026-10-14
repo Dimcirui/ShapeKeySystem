@@ -91,6 +91,16 @@ check(find("ARKit 覆盖", false) ~= nil or find("表情配置", true) ~= nil, "
 click_text("设置与调试", true)
 check(Panel.ui.page == "debug", "rail: 设置与调试")
 check(find("设置", true) and find("性能", true), "debug page cards drawn")
+check(Panel.ui.page_state.debug.perf_details ~= true, "performance details are collapsed by default")
+Panel.ui.page_state.debug.perf_details = true
+local previous_height = Panel.ui.win.h
+Panel.ui.win.h = 1040; frame()
+check(find("最近 60 次：平均 / 最大 / P95", false) and not find("页面出错", false),
+    "performance details render independent timing windows")
+SNAPS[#SNAPS + 1] = { name = "性能详情", cmds = CMDS }
+Panel.ui.page_state.debug.perf_details = false
+Panel.ui.win.h = previous_height; frame()
+
 
 -- 页面内输入：搜索立即更新，不打开弹窗；控件 ID 和位置跨帧保持稳定。
 click_text("捏脸", true)

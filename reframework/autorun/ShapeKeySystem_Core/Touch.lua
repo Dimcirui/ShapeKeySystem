@@ -11,6 +11,7 @@
 --     mouth = { left = {key = w}, right = ..., up = ..., down = ... } }
 -- otherwise auto-detected from the worn mesh's key names (Shinano / VRC / ARKit spellings).
 
+local TargetIndex = require("ShapeKeySystem_Core.TargetIndex")
 local E = {}
 
 E.HOLD = 1.0          -- seconds a poke stays at full weight
@@ -18,7 +19,7 @@ E.FADE_IN = 0.08
 E.FADE_OUT = 0.35
 E.DRAG_FADE_OUT = 0.3
 
-local function norm(name) return (tostring(name):gsub("[%s_%-%.]", ""):lower()) end
+local norm = TargetIndex.norm
 E.norm = norm
 
 -- ---------------------------------------------------------------- key detection
@@ -63,7 +64,13 @@ local drag = { a = 0, active = false, values = {} }
 local last_clock = nil
 E.animating = false
 
-function E.set_map(m) E.map = m end
+local layers, target_indexes, layers_dirty = {}, {}, true
+local drag_index
+
+-- 映射由调用方替换；即使复用同一张表，也必须通过此入口使名称索引失效。
+function E.set_map(m)
+    E.map, target_indexes, layers_dirty = m, {}, true
+end
 
 function E.poke(zone)
     local m = E.map and E.map[zone]
@@ -88,12 +95,14 @@ function E.drag(x, y)
     put(m.left, x); put(m.right, -x)
     put(m.down, y); put(m.up, -y)
     drag.active = true
+    drag_index, layers_dirty = nil, true
     return true
 end
 
 function E.release() drag.active = false end
 
 function E.reset()
+    drag_index, layers_dirty = nil, true
     for k in pairs(pokes) do pokes[k] = nil end
     drag.a, drag.active = 0, false
     for k in pairs(drag.values) do drag.values[k] = nil end
@@ -101,6 +110,7 @@ function E.reset()
 end
 
 function E.update()
+    layers_dirty = true
     local now = os.clock()
     local dt = last_clock and math.min(0.1, math.max(0, now - last_clock)) or 0
     last_clock = now
@@ -130,8 +140,10 @@ function E.any()
 end
 
 -- every (target set, weight) pair with weight: pokes, then the mouth drag
-local layers = {}
+-- 每次更新最多建立一次活跃层；拖拽修改目标后，下一次读取立即重建。
 local function active_layers()
+    if not layers_dirty then return layers end
+    layers_dirty = false
     for i = #layers, 1, -1 do layers[i] = nil end
     local m = E.map
     if not m then return layers end
@@ -155,16 +167,22 @@ function E.apply(prog, resolve, W)
     end
 end
 
--- keys the expression profile does not drive: expression-layer value after the interactions,
--- starting from e (what the conditional clips left). The caller mixes it with the sculpt value.
+-- 复用每层目标索引，保持触碰层先、嘴部拖拽层后的混合顺序。
 function E.for_key(key_name, e)
-    if not E.any() then return e end
-    local n = norm(key_name)
-    local v = e
-    for _, l in ipairs(active_layers()) do
-        for key, target in pairs(l[1]) do
-            if norm(key) == n then v = v * (1 - l[2]) + target * l[2] end
+    local active = active_layers()
+    if #active == 0 then return e end
+    local n, v = norm(key_name), e
+    for _, layer in ipairs(active) do
+        local set = layer[1]
+        local index
+        if set == drag.values then
+            drag_index = drag_index or TargetIndex.build(set)
+            index = drag_index
+        else
+            index = target_indexes[set]
+            if not index then index = TargetIndex.build(set); target_indexes[set] = index end
         end
+        v = TargetIndex.blend(index, n, v, layer[2])
     end
     return v
 end

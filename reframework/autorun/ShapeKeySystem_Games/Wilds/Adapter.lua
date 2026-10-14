@@ -11,11 +11,14 @@ local Cond  = require("ShapeKeySystem_Games.Wilds.Conditions")
 local Input = require("ShapeKeySystem_Games.Wilds.Input")
 local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 
+local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
+
 local A = {
     id = "mhwilds",
     name = "Monster Hunter Wilds",
     conditions = Cond,
     input = Input,
+    playback = Playback,
 }
 
 local M_JBN, M_DEMO_BUSY, M_DEMO_LOAD
