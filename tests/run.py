@@ -60,14 +60,6 @@ def glob(pattern, *_):
 G.json = L.table_from({"load_file": load_file, "dump_file": dump_file, "load_string": load_string})
 G.fs = L.table_from({"glob": glob})
 G.package.path = os.path.join(GAME, "autorun", "?.lua").replace("\\", "/")
-# REFramework only finds modules one folder below autorun ("A.B"); refuse deeper names like it does
-L.execute('''
-local file_searcher = package.searchers[2]
-package.searchers[2] = function(name)
-    local _, dots = name:gsub("%.", "")
-    if dots > 1 then return "REFramework cannot load nested module " .. name end
-    return file_searcher(name)
-end''')
 L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 from render_ui import font as _pil_font
 def py_measure(family, size, s):

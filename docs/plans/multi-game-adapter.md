@@ -9,7 +9,7 @@ Core 和 UI 里不再出现 `app.*` 类型名和游戏专属概念（猎人、�
 
 | # | 决定 | 理由 |
 |---|---|---|
-| D1 | 适配器放在 `autorun/ShapeKeySystem_Games/<Game>.lua`，一个游戏可以有多个文件（`Wilds.lua`、`WildsConditions.lua`、`WildsInput.lua`） | CLAUDE.md：REFramework 只解析 autorun 下一层的 `Folder.Module`。注意 RE4 差分管理器用了两层 require（`ArmorVariantManager_Core.Conditions.Registry`），这条规则可能写得太绝对，荒野实测之前仍按一层设计 |
+| D1 | 适配器放在 `autorun/ShapeKeySystem_Games/<Game>/`，入口为 `Adapter.lua`，其余按领域分文件（`Wilds/Conditions.lua`、`Wilds/Input.lua`、`Wilds/Probe.lua`） | 荒野中两级 require（`A.B.C`）可以正常解析，目录深度不受限制；仍须在加载时 require |
 | D2 | 适配器是一张 Lua 表，字段可选，按能力（`caps`）声明支持哪些功能；缺的功能由 Core 降级，不报错 | 崛起没有形态键驱动骨骼，只能用捏脸；有的游戏没有过场 hook |
 | D3 | 适配器顶层只定义表，**不调用 sdk**（不做 `find_type_definition` / `sdk.hook` / 单例查询）；这些都放进 `A.init(events)`，只有选中的适配器才会调用 | #6：所有适配器都在加载时 require，没选中的不能碰游戏 |
 | D4 | `via.*` 引擎类型（`via.render.Mesh`、`via.Transform`、`via.Joint`、`via.hid.Mouse`、`via.SceneManager`、`via.motion.Motion`）留在 Core | 所有 RE 引擎游戏都有，不属于游戏层 |
@@ -28,7 +28,7 @@ ShapeKeySystem.lua                 入口：选适配器 -> SKS.init(adapter)，
 ShapeKeySystem_Core/*              与游戏无关：profile 编译、表情计算、写入、捏脸、预设、条件求值、扫描框架
 ShapeKeySystem_UI/*                与游戏无关：面板；游戏相关的文字从 adapter.terms 取
 ShapeKeySystem_Games/Registry.lua  require 全部适配器，pick(game_name) -> adapter | nil
-ShapeKeySystem_Games/Wilds*.lua    荒野适配器
+ShapeKeySystem_Games/Wilds/*.lua   荒野适配器
 ```
 
 依赖方向：入口 → Games / Core / UI；Core 只通过 `SKS.adapter`（由 init 注入）访问游戏层，不 require
@@ -77,11 +77,11 @@ A.scene_search_type     = "via.motion.Motion"    -- 全场景搜索其他角色�
 
 | 现在 | 荒野实现 | 搬到 |
 |---|---|---|
-| `Scene.lua:21` `S.master_root`：`app.PlayerManager:getMasterPlayer():get_Object():get_Transform()` | `A.primary_root` | `Wilds.lua` |
-| `Guard.lua:66-70`：`getMasterPlayer().<Character>k__BackingField:get_IsSetUp()` | `A.primary_ready` | `Wilds.lua` |
-| `Scene.lua:38`：脸 = 有 `fcParam_001` 关节 | `A.is_face` | `Wilds.lua` |
-| `Scene.lua:45,135`：`Player_Face*` 子节点优先 | `A.face_rank`；主角色根下只找 rank > 0 的子节点 | `Wilds.lua` |
-| `Scene.lua:70`：只看 `ch02*` / `ch03*` 子节点（NPC 的脸也有 fcParam） | `A.is_part` | `Wilds.lua` |
+| `Scene.lua:21` `S.master_root`：`app.PlayerManager:getMasterPlayer():get_Object():get_Transform()` | `A.primary_root` | `Wilds/Adapter.lua` |
+| `Guard.lua:66-70`：`getMasterPlayer().<Character>k__BackingField:get_IsSetUp()` | `A.primary_ready` | `Wilds/Adapter.lua` |
+| `Scene.lua:38`：脸 = 有 `fcParam_001` 关节 | `A.is_face` | `Wilds/Adapter.lua` |
+| `Scene.lua:45,135`：`Player_Face*` 子节点优先 | `A.face_rank`；主角色根下只找 rank > 0 的子节点 | `Wilds/Adapter.lua` |
+| `Scene.lua:70`：只看 `ch02*` / `ch03*` 子节点（NPC 的脸也有 fcParam） | `A.is_part` | `Wilds/Adapter.lua` |
 | `Scene.lua:48-58`、`Writer.lua:19`：`findComponents(via.motion.Motion)` 全场景搜索 | 保持不变，类型名从 `A.scene_search_type` 读 | Core |
 
 角色分类不变：`primary`（父节点 = `primary_root()`），其他的都是非主角色（预览角色、过场副本 `Pl000_00`、其他玩家），
@@ -149,9 +149,9 @@ A.init(events)
 
 | 现在 | 搬到 |
 |---|---|
-| `Guard.lua:24-26` `app.DemoMediator` 类型和方法（顶层，违反 D3） | `Wilds.lua` 的 `init` |
+| `Guard.lua:24-26` `app.DemoMediator` 类型和方法（顶层，违反 D3） | `Wilds/Adapter.lua` 的 `init` |
 | `Guard.lua:55` `G.game_stable`：DemoMediator `IsBusy` / `IsBusyLoad` + 主角色 `IsSetUp`（每 10 帧查一次） | `A.gate`；Core 的 `Guard.game_stable` 改为调用它 |
-| `Guard.lua:82` `G.hook_cutscene`：`requestSkip` / `execSkip` / `requestStop` / `requestForceStop` / `unload`、`onPlayStartTimeline` | `Wilds.lua` 的 `init` → `events.release` / `events.segment` |
+| `Guard.lua:82` `G.hook_cutscene`：`requestSkip` / `execSkip` / `requestStop` / `requestForceStop` / `unload`、`onPlayStartTimeline` | `Wilds/Adapter.lua` 的 `init` → `events.release` / `events.segment` |
 | `Guard.lua:105` `G.hook_equip_build`：`app.HunterCharacter.onEquipBuildEnd` | `init` → `events.rebuilt` |
 | `Guard.lua:114` `G.hook_menus`：`GUI010100` / `GUI010101` 只 hook onOpen，`GUI010102` hook onOpen / onClose | `init` → `events.menu` |
 | `ShapeKeySystem.lua:19` `app.GUI040200` onOpen / onClose | `init` → `events.preview` |
@@ -187,7 +187,7 @@ A.conditions = {
   条件集就能跨游戏用。对照过 RE4 差分管理器：它把血量叫 `hp_ratio`、战斗叫 `is_battle`，可见不写下来就会各叫各的；
   它没有耐力，也没有「拔刀」，所以 `stamina_pct`、`weapon_on` 和 `weapon_type`、`weapon_form`、`spirit_level` 一样留给荒野。条件集文件里出现本游戏没有的 id 时，按现有规则视为不满足
   （`Conditions.lua` 头部注释），不需要做迁移。
-- 荒野的 getter 原样搬进 `WildsConditions.lua`（`Conditions.lua:20-29,63-195`）。
+- 荒野的 getter 原样搬进 `Wilds/Conditions.lua`（`Conditions.lua:20-29,63-195`）。
 
 ### 2.7 输入屏蔽
 
@@ -203,9 +203,9 @@ A.input = {
 
 | 现在 | 搬到 |
 |---|---|
-| `InputBlocker.lua:204` `clear_game_inputs` + `:216-232` hook `app.GameInputManager.updatePlayerInput/updateUIInput` | `WildsInput.lua` 的 `install` |
-| `InputBlocker.lua:236-248` hook `app.GUIManager.isMouseCursorAvailable` 返回 true（放开光标） | `WildsInput.lua` 的 `install` |
-| `InputBlocker.lua:182` `capture_and_clear_mouse` 里的 `app.AppMouseKeyboardManager` | `WildsInput.lua` 的 `capture_mouse` |
+| `InputBlocker.lua:204` `clear_game_inputs` + `:216-232` hook `app.GameInputManager.updatePlayerInput/updateUIInput` | `Wilds/Input.lua` 的 `install` |
+| `InputBlocker.lua:236-248` hook `app.GUIManager.isMouseCursorAvailable` 返回 true（放开光标） | `Wilds/Input.lua` 的 `install` |
+| `InputBlocker.lua:182` `capture_and_clear_mouse` 里的 `app.AppMouseKeyboardManager` | `Wilds/Input.lua` 的 `capture_mouse` |
 | `InputBlocker.lua` 其余部分 | 留在 UI |
 
 没有 `A.input` 的游戏：面板照常可用，但游戏也会收到输入；状态栏显示「本游戏不支持输入屏蔽」。
@@ -225,7 +225,7 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）不�
 ### 2.9 调试探针
 
 `Probe.lua` 只服务荒野（`app.CharacterEditRegionRoot` 的 blendshape 哈希表），改成可选的 `A.probe(path)`，
-文件搬到 `ShapeKeySystem_Games/WildsProbe.lua`；没有 probe 的游戏隐藏调试页的按钮。
+文件搬到 `ShapeKeySystem_Games/Wilds/Probe.lua`；没有 probe 的游戏隐藏调试页的按钮。
 
 ## 3. 信号字典和 profile 跨游戏复用（#4）
 
@@ -314,7 +314,7 @@ SKS.init(A)    -- 内部调用 A.init(events)，然后按 A.caps 建立状态
 
 ## 7. 实施顺序
 
-1. **#3** 拆出 `Wilds.lua` / `WildsConditions.lua` / `WildsInput.lua` / `WildsProbe.lua`，Core 通过 `SKS.adapter` 调用；
+1. **#3** 拆出 `Wilds/Adapter.lua` / `Wilds/Conditions.lua` / `Wilds/Input.lua` / `Wilds/Probe.lua`，Core 通过 `SKS.adapter` 调用；
    入口暂时固定选荒野。只搬代码和改名（D8），不加新功能。
 2. **#4** 引入 `A.raw` / `A.bind` / `A.read`、signals `raw` 字段、D6 和 D10。
 3. **#5** builtin 分目录，加载路径改成 `builtin/<id>/`，`deploy.ps1` 清理旧文件。
