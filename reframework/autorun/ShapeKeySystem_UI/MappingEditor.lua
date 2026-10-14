@@ -69,7 +69,8 @@ function E.summary(ctx, node)
     if kind == "s" then
         for _, sd in ipairs(ctx.st.mapping.signals or {}) do
             if sd.name == node.s then
-                label = string.format("%s · fcParam_%03d", sd.name, sd.param)
+                local param_name = string.format("fcParam_%03d", sd.param)
+                label = sd.name == param_name and param_name or (sd.name .. " · " .. param_name)
                 detail = sd.note .. (sd.guessed and "（推测）" or "")
                 break
             end
@@ -173,11 +174,19 @@ local function signal_picker(ctx, draft, node, id, x, y, w)
     local signals = ctx.st.mapping.signals or {}
     local selected
     for _, sd in ipairs(signals) do if sd.name == node.s then selected = sd end end
-    local title = selected and string.format("%s · fcParam_%03d", selected.name, selected.param) or (node.s or "选择信号")
+    local title
+    if selected then
+        local param_name = string.format("fcParam_%03d", selected.param)
+        title = selected.name == param_name and param_name or (selected.name .. " · " .. param_name)
+    else
+        title = node.s or "选择信号"
+    end
     local items = {}
     for _, sd in ipairs(signals) do
+        local param_name = string.format("fcParam_%03d", sd.param)
+        local name_label = sd.name == param_name and param_name or (sd.name .. " · " .. param_name)
         items[#items + 1] = { value = sd.name,
-            label = string.format("%s · fcParam_%03d · %s%s", sd.name, sd.param, sd.note,
+            label = string.format("%s · %s%s", name_label, sd.note,
                 sd.guessed and "（推测）" or "") }
     end
     draft.search = draft.search or {}

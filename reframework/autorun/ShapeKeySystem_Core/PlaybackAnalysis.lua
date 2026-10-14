@@ -80,7 +80,10 @@ function A:bindings(prog, signals, channels, revision)
             end
         end
         local param_name = string.format("fcParam_%03d", param)
-        row.label = #aliases > 0 and (table.concat(aliases, " / ") .. " · " .. param_name) or param_name
+        -- 通用 fcParam 名称只是补全编号，不重复显示为“fcParam · fcParam”。
+        local semantic = {}
+        for _, alias in ipairs(aliases) do if alias ~= param_name then semantic[#semantic + 1] = alias end end
+        row.label = #semantic > 0 and (table.concat(semantic, " / ") .. " · " .. param_name) or param_name
         row.purpose = #notes > 0 and table.concat(notes, "；") or "词典尚未标注用途"
         row.guessed, row.mappings, row.present_count = guessed, {}, 0
     end

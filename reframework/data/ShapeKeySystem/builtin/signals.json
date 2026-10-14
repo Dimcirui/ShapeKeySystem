@@ -2,68 +2,1005 @@
   "schema": "sks.signals/1",
   "full": 0.01,
   "signals": [
-    { "name": "blink.L",          "param": 1,   "note": "L_EyeClose 闭眼" },
-    { "name": "blink.R",          "param": 2,   "note": "R_EyeClose 闭眼" },
-    { "name": "eyeWide.L",        "param": 3,   "note": "睁大（推测）", "guessed": true },
-    { "name": "eyeWide.R",        "param": 4,   "note": "睁大（推测）", "guessed": true },
-    { "name": "eyeSquint.L",      "param": 5,   "note": "L_EyeBring 眯眼" },
-    { "name": "eyeSquint.R",      "param": 6,   "note": "R_EyeBring 眯眼" },
-    { "name": "browBring.L",      "param": 15,  "note": "L_EyeBrow_Bring 皱眉肌" },
-    { "name": "browBring.R",      "param": 16,  "note": "R_EyeBrow_Bring 皱眉肌" },
-    { "name": "browDown.L",       "param": 17,  "note": "L_EyeBrow_Down 压眉" },
-    { "name": "browDown.R",       "param": 18,  "note": "R_EyeBrow_Down 压眉" },
-    { "name": "browInnerUp.L",    "param": 19,  "note": "L_EyeBrow_CenterUp 眉心上提" },
-    { "name": "browInnerUp.R",    "param": 20,  "note": "R_EyeBrow_CenterUp 眉心上提" },
-    { "name": "browOuterUp.L",    "param": 21,  "note": "L_EyeBrow_OuterUp 眉尾上提" },
-    { "name": "browOuterUp.R",    "param": 22,  "note": "R_EyeBrow_OuterUp 眉尾上提" },
-    { "name": "sneer.L",          "param": 23,  "note": "L_LLSAN 提上唇鼻翼肌" },
-    { "name": "sneer.R",          "param": 24,  "note": "R_LLSAN 提上唇鼻翼肌" },
-    { "name": "upperLipUp.L",     "param": 29,  "note": "L_LLS 提上唇肌" },
-    { "name": "upperLipUp.R",     "param": 30,  "note": "R_LLS 提上唇肌" },
-    { "name": "smileMinor.L",     "param": 31,  "note": "L_Zm 颧小肌" },
-    { "name": "smileMinor.R",     "param": 32,  "note": "R_Zm 颧小肌" },
-    { "name": "smile.L",          "param": 33,  "note": "L_Z 颧大肌" },
-    { "name": "smile.R",          "param": 34,  "note": "R_Z 颧大肌" },
-    { "name": "dimple.L",         "param": 35,  "note": "L_B 颊肌" },
-    { "name": "dimple.R",         "param": 36,  "note": "R_B 颊肌" },
-    { "name": "stretch.L",        "param": 37,  "note": "L_Platysma 颈阔肌" },
-    { "name": "stretch.R",        "param": 38,  "note": "R_Platysma 颈阔肌" },
-    { "name": "frown.L",          "param": 39,  "note": "L_DAO 降口角肌" },
-    { "name": "frown.R",          "param": 40,  "note": "R_DAO 降口角肌" },
-    { "name": "lowerLipDown.L",   "param": 41,  "note": "L_DLI 降下唇肌" },
-    { "name": "lowerLipDown.R",   "param": 42,  "note": "R_DLI 降下唇肌" },
-    { "name": "funnel.L",         "param": 43,  "note": "L_Funnel 嘟嘴（漏斗）" },
-    { "name": "funnel.R",         "param": 44,  "note": "R_Funnel 嘟嘴（漏斗）" },
-    { "name": "press.L",          "param": 45,  "note": "L_Press 抿嘴" },
-    { "name": "press.R",          "param": 46,  "note": "R_Press 抿嘴" },
-    { "name": "mouthMove.left",   "param": 47,  "note": "MouthMove_Left 嘴左移" },
-    { "name": "mouthMove.right",  "param": 48,  "note": "MouthMove_Right 嘴右移" },
-    { "name": "mouthMove.up",     "param": 49,  "note": "MouthMove_Upper（含义推测）", "guessed": true },
-    { "name": "mouthMove.down",   "param": 50,  "note": "MouthMove_Down" },
-    { "name": "chinRaise",        "param": 51,  "note": "ChinRaiseUp 颏肌上提" },
-    { "name": "jawOpen",          "param": 52,  "note": "JawOpen 张嘴" },
-    { "name": "cheekShrink",      "param": 57,  "note": "Cheek_Shrink 吸颊" },
-    { "name": "upperLipRoll",     "param": 58,  "note": "UpperLip_Roll 上唇内卷" },
-    { "name": "lowerLipRoll",     "param": 59,  "note": "UnderLip_Roll 下唇内卷" },
-    { "name": "puff.L",           "param": 78,  "note": "L_Mouth_Puff 鼓腮" },
-    { "name": "puff.R",           "param": 79,  "note": "R_Mouth_Puff 鼓腮" },
-    { "name": "pose.01",          "param": 86,  "note": "Pose_01" },
-    { "name": "pose.02",          "param": 87,  "note": "Pose_02" },
-    { "name": "pose.03",          "param": 88,  "note": "Pose_03" },
-    { "name": "pose.04",          "param": 89,  "note": "Pose_04" },
-    { "name": "pose.05",          "param": 90,  "note": "Pose_05" },
-    { "name": "pose.06",          "param": 91,  "note": "Pose_06" },
-    { "name": "pose.07",          "param": 92,  "note": "Pose_07" },
-    { "name": "pose.08",          "param": 93,  "note": "Pose_08" },
-    { "name": "pose.09",          "param": 94,  "note": "Pose_09" },
-    { "name": "pose.10",          "param": 95,  "note": "Pose_10" },
-    { "name": "pose.11",          "param": 96,  "note": "Pose_11" },
-    { "name": "pose.12",          "param": 97,  "note": "Pose_12" },
-    { "name": "cheekSquint.L",    "param": 109, "note": "L_ZEC 笑+闭眼修正（推测）", "guessed": true },
-    { "name": "cheekSquint.R",    "param": 110, "note": "R_ZEC 笑+闭眼修正（推测）", "guessed": true },
-    { "name": "funnelTogether.L", "param": 175, "note": "L_F_LT 嘟嘴+双唇合拢（推测为 pucker）", "guessed": true },
-    { "name": "funnelTogether.R", "param": 176, "note": "R_F_LT 嘟嘴+双唇合拢（推测为 pucker）", "guessed": true },
-    { "name": "lipsTogether.L",   "param": 177, "note": "L_Lip_Together 双唇合拢" },
-    { "name": "lipsTogether.R",   "param": 178, "note": "R_Lip_Together 双唇合拢" }
+    {
+      "name": "blink.L",
+      "param": 1,
+      "note": "L_EyeClose；角色左侧：闭眼、眨眼"
+    },
+    {
+      "name": "blink.R",
+      "param": 2,
+      "note": "R_EyeClose；角色右侧：闭眼、眨眼"
+    },
+    {
+      "name": "eyeWide.L",
+      "param": 3,
+      "note": "角色左侧：睁大眼睛"
+    },
+    {
+      "name": "eyeWide.R",
+      "param": 4,
+      "note": "角色右侧：睁大眼睛"
+    },
+    {
+      "name": "eyeSquint.L",
+      "param": 5,
+      "note": "L_EyeBring；角色左侧：眯眼、收窄眼裂"
+    },
+    {
+      "name": "eyeSquint.R",
+      "param": 6,
+      "note": "R_EyeBring；角色右侧：眯眼、收窄眼裂"
+    },
+    {
+      "name": "fcParam_007",
+      "param": 7,
+      "note": "左眼球向左看"
+    },
+    {
+      "name": "native.R_Eye_RightLook",
+      "param": 8,
+      "note": "R_Eye_RightLook；右眼球向右看"
+    },
+    {
+      "name": "native.L_Eye_RightLook",
+      "param": 9,
+      "note": "L_Eye_RightLook；左眼球向右看"
+    },
+    {
+      "name": "fcParam_010",
+      "param": 10,
+      "note": "右眼球向左看"
+    },
+    {
+      "name": "native.L_Eye_UnderLook",
+      "param": 11,
+      "note": "L_Eye_UnderLook；左眼向下看，伴随半合眼"
+    },
+    {
+      "name": "native.R_Eye_UnderLook",
+      "param": 12,
+      "note": "R_Eye_UnderLook；右眼向下看，伴随半合眼"
+    },
+    {
+      "name": "fcParam_013",
+      "param": 13,
+      "note": "左眼睁大并向上看"
+    },
+    {
+      "name": "fcParam_014",
+      "param": 14,
+      "note": "右眼睁大并向上看"
+    },
+    {
+      "name": "browBring.L",
+      "param": 15,
+      "note": "L_EyeBrow_Bring；角色左侧：眉头向中间聚拢、皱眉"
+    },
+    {
+      "name": "browBring.R",
+      "param": 16,
+      "note": "R_EyeBrow_Bring；角色右侧：眉头向中间聚拢、皱眉"
+    },
+    {
+      "name": "browDown.L",
+      "param": 17,
+      "note": "L_EyeBrow_Down；角色左侧：压眉"
+    },
+    {
+      "name": "browDown.R",
+      "param": 18,
+      "note": "R_EyeBrow_Down；角色右侧：压眉"
+    },
+    {
+      "name": "browInnerUp.L",
+      "param": 19,
+      "note": "L_EyeBrow_CenterUp；角色左侧：眉心上提"
+    },
+    {
+      "name": "browInnerUp.R",
+      "param": 20,
+      "note": "R_EyeBrow_CenterUp；角色右侧：眉心上提"
+    },
+    {
+      "name": "browOuterUp.L",
+      "param": 21,
+      "note": "L_EyeBrow_OuterUp；角色左侧：眉尾上提"
+    },
+    {
+      "name": "browOuterUp.R",
+      "param": 22,
+      "note": "R_EyeBrow_OuterUp；角色右侧：眉尾上提"
+    },
+    {
+      "name": "sneer.L",
+      "param": 23,
+      "note": "L_LLSAN；角色左侧：提上唇鼻翼肌动作；皱鼻与上唇上提"
+    },
+    {
+      "name": "sneer.R",
+      "param": 24,
+      "note": "R_LLSAN；角色右侧：提上唇鼻翼肌动作；皱鼻与上唇上提"
+    },
+    {
+      "name": "fcParam_025",
+      "param": 25,
+      "note": "左侧鼓鼻"
+    },
+    {
+      "name": "fcParam_026",
+      "param": 26,
+      "note": "右侧鼓鼻"
+    },
+    {
+      "name": "fcParam_027",
+      "param": 27,
+      "note": "左侧缩鼻"
+    },
+    {
+      "name": "fcParam_028",
+      "param": 28,
+      "note": "右侧缩鼻"
+    },
+    {
+      "name": "upperLipUp.L",
+      "param": 29,
+      "note": "L_LLS；角色左侧：提上唇肌动作"
+    },
+    {
+      "name": "upperLipUp.R",
+      "param": 30,
+      "note": "R_LLS；角色右侧：提上唇肌动作"
+    },
+    {
+      "name": "smileMinor.L",
+      "param": 31,
+      "note": "L_Zm；角色左侧：颧小肌动作；辅助提唇与笑容"
+    },
+    {
+      "name": "smileMinor.R",
+      "param": 32,
+      "note": "R_Zm；角色右侧：颧小肌动作；辅助提唇与笑容"
+    },
+    {
+      "name": "smile.L",
+      "param": 33,
+      "note": "L_Z；角色左侧：颧大肌动作；嘴角上扬"
+    },
+    {
+      "name": "smile.R",
+      "param": 34,
+      "note": "R_Z；角色右侧：颧大肌动作；嘴角上扬"
+    },
+    {
+      "name": "dimple.L",
+      "param": 35,
+      "note": "L_B；角色左侧：颊肌动作；颊部与嘴角附近收紧"
+    },
+    {
+      "name": "dimple.R",
+      "param": 36,
+      "note": "R_B；角色右侧：颊肌动作；颊部与嘴角附近收紧"
+    },
+    {
+      "name": "stretch.L",
+      "param": 37,
+      "note": "L_Platysma；角色左侧：颈阔肌动作；口角与下脸拉紧"
+    },
+    {
+      "name": "stretch.R",
+      "param": 38,
+      "note": "R_Platysma；角色右侧：颈阔肌动作；口角与下脸拉紧"
+    },
+    {
+      "name": "frown.L",
+      "param": 39,
+      "note": "L_DAO；角色左侧：降口角肌动作；嘴角下压"
+    },
+    {
+      "name": "frown.R",
+      "param": 40,
+      "note": "R_DAO；角色右侧：降口角肌动作；嘴角下压"
+    },
+    {
+      "name": "lowerLipDown.L",
+      "param": 41,
+      "note": "L_DLI；角色左侧：降下唇肌动作"
+    },
+    {
+      "name": "lowerLipDown.R",
+      "param": 42,
+      "note": "R_DLI；角色右侧：降下唇肌动作"
+    },
+    {
+      "name": "funnel.L",
+      "param": 43,
+      "note": "L_Funnel；角色左侧：漏斗状嘟嘴"
+    },
+    {
+      "name": "funnel.R",
+      "param": 44,
+      "note": "R_Funnel；角色右侧：漏斗状嘟嘴"
+    },
+    {
+      "name": "press.L",
+      "param": 45,
+      "note": "L_Press；角色左侧：抿嘴、压紧嘴唇"
+    },
+    {
+      "name": "press.R",
+      "param": 46,
+      "note": "R_Press；角色右侧：抿嘴、压紧嘴唇"
+    },
+    {
+      "name": "mouthMove.left",
+      "param": 47,
+      "note": "MouthMove_Left；嘴整体左移"
+    },
+    {
+      "name": "mouthMove.right",
+      "param": 48,
+      "note": "MouthMove_Right；嘴整体右移"
+    },
+    {
+      "name": "mouthMove.up",
+      "param": 49,
+      "note": "MouthMove_Upper；嘴整体上移"
+    },
+    {
+      "name": "mouthMove.down",
+      "param": 50,
+      "note": "MouthMove_Down；嘴整体下移"
+    },
+    {
+      "name": "chinRaise",
+      "param": 51,
+      "note": "ChinRaiseUp；下巴、颏部上提"
+    },
+    {
+      "name": "jawOpen",
+      "param": 52,
+      "note": "JawOpen；张嘴"
+    },
+    {
+      "name": "fcParam_053",
+      "param": 53,
+      "note": "左侧下嘴唇向左移"
+    },
+    {
+      "name": "fcParam_054",
+      "param": 54,
+      "note": "右侧下嘴唇向右移"
+    },
+    {
+      "name": "fcParam_055",
+      "param": 55,
+      "note": "嘴巴微张开，咬牙状"
+    },
+    {
+      "name": "fcParam_056",
+      "param": 56,
+      "note": "下嘴唇向内收缩"
+    },
+    {
+      "name": "cheekShrink",
+      "param": 57,
+      "note": "Cheek_Shrink；吸颊、脸颊内收、嘟嘴"
+    },
+    {
+      "name": "upperLipRoll",
+      "param": 58,
+      "note": "UpperLip_Roll；上唇内卷"
+    },
+    {
+      "name": "lowerLipRoll",
+      "param": 59,
+      "note": "UnderLip_Roll；下唇内卷"
+    },
+    {
+      "name": "fcParam_060",
+      "param": 60,
+      "note": "喉部鼓起（视觉描述；目标为下颌下方与舌骨骼）"
+    },
+    {
+      "name": "fcParam_061",
+      "param": 61,
+      "note": "喉部收缩（视觉描述；目标为下颌下方与舌骨骼）"
+    },
+    {
+      "name": "fcParam_062",
+      "param": 62,
+      "note": "吐舌"
+    },
+    {
+      "name": "fcParam_063",
+      "param": 63,
+      "note": "脖子鼓起（视觉描述；目标为下颌下方与舌骨骼）"
+    },
+    {
+      "name": "fcParam_064",
+      "param": 64,
+      "note": "脖子收缩（视觉描述；目标为下颌下方与舌骨骼）"
+    },
+    {
+      "name": "fcParam_065",
+      "param": 65,
+      "note": "下巴和舌头相关"
+    },
+    {
+      "name": "fcParam_066",
+      "param": 66,
+      "note": "下巴和舌头相关"
+    },
+    {
+      "name": "fcParam_067",
+      "param": 67,
+      "note": "下巴和舌头相关"
+    },
+    {
+      "name": "fcParam_068",
+      "param": 68,
+      "note": "下巴和舌头相关"
+    },
+    {
+      "name": "fcParam_069",
+      "param": 69,
+      "note": "下巴和舌头相关"
+    },
+    {
+      "name": "fcParam_070",
+      "param": 70,
+      "note": "舌头相关"
+    },
+    {
+      "name": "fcParam_071",
+      "param": 71,
+      "note": "舌头相关"
+    },
+    {
+      "name": "fcParam_072",
+      "param": 72,
+      "note": "舌头相关"
+    },
+    {
+      "name": "fcParam_073",
+      "param": 73,
+      "note": "舌头相关"
+    },
+    {
+      "name": "native.L_LLSAN_Lip",
+      "param": 74,
+      "note": "L_LLSAN_Lip；角色左侧：提上唇鼻翼肌的唇部修正"
+    },
+    {
+      "name": "native.R_LLSAN_Lip",
+      "param": 75,
+      "note": "R_LLSAN_Lip；角色右侧：提上唇鼻翼肌的唇部修正"
+    },
+    {
+      "name": "fcParam_076",
+      "param": 76,
+      "note": "下巴向下移动"
+    },
+    {
+      "name": "fcParam_077",
+      "param": 77,
+      "note": "下巴小幅向下移动"
+    },
+    {
+      "name": "puff.L",
+      "param": 78,
+      "note": "L_Mouth_Puff；角色左侧：鼓腮"
+    },
+    {
+      "name": "puff.R",
+      "param": 79,
+      "note": "R_Mouth_Puff；角色右侧：鼓腮"
+    },
+    {
+      "name": "fcParam_080",
+      "param": 80,
+      "note": "上嘴唇包住下嘴唇"
+    },
+    {
+      "name": "fcParam_081",
+      "param": 81,
+      "note": "下嘴唇向上嘴唇移动"
+    },
+    {
+      "name": "fcParam_082",
+      "param": 82,
+      "note": "上嘴唇向外张"
+    },
+    {
+      "name": "fcParam_083",
+      "param": 83,
+      "note": "下嘴唇向外张"
+    },
+    {
+      "name": "fcParam_084",
+      "param": 84,
+      "note": "上嘴唇内缩"
+    },
+    {
+      "name": "fcParam_085",
+      "param": 85,
+      "note": "下嘴唇内缩"
+    },
+    {
+      "name": "pose.01",
+      "param": 86,
+      "note": "Pose_01；预设面部姿势 01；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.02",
+      "param": 87,
+      "note": "Pose_02；预设面部姿势 02；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.03",
+      "param": 88,
+      "note": "Pose_03；预设面部姿势 03；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.04",
+      "param": 89,
+      "note": "Pose_04；预设面部姿势 04；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.05",
+      "param": 90,
+      "note": "Pose_05；预设面部姿势 05；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.06",
+      "param": 91,
+      "note": "Pose_06；预设面部姿势 06；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.07",
+      "param": 92,
+      "note": "Pose_07；预设面部姿势 07；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.08",
+      "param": 93,
+      "note": "Pose_08；预设面部姿势 08；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.09",
+      "param": 94,
+      "note": "Pose_09；预设面部姿势 09；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.10",
+      "param": 95,
+      "note": "Pose_10；预设面部姿势 10；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.11",
+      "param": 96,
+      "note": "Pose_11；预设面部姿势 11；具体情绪、口型未知"
+    },
+    {
+      "name": "pose.12",
+      "param": 97,
+      "note": "Pose_12；预设面部姿势 12；具体情绪、口型未知"
+    },
+    {
+      "name": "fcParam_098",
+      "param": 98,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_099",
+      "param": 99,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_100",
+      "param": 100,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "native.L_EBEC",
+      "param": 101,
+      "note": "L_EBEC；角色左侧：EyeBring 与 EyeClose 的组合修正"
+    },
+    {
+      "name": "native.R_EBEC",
+      "param": 102,
+      "note": "R_EBEC；角色右侧：EyeBring 与 EyeClose 的组合修正"
+    },
+    {
+      "name": "native.L_LUEC",
+      "param": 103,
+      "note": "L_LUEC；角色左侧：可能为向上看与闭眼修正"
+    },
+    {
+      "name": "native.R_LUEC",
+      "param": 104,
+      "note": "R_LUEC；角色右侧：可能为向上看与闭眼修正"
+    },
+    {
+      "name": "native.L_LDEC",
+      "param": 105,
+      "note": "L_LDEC；角色左侧：可能为向下看与闭眼修正"
+    },
+    {
+      "name": "native.R_LDEC",
+      "param": 106,
+      "note": "R_LDEC；角色右侧：可能为向下看与闭眼修正"
+    },
+    {
+      "name": "native.L_EBDEC",
+      "param": 107,
+      "note": "L_EBDEC；角色左侧：可能为压眉与闭眼修正"
+    },
+    {
+      "name": "native.R_EBDEC",
+      "param": 108,
+      "note": "R_EBDEC；角色右侧：可能为压眉与闭眼修正"
+    },
+    {
+      "name": "cheekSquint.L",
+      "param": 109,
+      "note": "L_ZEC；角色左侧：颧大肌（笑容）与闭眼组合修正"
+    },
+    {
+      "name": "cheekSquint.R",
+      "param": 110,
+      "note": "R_ZEC；角色右侧：颧大肌（笑容）与闭眼组合修正"
+    },
+    {
+      "name": "native.L_EyeBrowBaD",
+      "param": 111,
+      "note": "L_EyeBrowBaD；角色左侧：眉部 Bring/Down 组合修正"
+    },
+    {
+      "name": "native.R_EyeBrowBaD",
+      "param": 112,
+      "note": "R_EyeBrowBaD；角色右侧：眉部 Bring/Down 组合修正"
+    },
+    {
+      "name": "native.L_EyeBrowBaCU",
+      "param": 113,
+      "note": "L_EyeBrowBaCU；角色左侧：眉部 Bring/CenterUp 组合修正"
+    },
+    {
+      "name": "native.R_EyeBrowBaCU",
+      "param": 114,
+      "note": "R_EyeBrowBaCU；角色右侧：眉部 Bring/CenterUp 组合修正"
+    },
+    {
+      "name": "fcParam_115",
+      "param": 115,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_116",
+      "param": 116,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_117",
+      "param": 117,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_118",
+      "param": 118,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_119",
+      "param": 119,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_120",
+      "param": 120,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_121",
+      "param": 121,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_122",
+      "param": 122,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_123",
+      "param": 123,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_124",
+      "param": 124,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_125",
+      "param": 125,
+      "note": "下嘴唇相关"
+    },
+    {
+      "name": "fcParam_126",
+      "param": 126,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_127",
+      "param": 127,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "native.MMU_Puff",
+      "param": 128,
+      "note": "MMU_Puff；嘴上移与鼓腮组合修正"
+    },
+    {
+      "name": "native.MMD_Puff",
+      "param": 129,
+      "note": "MMD_Puff；嘴下移与鼓腮组合修正"
+    },
+    {
+      "name": "native.MML_Puff",
+      "param": 130,
+      "note": "MML_Puff；嘴左移与鼓腮组合修正"
+    },
+    {
+      "name": "native.MMR_Puff",
+      "param": 131,
+      "note": "MMR_Puff；嘴右移与鼓腮组合修正"
+    },
+    {
+      "name": "native.L_LLS_Zm",
+      "param": 132,
+      "note": "L_LLS_Zm；角色左侧：提上唇肌与颧小肌组合修正"
+    },
+    {
+      "name": "native.R_LLS_Zm",
+      "param": 133,
+      "note": "R_LLS_Zm；角色右侧：提上唇肌与颧小肌组合修正"
+    },
+    {
+      "name": "native.L_ZmZ",
+      "param": 134,
+      "note": "L_ZmZ；角色左侧：颧小肌与颧大肌组合修正"
+    },
+    {
+      "name": "native.R_ZmZ",
+      "param": 135,
+      "note": "R_ZmZ；角色右侧：颧小肌与颧大肌组合修正"
+    },
+    {
+      "name": "native.L_ZB",
+      "param": 136,
+      "note": "L_ZB；角色左侧：颧大肌与颊肌组合修正"
+    },
+    {
+      "name": "native.R_ZB",
+      "param": 137,
+      "note": "R_ZB；角色右侧：颧大肌与颊肌组合修正"
+    },
+    {
+      "name": "native.L_PDAO",
+      "param": 138,
+      "note": "L_PDAO；角色左侧：P 与降口角肌组合修正"
+    },
+    {
+      "name": "native.R_PDAO",
+      "param": 139,
+      "note": "R_PDAO；角色右侧：P 与降口角肌组合修正"
+    },
+    {
+      "name": "native.L_DAODLI",
+      "param": 140,
+      "note": "L_DAODLI；角色左侧：降口角肌与降下唇肌组合修正"
+    },
+    {
+      "name": "native.R_DAODLI",
+      "param": 141,
+      "note": "R_DAODLI；角色右侧：降口角肌与降下唇肌组合修正"
+    },
+    {
+      "name": "native.L_LLSAN_F",
+      "param": 142,
+      "note": "L_LLSAN_F；角色左侧：提上唇鼻翼肌与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "native.R_LLSAN_F",
+      "param": 143,
+      "note": "R_LLSAN_F；角色右侧：提上唇鼻翼肌与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "native.L_DLI_F",
+      "param": 144,
+      "note": "L_DLI_F；角色左侧：降下唇肌与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "native.R_DLI_F",
+      "param": 145,
+      "note": "R_DLI_F；角色右侧：降下唇肌与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "native.L_Zm_Jo",
+      "param": 146,
+      "note": "L_Zm_Jo；角色左侧：颧小肌与张嘴组合修正"
+    },
+    {
+      "name": "native.R_Zm_Jo",
+      "param": 147,
+      "note": "R_Zm_Jo；角色右侧：颧小肌与张嘴组合修正"
+    },
+    {
+      "name": "native.L_Z_Jo",
+      "param": 148,
+      "note": "L_Z_Jo；角色左侧：颧大肌与张嘴组合修正"
+    },
+    {
+      "name": "native.R_Z_Jo",
+      "param": 149,
+      "note": "R_Z_Jo；角色右侧：颧大肌与张嘴组合修正"
+    },
+    {
+      "name": "native.L_B_Jo",
+      "param": 150,
+      "note": "L_B_Jo；角色左侧：颊肌与张嘴组合修正"
+    },
+    {
+      "name": "native.R_B_Jo",
+      "param": 151,
+      "note": "R_B_Jo；角色右侧：颊肌与张嘴组合修正"
+    },
+    {
+      "name": "native.L_P_Jo",
+      "param": 152,
+      "note": "L_P_Jo；角色左侧：P 与张嘴组合修正"
+    },
+    {
+      "name": "native.R_P_Jo",
+      "param": 153,
+      "note": "R_P_Jo；角色右侧：P 与张嘴组合修正"
+    },
+    {
+      "name": "fcParam_154",
+      "param": 154,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "native.UL_LipRoll",
+      "param": 155,
+      "note": "UL_LipRoll；唇内卷组合修正"
+    },
+    {
+      "name": "fcParam_156",
+      "param": 156,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_157",
+      "param": 157,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "native.L_MMU_F",
+      "param": 158,
+      "note": "L_MMU_F；角色左侧：嘴上移与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "native.R_MMU_F",
+      "param": 159,
+      "note": "R_MMU_F；角色右侧：嘴上移与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "fcParam_160",
+      "param": 160,
+      "note": "上、下嘴唇的中央与左侧相关"
+    },
+    {
+      "name": "fcParam_161",
+      "param": 161,
+      "note": "上、下嘴唇的中央与右侧相关"
+    },
+    {
+      "name": "fcParam_162",
+      "param": 162,
+      "note": "下嘴唇的中央与左侧相关"
+    },
+    {
+      "name": "fcParam_163",
+      "param": 163,
+      "note": "下嘴唇的中央与右侧相关"
+    },
+    {
+      "name": "fcParam_164",
+      "param": 164,
+      "note": "下嘴唇的中央与左侧相关"
+    },
+    {
+      "name": "fcParam_165",
+      "param": 165,
+      "note": "下嘴唇的中央与右侧相关"
+    },
+    {
+      "name": "fcParam_166",
+      "param": 166,
+      "note": "上、下嘴唇和两侧嘴角相关"
+    },
+    {
+      "name": "fcParam_167",
+      "param": 167,
+      "note": "上、下嘴唇和左侧嘴角相关"
+    },
+    {
+      "name": "native.L_LLSZ",
+      "param": 168,
+      "note": "L_LLSZ；角色左侧：提上唇肌与颧大肌组合修正"
+    },
+    {
+      "name": "native.R_LLSZ",
+      "param": 169,
+      "note": "R_LLSZ；角色右侧：提上唇肌与颧大肌组合修正"
+    },
+    {
+      "name": "native.L_ZF",
+      "param": 170,
+      "note": "L_ZF；角色左侧：颧大肌与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "native.R_ZF",
+      "param": 171,
+      "note": "R_ZF；角色右侧：颧大肌与漏斗嘟嘴组合修正"
+    },
+    {
+      "name": "native.L_F_Jo",
+      "param": 172,
+      "note": "L_F_Jo；角色左侧：漏斗嘟嘴与张嘴组合修正"
+    },
+    {
+      "name": "native.R_F_Jo",
+      "param": 173,
+      "note": "R_F_Jo；角色右侧：漏斗嘟嘴与张嘴组合修正"
+    },
+    {
+      "name": "native.Jo_LLR",
+      "param": 174,
+      "note": "Jo_LLR；张嘴与下唇内卷组合修正"
+    },
+    {
+      "name": "funnelTogether.L",
+      "param": 175,
+      "note": "L_F_LT；角色左侧：漏斗嘟嘴与双唇合拢组合修正；不能直接等同亲吻/pucker"
+    },
+    {
+      "name": "funnelTogether.R",
+      "param": 176,
+      "note": "R_F_LT；角色右侧：漏斗嘟嘴与双唇合拢组合修正；不能直接等同亲吻/pucker"
+    },
+    {
+      "name": "lipsTogether.L",
+      "param": 177,
+      "note": "L_Lip_Together；角色左侧：双唇合拢"
+    },
+    {
+      "name": "lipsTogether.R",
+      "param": 178,
+      "note": "R_Lip_Together；角色右侧：双唇合拢"
+    },
+    {
+      "name": "native.L_JoZB",
+      "param": 179,
+      "note": "L_JoZB；角色左侧：张嘴、颧大肌、颊肌组合修正"
+    },
+    {
+      "name": "native.R_JoZB",
+      "param": 180,
+      "note": "R_JoZB；角色右侧：张嘴、颧大肌、颊肌组合修正"
+    },
+    {
+      "name": "native.L_LLSAN_Jo",
+      "param": 181,
+      "note": "L_LLSAN_Jo；角色左侧：提上唇鼻翼肌与张嘴组合修正"
+    },
+    {
+      "name": "native.R_LLSAN_Jo",
+      "param": 182,
+      "note": "R_LLSAN_Jo；角色右侧：提上唇鼻翼肌与张嘴组合修正"
+    },
+    {
+      "name": "fcParam_183",
+      "param": 183,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_184",
+      "param": 184,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_185",
+      "param": 185,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_186",
+      "param": 186,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_187",
+      "param": 187,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_188",
+      "param": 188,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_189",
+      "param": 189,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_190",
+      "param": 190,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_191",
+      "param": 191,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_192",
+      "param": 192,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_193",
+      "param": 193,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_194",
+      "param": 194,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_195",
+      "param": 195,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_196",
+      "param": 196,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_197",
+      "param": 197,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_198",
+      "param": 198,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_199",
+      "param": 199,
+      "note": "相关部位尚未确定"
+    },
+    {
+      "name": "fcParam_200",
+      "param": 200,
+      "note": "相关部位尚未确定"
+    }
   ]
 }
