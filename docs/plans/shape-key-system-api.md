@@ -295,7 +295,8 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ```
 reframework/data/ShapeKeySystem/
   settings.json
-  builtin/  profiles/*.json, signals.json, aliases.json     （随插件发布，只读）
+  builtin/  profiles/*.json, aliases.json                   （随插件发布，只读；各游戏通用）
+            <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json  （随 mod 发布，只读）
   user/     bindings/*.json, profiles/*.json, sculpt/*.json  （用户自己的，插件只写这里）
 ```
@@ -354,7 +355,7 @@ reframework/data/ShapeKeySystem/
 ```
 reframework/data/ShapeKeySystem/
   settings.json                           全局设置；增益和视线只在这里作为"没有父预设时"的兜底
-  builtin/  profiles/*.json, signals.json, aliases.json
+  builtin/  profiles/*.json, aliases.json, <游戏 id>/（见第 8 节）
   mods/ | user/                           mods/ 随 mod 发布、只读；user/ 是唯一会写的地方
     default.json                          全局默认父预设
     profiles/*.json                       表情配置

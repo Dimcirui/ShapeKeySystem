@@ -417,12 +417,13 @@ local function sculpt_entry_state(e)
     return { id = e.id, name = e.name, source = e.source, folder = e.folder, target_part = e.target_part }
 end
 
--- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β"), builtin/armor_names.json
--- (generated from Modding-Toolkit's mhws_armor_sets.json); nil when unknown
+-- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β") from builtin/<adapter id>/<A.model_names>
+-- (Wilds: armor_names.json, generated from Modding-Toolkit's mhws_armor_sets.json); nil when unknown
 local armor_names = nil
 local function armor_name(model)
     if armor_names == nil then
-        local d = U.load_json(U.path("builtin", "armor_names.json"))
+        local A = SKS.adapter
+        local d = A.id and A.model_names and U.load_json(U.path("builtin", A.id, A.model_names))
         armor_names = d and type(d.models) == "table" and d.models or false
     end
     local e = armor_names and model and armor_names[model]

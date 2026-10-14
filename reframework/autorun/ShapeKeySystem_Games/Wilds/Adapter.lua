@@ -102,6 +102,8 @@ function A.read(handle, P, inv_full)
     end
 end
 
+A.model_names = "armor_names.json"   -- in builtin/mhwilds/
+
 -- ch03_012_0014 -> "ch03_012_001", "4"; the representative is the slot-2 part of the model
 function A.model_of(part)
     if type(part) ~= "string" then return nil end
