@@ -123,7 +123,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `dirty` | bool | 是否有未保存的修改 |
 | `can_undo` / `can_redo` | bool | |
 | `preset` | `{name, source}?` | 当前捏脸配置 |
-| `groups` | list of `{key, name, key_indices}` | 自动分组 |
+| `groups` | list of `{key, name, key_indices}` | 按部件分组；`key` 是部件 id，`name` 是装备名和部位（如「护锁刃龙 α/β · 躯干」），认不出时等于 `key` |
 | `keys` | list of SculptKey | 合并后的形态键 |
 
 `SculptKey`：
@@ -131,6 +131,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 { name = "Waist_thin",
   group = "body",
   parts = { "ch03_012_0012", "ch03_012_0014" },  -- 出现在哪些部件
+  part_labels = { "躯干", "腿部" },               -- parts 的显示名；都属于同一件已知装备时只写部位，认不出的保留 id
   value = 0.30,                                  -- 合并值，0~2
   default = 0.30,                                -- mod 自带默认值，没有时为 0
   overrides = { ["ch03_012_0014"] = 0.5 },       -- 按部件单独设的值

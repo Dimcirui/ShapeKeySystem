@@ -165,7 +165,7 @@ local function key_row(ctx, k, x, y, w)
     -- second line only for what the group header does not already say
     local sub = {}
     if k.mixed then sub[#sub + 1] = "表情叠加" end
-    if multi then sub[#sub + 1] = table.concat(k.parts, " · ") end
+    if multi then sub[#sub + 1] = table.concat(k.part_labels or k.parts, " · ") end
     if has_ovr then sub[#sub + 1] = "有部件单独值" end
     local h = (#sub > 0 and 42 or 34) + nparts * 30
     if not visible(y, h) then return h end
@@ -197,10 +197,10 @@ local function key_row(ctx, k, x, y, w)
     end
     if expanded and not ext then
         local oy = y + rh
-        for _, p in ipairs(k.parts) do
+        for i, p in ipairs(k.parts) do
             local ov = k.overrides[p]
             D.rect(x + 16, oy, 1, 30, C.line)
-            D.text_mid(p, x + 26, oy, 30, ov ~= nil and C.text or C.muted, W.small(), nw - 30)
+            D.text_mid(k.part_labels and k.part_labels[i] or p, x + 26, oy, 30, ov ~= nil and C.text or C.muted, W.small(), nw - 30)
             local ch, v = W.slider("ov:" .. k.name .. "|" .. p, x + nw, oy + 2, ax - x - nw - 12, 26, ov or k.value,
                 k.range[1], k.range[2], { step = 0.01, fmt = "%.2f" })
             if ch then call("set_sculpt_override", { name = k.name, part = p, value = v }) end
@@ -243,7 +243,9 @@ function Page.draw(ctx, x, y, w)
         end
         if #rows > 0 then
             local open = not s.collapsed[g.key] or filter ~= ""
-            local clicked, hh = W.header(g.name, x, cy, w, open, string.format("%d 项", #rows))
+            -- a named part keeps its id next to the count (binding files are named by it)
+            local stat = g.name ~= g.key and string.format("%s · %d 项", g.key, #rows) or string.format("%d 项", #rows)
+            local clicked, hh = W.header(g.name, x, cy, w, open, stat)
             if clicked then s.collapsed[g.key] = open end
             cy = cy + hh + 2
             if open then

@@ -103,6 +103,8 @@ function A.read(handle, P, inv_full)
 end
 
 A.model_names = "armor_names.json"   -- in builtin/mhwilds/
+-- the last digit of a part id (Arm, Body, Helmet, Leg, Waist)
+A.slot_names = { ["1"] = "腕部", ["2"] = "躯干", ["3"] = "头部", ["4"] = "腿部", ["5"] = "腰部" }
 
 -- ch03_012_0014 -> "ch03_012_001", "4"; the representative is the slot-2 part of the model
 function A.model_of(part)

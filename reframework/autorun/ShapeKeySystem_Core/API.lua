@@ -430,6 +430,33 @@ local function armor_name(model)
     return e and (e.zh or e.en) or nil
 end
 
+-- "ch03_032_5012" -> "护锁刃龙 α/β", "躯干" (A.slot_names; the slot number without one); nil when
+-- the model has no readable name
+local function part_name(part)
+    local model, slot = Presets.model_of(part)
+    local name = model and armor_name(model)
+    if not name then return nil end
+    local sn = SKS.adapter.slot_names
+    return name, sn and sn[slot] or slot
+end
+
+-- labels for a key's parts: only the slots when they all belong to one named model
+local function part_labels(parts)
+    local names, slots, same = {}, {}, true
+    for i, p in ipairs(parts) do
+        local name, slot = part_name(p)
+        names[i], slots[i] = name, slot
+        if not name or name ~= names[1] then same = false end
+    end
+    local out = {}
+    for i, p in ipairs(parts) do
+        if same and slots[i] then out[i] = slots[i]
+        elseif names[i] then out[i] = names[i] .. (slots[i] and (" · " .. slots[i]) or "")
+        else out[i] = p end
+    end
+    return out
+end
+
 -- where "绑定到" writes: the binding in effect (its file base) or, without one, a model-wide
 -- binding for the part with the most channels. Returns base, model, display name, data to start from
 local function bind_target()
@@ -496,13 +523,14 @@ local function build_sculpt_state()
     for i, k in ipairs(Sculpt.K.keys) do
         local o = {}
         for p, v in pairs(k.overrides) do o[p] = v end
-        keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), value = k.value,
+        keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts), value = k.value,
                     default = k.default, overrides = o, owner = k.owner,
                     locked = false, mixed = k.owner == "expression", in_preset = k.in_preset == true,
                     range = { Sculpt.RANGE[1], Sculpt.RANGE[2] } }
         local g = gi[k.group]
         if not g then
-            g = { key = k.group, name = k.group, key_indices = {} }
+            local name, slot = part_name(k.group)
+            g = { key = k.group, name = name and (name .. (slot and (" · " .. slot) or "")) or k.group, key_indices = {} }
             gi[k.group] = g; groups[#groups + 1] = g
         end
         g.key_indices[#g.key_indices + 1] = i

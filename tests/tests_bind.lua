@@ -70,6 +70,13 @@ SKS.call("rescan"); ticks(5)
 check(st.expression.profile.id == other, "after revert the binding switches the profile")
 SKS.call("bind_config", { kind = "expression", name = cur }); SKS.call("rescan"); ticks(5)
 
+-- sculpt groups name the armour and its slot; the id stays next to the count
+local g1 = st.sculpt.groups[1]
+check(g1 and g1.key == "ch03_012_0012" and g1.name == "刺花蜘蛛 α/β · 躯干",
+    "sculpt group named by armour and slot (" .. tostring(g1 and g1.name) .. ")")
+Panel.ui.page = "sculpt"; frame()
+check(find("刺花蜘蛛 α/β · 躯干") ~= nil and find("ch03_012_0012 · ") ~= nil, "sculpt header shows the name, the id beside the count")
+
 -- a user preset hides the mod's preset of the same name and folder
 local U = require("ShapeKeySystem_Core.Util")
 local folder
