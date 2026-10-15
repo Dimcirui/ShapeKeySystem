@@ -18,38 +18,8 @@ $game = $env:SKS_GAME_REFRAMEWORK
 if (-not $game) { $game = "C:\Steam\steamapps\common\MonsterHunterWilds\reframework" }
 if (-not (Test-Path $game)) { throw "game reframework folder not found: $game" }
 
-# relative paths owned by SKS; directories are mirrored (extra files on the target side are removed)
-$owned = @(
-    "autorun\ShapeKeySystem.lua",
-    "autorun\ShapeKeySystem_Core",
-    "autorun\ShapeKeySystem_UI",
-    "autorun\ShapeKeySystem_Games",
-    "autorun\ShapeKeySystem_Game", # 清理旧的播放适配器目录
-    "data\ShapeKeySystem\builtin",
-    "data\ShapeKeySystem\faces",
-    "images\ShapeKeySystem"
-)
-# 仅清理迁入 builtin 的三个旧内置文件，不镜像旧 games 目录，保留玩家另外放入的录制。
-$retired = @(
-    "data\ShapeKeySystem\games\mhwilds\recording_catalog.json",
-    "data\ShapeKeySystem\games\mhwilds\recordings\Speak.json",
-    "data\ShapeKeySystem\games\mhwilds\recordings\CampMeals.json"
-)
+. (Join-Path $PSScriptRoot "sks-files.ps1")
 # REF-IME 从上游最新 Release 独立安装，见 install-ref-ime.ps1；这里仅部署 SKS 主包。
-
-function Get-Files($root, $rel) {
-    $p = Join-Path $root $rel
-    if (-not (Test-Path $p)) { return @{} }
-    $out = @{}
-    if ((Get-Item $p).PSIsContainer) {
-        Get-ChildItem $p -Recurse -File | Where-Object { $_.FullName -notmatch '\\__pycache__\\' } | ForEach-Object {
-            $out[$_.FullName.Substring($root.Length + 1)] = $_
-        }
-    } else {
-        $out[$rel] = Get-Item $p
-    }
-    return $out
-}
 
 $src = if ($Pull) { $game } else { $repo }
 $dst = if ($Pull) { $repo } else { $game }
