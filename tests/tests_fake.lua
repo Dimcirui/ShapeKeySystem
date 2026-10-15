@@ -56,6 +56,40 @@ local saved = false
 for _, e in ipairs(st.presets.sculpt) do if e.name == "Fake Test" then saved = true end end
 check(saved and tick_ok(), "the saved preset is listed")
 
+-- an engine without getBlendShapeChannelName: names come back from the mesh's name hashes
+local W = require("ShapeKeySystem_Core.Writer")
+local U = require("ShapeKeySystem_Core.Util")
+local NameHash = require("ShapeKeySystem_Core.NameHash")
+HASH = NameHash.murmur3
+local keep_cname, keep_channels = W.M_CNAME, CHANNELS
+W.M_CNAME = nil
+CHANNELS = { "Eye_Blink_Left", "Jaw_Open", "Waist_thin", "Breasts_big", "Mystery_key" }
+local function sculpt_names()
+    SKS.call("sculpt_scan"); ticks(5)
+    local by = {}
+    for _, k in ipairs(st.sculpt.keys) do by[k.name] = k end
+    return by
+end
+local by = sculpt_names()
+local mystery = NameHash.label(NameHash.murmur3("Mystery_key"))
+check(by.Eye_Blink_Left and by.Jaw_Open and by.Waist_thin and by[mystery] and not by.Breasts_big,
+    "hashes: ARKit spelling, alias and preset keys resolve, the rest show as " .. mystery)
+check(ex.channels and SKS.state.expression.coverage.arkit_hit >= 2, "hashes: the profile matches the resolved names ("
+    .. tostring(SKS.state.expression.coverage.arkit_hit) .. ")")
+U.save_json(U.path("mods", "names", "fake.json"), { schema = "sks.names/1", names = { "Breasts_big" } })
+SKS.call("set_sculpt_key", { name = mystery, value = 0.4 }); ticks(5)
+check(SKS.call("save_sculpt", { name = "Hash Test" }), "a preset saves an unknown key by its hash")
+U.save_json(U.path("user", "names", "mine.json"), { names = { "Mystery_key" } })
+by = sculpt_names()
+check(by.Breasts_big and by.Mystery_key and not by[mystery], "hashes: mod and user name tables resolve the rest")
+SKS.call("set_sculpt_key", { name = "Mystery_key", value = 0 }); ticks(5)
+SKS.call("load_sculpt", { name = "Hash Test" }); ticks(5)
+by = sculpt_names()
+check(math.abs((by.Mystery_key and by.Mystery_key.value or 0) - 0.4) < 1e-6,
+    "a preset key saved as " .. mystery .. " applies to Mystery_key once its name is known")
+W.M_CNAME, CHANNELS = keep_cname, keep_channels
+sculpt_names()
+
 SKS.call("set_setting", { key = "advanced", value = true })
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 for _, page in ipairs({ "basic", "sculpt", "expr", "cond", "debug" }) do

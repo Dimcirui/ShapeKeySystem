@@ -35,6 +35,13 @@ local mesh = {
     get_BlendShapeChannelNum = function() return #CHANNELS end,
     get_BlendShapeChannelWeightCount = function() return #CHANNELS end,
     getBlendShapeChannelName = function(_, i) return CHANNELS[i + 1] end,
+    -- murmur3 of each name (an engine without getBlendShapeChannelName); HASH set by the tests
+    get_ChannelNameHash = function()
+        local e = {}
+        for i, n in ipairs(CHANNELS) do e[i] = HASH(n) end
+        return { get_elements = function() return e end }
+    end,
+    call = function(self, m, ...) return self[m](self, ...) end,
     setBlendShapeChannelWeightParam = function(_, i, w)
         if math.type(w) ~= "float" then INT_WRITES = (INT_WRITES or 0) + 1 end   -- System.Single needs a float
         writes[#writes + 1] = { i, w }; WEIGHTS[i] = w

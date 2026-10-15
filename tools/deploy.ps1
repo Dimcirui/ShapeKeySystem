@@ -1,4 +1,4 @@
-<#
+﻿<#
 Sync ShapeKeySystem between this repo and the game's reframework folder.
 
   deploy.ps1            repo -> game (refuses when a game file differs and is newer than the repo copy)

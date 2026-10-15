@@ -14,6 +14,9 @@ local function short(path) return path:match("autorun/(.+)$") or path end
 
 check(Games.game_name() == "mhwilds" and Games.pick("mhwilds") == Wilds and SKS.adapter == Wilds, "mhwilds picks the Wilds adapter")
 check(Games.pick("re4") == nil and Games.pick(nil) == nil, "an unknown game picks nothing")
+local Onimusha = Games.pick("onimusha_wots")
+check(Onimusha and Onimusha.raw and Onimusha.bind and Onimusha.read,
+    "onimusha_wots picks the bsControl adapter")
 
 -- the entry script run again; returns what it registered, hooked, wrote and showed
 local function run_entry(game)
@@ -44,9 +47,12 @@ check(r.text:find("暂不支持当前游戏（re4）", 1, true) ~= nil, "unsuppo
 local find_type = sdk.find_type_definition
 sdk.find_type_definition = function(n) if n == "app.PlayerManager" then return nil end return find_type(n) end
 r = run_entry("mhwilds")
+local oni_failed = run_entry("onimusha_wots")
 sdk.find_type_definition = find_type
 check(r.regs == "on_draw_ui" and not r.hooked and r.dumps == 0, "adapter init fails: same as unsupported (" .. r.regs .. ")")
 check(r.text:find("找不到类型 app.PlayerManager", 1, true) ~= nil, "adapter init fails: the menu gives the reason")
+check(oni_failed.regs == "on_draw_ui" and not oni_failed.hooked and oni_failed.dumps == 0
+    and oni_failed.text:find("找不到类型 app.PlayerManager", 1, true), "Onimusha init failure leaves only the menu reason")
 
 -- D3: adapter files call no sdk at load (only the picked adapter's init may)
 local real_sdk = sdk
@@ -93,7 +99,8 @@ for _, A in ipairs(Games.list) do
             if not pr then bad[#bad + 1] = e.id .. " " .. tostring(m) end
         end
     end
-    check(#sig.list > 0 and #bad == 0, A.id .. ": every builtin profile compiles " .. table.concat(bad, "; "))
+    check((#sig.list > 0 or (sig.none and A.raw == nil)) and #bad == 0,
+        A.id .. ": every builtin profile compiles " .. table.concat(bad, "; "))
 end
 Profile.adapter = keep
 Profile.load_signals()

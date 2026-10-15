@@ -25,14 +25,18 @@ for _, n in ipairs(N.ARKIT52) do N.ARKIT_BY_NORM[U.norm(n)] = n end
 
 -- alias sets: set name -> { norm(alias) = canonical }
 N.alias_sets = {}
+N.alias_names = {}   -- every alias and canonical as written (NameHash needs the exact spelling)
 
 function N.load_aliases()
-    N.alias_sets = {}
+    N.alias_sets, N.alias_names = {}, {}
     local data = U.load_json(U.path("builtin", "aliases.json"))
     if data and type(data.sets) == "table" then
         for set, map in pairs(data.sets) do
             local t = {}
-            for a, c in pairs(map) do t[U.norm(a)] = c end
+            for a, c in pairs(map) do
+                t[U.norm(a)] = c
+                N.alias_names[#N.alias_names + 1] = a; N.alias_names[#N.alias_names + 1] = c
+            end
             N.alias_sets[set] = t
         end
     end

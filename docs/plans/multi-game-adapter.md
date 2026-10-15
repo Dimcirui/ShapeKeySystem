@@ -72,6 +72,7 @@ A.primary_ready()       -> bool                  -- 主角色已经装配完成�
 A.is_face(tr)           -> bool                  -- 这个 transform 是带驱动骨骼的脸
 A.face_rank(tr)         -> number                -- 同一个父节点下有多张脸时，分数高的胜出
 A.is_part(name)         -> bool                  -- 这个子节点名是可驱动的装备部件
+A.child_tag(tr, name)   -> string | nil          -- 可选：拼进子节点签名，换装后名字不变的游戏用它发现重建
 A.scene_search_type     = "via.motion.Motion"    -- 全场景搜索其他角色时用的组件类型
 ```
 
@@ -222,6 +223,9 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）不�
 | `Presets.lua:41` `representative_of`：槽位 2（身体）代表整个模型 | `A.representative_of(part) -> part` | `model .. "2"` |
 | `API.lua:410-420` `armor_name`：读 `builtin/armor_names.json` | `A.model_names = "armor_names.json"`（文件放在 `builtin/<id>/`）；`A.slot_names = {[槽位] = 部位名}`，可选 | 现有文件搬到 `builtin/mhwilds/`；槽位 1~5 = 腕部、躯干、头部、腿部、腰部 |
 
+鬼武者：部件名是固定的 `Head` / `Body`，`model_of` 和 `representative_of` 都返回 `musashi`，整个角色共用
+`<src>/musashi/musashi.json`（见 `onimusha-adapter.md` 4.3）。
+
 没有 `model_of` 的游戏：model = 部件 id 本身，绑定只有「每个部件自己的文件」和 `default.json` 这两层。
 绑定文件的目录结构（`<src>/<model>/<part>.json`）不变。
 
@@ -347,6 +351,13 @@ RE4R（游戏没装，现成的参考实现是 [RE4R-ShapeKey-System](https://gi
 - 信号：修正形态键（`crct_*`）只有在 mod 的头部网格保留这些通道时才读得到；骨骼姿态那套标定是按里昂做的，其他角色要重新标定；
 - 可操作角色不止一个（里昂、艾达等），绑定可能要按角色区分；
 - 身体、头发网格的权重数组要由插件分配（D11），越界写入会让游戏崩溃。
+
+实测结果（2026-10-14，探针 `reframework/plugins/source/SksOniProbe.cs`，在游戏目录里，不进仓库）：
+- 主角色：`app.PlayerManager:getControllingPlayer():get_Object()` → `Player_00`；就绪用 `isPlayerReady(false)`。过场管理器同样叫 `app.DemoMediator`，方法还没查。
+- 脸是 `Player_00` 下的 `Head`，`bsControl_000..135` 都在，局部位置 x/y/z 在普通游玩中也会变，量级 0.001~0.01；原版待机时 261 个形态键里有 84 个非零。眼球是 `eye_Lt` / `eye_Rt`（转动已确认）。
+- 头部 mod 如果没有 blendshape，`Head` 上就没有 bsControl，通道数读出来是 0。
+- **引擎没有 `getBlendShapeChannelName`**，只有 `get_ChannelNameHash()`。原版通道名带前缀，而且每个 mesh 不同（主角 `blendShape1503.`，NPC `HeadCorrectives_blendShape.`）；用户自己导出的 mod 不带前缀，141 + 29 个通道全部按原名反查成功。做法见 API 文档第 8 节的 `names/`。
+- 还没查：换装重建的钩子、`get_game_name()` 的值。mod 头部的形态键名对不上原版 wrinkledriver jcns，游戏不驱动它们，要靠 SKS 读 bsControl 来驱动（信号字典待做）。
 
 崛起：没有驱动骨骼，按 `caps.expression = false` 接入时，只需要 2.2（找部件）、2.5（gate）和 2.8，用来验证捏脸和预设的降级路径。
 

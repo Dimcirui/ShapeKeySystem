@@ -5,11 +5,12 @@
 local U = require("ShapeKeySystem_Core.Util")
 local Names = require("ShapeKeySystem_Core.Names")
 local W = require("ShapeKeySystem_Core.Writer")
+local NameHash = require("ShapeKeySystem_Core.NameHash")
 
 local S = {}
 S.adapter = {}   -- set by SKS.init
 
-local M_CN, M_CNAME = W.M_CN, W.M_CNAME
+local M_CN = W.M_CN
 local clock = os.clock
 
 S.no_targets = {}   -- parent transform -> children signature known to hold no hunter mesh
@@ -24,10 +25,16 @@ function S.primary_root()
     return f and f() or nil
 end
 
+-- child names, plus the adapter's child_tag where a rebuild keeps the names (adapter interface 2.2)
 function S.children_signature(root)
     if not root then return "" end
+    local tag = S.adapter.child_tag
     local parts, c = {}, root:call("get_Child")
-    while c do parts[#parts + 1] = S.go_name(c); c = c:call("get_Next") end
+    while c do
+        local name = S.go_name(c)
+        parts[#parts + 1] = tag and (name .. (tag(c, name) or "")) or name
+        c = c:call("get_Next")
+    end
     return table.concat(parts, "|")
 end
 
@@ -60,9 +67,21 @@ local function find_faces(root, scene_search)
     return faces
 end
 
+-- Every channel name of a mesh. Without getBlendShapeChannelName (W.M_CNAME, read per call so
+-- tests can drop it) the names come from the mesh's name hashes through known (NameHash.table).
+local function channel_names(mesh, n, known)
+    local M_CNAME = W.M_CNAME
+    if M_CNAME then
+        local names = {}
+        for i = 0, n - 1 do names[i + 1] = M_CNAME:call(mesh, i) or "" end
+        return names
+    end
+    return NameHash.names_of(mesh, n, known or {})
+end
+
 -- Part meshes under one parent: every child the adapter calls a part, with blendshape channels.
 -- Returns parts = { {id, mesh, names, n} } (names = every channel name, read once per scan).
-local function read_parts(parent)
+local function read_parts(parent, known)
     local parts = {}
     local child = parent and parent:call("get_Child")
     while child do
@@ -71,11 +90,8 @@ local function read_parts(parent)
             local mesh
             pcall(function() mesh = child:call("get_GameObject"):call("getComponent(System.Type)", W.MESH_TYPE) end)
             local n = mesh and (M_CN:call(mesh) or 0) or 0
-            if n > 0 then
-                local names = {}
-                for i = 0, n - 1 do names[i + 1] = M_CNAME:call(mesh, i) or "" end
-                parts[#parts + 1] = { id = cname, mesh = mesh, names = names, n = n }
-            end
+            local names = n > 0 and channel_names(mesh, n, known)
+            if names then parts[#parts + 1] = { id = cname, mesh = mesh, names = names, n = n } end
         end
         child = child:call("get_Next")
     end
@@ -107,7 +123,7 @@ local function build_target(part, index, min_hits, mesh_name_of)
              last = last, count = count, distinct = hits, ready = false, stable = 0 }
 end
 
--- opts = { index, scene_search (bool), min_hits }
+-- opts = { index, scene_search (bool), min_hits, known (hash -> name, engines without channel names) }
 function S.scan(opts)
     local t0 = clock()
     local root = S.primary_root()
@@ -140,7 +156,7 @@ function S.scan(opts)
         if psig and S.no_targets[parent] == psig then
             skipped = skipped + 1
         else
-            parts = read_parts(parent)
+            parts = read_parts(parent, opts.known)
             if #parts == 0 and psig then S.no_targets[parent] = psig end
         end
         if #parts > 0 then seen_parents[#seen_parents + 1] = string.format("%s(%d)", S.go_name(parent), #parts) end

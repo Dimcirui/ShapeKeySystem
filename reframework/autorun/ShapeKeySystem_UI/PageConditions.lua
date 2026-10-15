@@ -86,7 +86,7 @@ local function top_bar(ctx, x, y, w)
     if ch then
         local ok = call("cond_select", { name = ids[i] })
         if not ok then ctx.toast("warn", "当前配置有未保存的修改：先保存或还原")
-        else s.name_form, s.clip_form = nil, nil end
+        else s.name_form, s.clip_form, s.closed = nil, nil, nil end
     end
     local bx = x + 56 + sw
     local dw = W.default_button(ctx, bx, y + 8, "conditions", (cur and not cur.dirty) and cur.id or nil, cs.binding_name)
@@ -189,19 +189,34 @@ local function condition_form(ctx, x, y, w, si, ri)
     return 46
 end
 
+-- one line for a collapsed state: rules joined by 或者, a rule's conditions by its connective
+local function rules_text(st, rules)
+    local parts = {}
+    for _, r in ipairs(rules) do
+        local cs = {}
+        for _, c in ipairs(r.conditions) do cs[#cs + 1] = cond_text(st, c) end
+        local t = #cs == 0 and "空规则" or table.concat(cs, r.logic == "OR" and " 或 " or " 且 ")
+        if #cs > 1 and #rules > 1 then t = "（" .. t .. "）" end
+        parts[#parts + 1] = t
+    end
+    return #parts == 0 and "没有规则" or table.concat(parts, "  或者  ")
+end
+
 -- ---------------------------------------------------------------- states
 local function states_section(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
     local data = st.conditions.current.data
     local cy = y
-    W.h2("状态（靠上的优先生效）", x, cy); cy = cy + 30
+    W.h2("状态", x, cy); cy = cy + 28
+    D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效", x, cy, C.faint, W.small(), w); cy = cy + 24
     local clip_ids = {}
     for id in pairs(data.clips) do clip_ids[#clip_ids + 1] = id end
     table.sort(clip_ids)
     local status = live.cond and live.cond.status or {}
     s.closed = s.closed or {}
     for si, state in ipairs(data.states) do
-        local closed = s.closed[si] == true
+        -- states start collapsed; only an explicit false keeps one open
+        local closed = s.closed[si] ~= false
         local rh = 0
         for ri, r in ipairs(state.rules) do rh = rh + (ri > 1 and 22 or 0) + 34 + #r.conditions * 26 + 30 end
         local form_here = s.form and s.form.si == si
@@ -218,8 +233,19 @@ local function states_section(ctx, x, y, w)
             local stx = STATUS[status[si] or "idle"]
             local chx = x + 48 + min(200, w * 0.3)
             local chw = W.chip(stx[1], chx, cy + 13, stx[2])
-            D.text_mid("规则满足一种即生效", chx + chw + 10, cy + 8, 28, C.faint, W.small(), max(0, w * 0.35))
             local bx = x + w - 10
+            if closed then
+                -- the summary stops before the move / delete buttons drawn right to left below
+                local bw_all = 0
+                for _, label in ipairs({ "删除状态", si < #data.states and "下移" or nil, si > 1 and "上移" or nil }) do
+                    bw_all = bw_all + D.measure(W.small(), label) + 26
+                end
+                local tx = chx + chw + 10
+                local tw = max(0, bx - bw_all - 8 - tx)
+                local summary = rules_text(st, state.rules)
+                D.text_mid(summary, tx, cy + 8, 28, C.muted, W.small(), tw)
+                W.tooltip(summary, tx, cy + 8, tw, 28)
+            end
             local function rbtn(label, opt)
                 local bw = D.measure(W.small(), label) + 22
                 bx = bx - bw
@@ -281,6 +307,7 @@ local function states_section(ctx, x, y, w)
         D.text("先在下面新建一个表情组合，再添加状态。", x, cy, C.muted, W.small()); cy = cy + 24
     elseif W.button("＋ 添加状态", x, cy, nil, 28) then
         edit(ctx, function(d) table.insert(d.states, { clip = clip_ids[1], rules = {} }) end)
+        s.closed[#data.states + 1] = false
     end
     return cy + 36 - y
 end

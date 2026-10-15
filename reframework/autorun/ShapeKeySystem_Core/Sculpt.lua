@@ -12,6 +12,7 @@ local G = require("ShapeKeySystem_Core.Guard")
 local Ext = require("ShapeKeySystem_Core.External")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch = require("ShapeKeySystem_Core.Touch")
+local NameHash = require("ShapeKeySystem_Core.NameHash")
 
 local S = {}
 
@@ -38,11 +39,20 @@ S.frame = 0          -- set by the caller every tick (drag detection)
 local DRAG_GAP = 5   -- changes of one key at most this many frames apart are one drag
 S.K = K
 
+-- a preset's value for a key; one saved as "#XXXXXXXX" (the name was unknown then, NameHash)
+-- still applies once the name is known
+local function lookup(t, name)
+    if not t then return nil end
+    local v = t[name]
+    if v == nil and name:sub(1, 1) ~= "#" then v = t[NameHash.label(NameHash.hash(name))] end
+    return tonumber(v)
+end
+
 local function preset_value(preset, part, name)
     if not preset then return nil end
-    local o = preset.overrides[part]
-    if o and o[name] ~= nil then return tonumber(o[name]) end
-    return tonumber(preset.values[name])
+    local v = lookup(preset.overrides[part], name)
+    if v ~= nil then return v end
+    return lookup(preset.values, name)
 end
 
 -- parts: Scene parts { id, mesh, names, n }; owned[mesh] = { [index] = true } (expression)
@@ -308,13 +318,13 @@ function S.apply_preset(preset)
     local lo, hi = S.RANGE[1], S.RANGE[2]
     for _, k in ipairs(K.keys) do
         do
-            local v = tonumber(preset.values[k.name])
+            local v = lookup(preset.values, k.name)
             k.value = v and U.clamp(v, lo, hi) or k.default
             k.overrides = {}
             if not v then for p, d in pairs(k.preset_overrides) do k.overrides[p] = d end end
             for _, p in ipairs(k.parts) do
-                local o = preset.overrides[p]
-                if o and tonumber(o[k.name]) then k.overrides[p] = U.clamp(tonumber(o[k.name]), lo, hi) end
+                local o = lookup(preset.overrides[p], k.name)
+                if o then k.overrides[p] = U.clamp(o, lo, hi) end
             end
             k.touched = true
         end

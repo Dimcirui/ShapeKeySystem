@@ -299,10 +299,12 @@ reframework/data/ShapeKeySystem/
   builtin/  profiles/*.json, aliases.json                   （随插件发布，只读；各游戏通用）
             <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
                        recording_catalog.json, recordings/*.json       （内置面部动画测试数据）
-  mods/     bindings/*.json, profiles/*.json, sculpt/*.json  （随 mod 发布，只读）
-  user/     bindings/*.json, profiles/*.json, sculpt/*.json  （用户自己的，插件只写这里）
+  mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
+  user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
             recordings/*.json                             （用户面部动画录制）
 ```
+
+`names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有 `getBlendShapeChannelName` 时用到（鬼武者）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
 
 父预设查找顺序：`user/bindings/<部件ID>.json` → `mods/bindings/<部件ID>.json` → 同系列 `<ch03_012>_*.json`（先 user 后 mods）→ `default.json`。
 
