@@ -1,0 +1,113 @@
+-- ShapeKeySystem: Leon discovery, calibrated native signals and shape-key targets.
+--
+-- Only the current player's cha000 head is supported. No scene-wide cutscene/NPC search is
+-- performed. Objects are resolved per call; rig handles are released when the topology changes.
+local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
+local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true,
+    terms = { primary = "Leon", part = "部件" }, raw = Signals.raw,
+    bind = Signals.bind, read = Signals.read, channel_writable = Signals.writable }
+local T_MESH
+local function call(obj, method, ...)
+    if not obj then return nil end
+    local ok, value = pcall(obj.call, obj, method, ...)
+    return ok and value or nil
+end
+local function context()
+    return call(sdk.get_managed_singleton("chainsaw.CharacterManager"), "getPlayerContextRef()")
+end
+local function transform(go) return call(go, "get_Transform") end
+local function mesh(tr) return call(call(tr, "get_GameObject"), "getComponent(System.Type)", T_MESH) end
+local function path(tr)
+    local p = call(call(mesh(tr), "getMesh"), "get_ResourcePath")
+    return type(p) == "string" and p:gsub("\\", "/"):lower() or ""
+end
+local function head()
+    local ctx = context()
+    local go = call(call(call(ctx, "get_BodyUpdater"), "get_HeadMotion"), "get_GameObject")
+        or call(ctx, "get_HeadGameObject")
+    return transform(go)
+end
+
+function A.primary_root()
+    local ctx = context()
+    return transform(call(ctx, "get_BodyGameObject") or call(ctx, "get_GameObject"))
+end
+function A.is_face(tr)
+    return path(tr):find("/cha000/", 1, true) ~= nil
+        and call(tr, "getJointByName(System.String)", "C_Chin") ~= nil
+end
+function A.primary_ready()
+    local h = head()
+    return A.primary_root() ~= nil and h ~= nil and A.is_face(h)
+end
+function A.faces() local h = head(); return h and {h} or {} end
+function A.face_root(_, root) return root end
+function A.face_rank() return 1 end
+function A.is_part() return false end
+function A.parts(root)
+    local out, seen = {}, {}
+    local function visit(tr, depth)
+        if not tr or depth > 6 or #out >= 64 or seen[tr] then return end
+        seen[tr] = true
+        if mesh(tr) then out[#out + 1] = tr end
+        local c = call(tr, "get_Child")
+        local siblings, n = {}, 0
+        while c and not siblings[c] and n < 256 do
+            siblings[c], n = true, n + 1
+            visit(c, depth + 1); c = call(c, "get_Next")
+        end
+    end
+    visit(head(), 0); visit(root, 0)
+    return out
+end
+function A.part_id(tr)
+    local p = path(tr):match("([^/]+)%.mesh")
+    local name = call(call(tr, "get_GameObject"), "get_Name") or "part"
+    return (p or name):gsub("[^%w_%-]", "_")
+end
+function A.model_of(part) return "leon", part end
+function A.representative_of() return "leon" end
+function A.eye_joints(face)
+    return { L = call(face, "getJointByName(System.String)", "L_Eye"),
+             R = call(face, "getJointByName(System.String)", "R_Eye") }
+end
+function A.signature(root)
+    local out = {}
+    for _, tr in ipairs(A.parts(root)) do
+        local m = mesh(tr)
+        local ok, addr = pcall(m.get_address, m)
+        out[#out+1] = A.part_id(tr) .. "@" .. tostring(ok and addr or "-") .. ":" .. tostring(call(m, "get_BlendShapeChannelNum"))
+    end
+    table.sort(out)
+    return table.concat(out, "|")
+end
+function A.gate()
+    if not A.primary_ready() then return false, "Leon player or head unavailable" end
+    return true
+end
+
+-- Core passes only current targets after checking the player's signature and readiness.
+function A.prepare_mesh(m) call(m, "set_LodLevel", 0) end
+
+function A.probe(output)
+    local lines = { "RE4R Leon (cha000); native inputs are read-only" }
+    if not A.primary_ready() then return { "Leon player or head unavailable" } end
+    local h = Signals.bind(head(), { Signals.raw.parse("jawOpen") })
+    Signals.read(h, {}, 1)
+    for name, state in pairs(h.status) do lines[#lines + 1] = name .. ": " .. state end
+    table.sort(lines)
+    local f = io.open(output, "w")
+    if f then f:write(table.concat(lines, "\n"), "\n"); f:close() end
+    return lines
+end
+
+function A.init()
+    if not sdk.find_type_definition("chainsaw.CharacterManager") then return false, "找不到 chainsaw.CharacterManager" end
+    T_MESH = sdk.typeof("via.render.Mesh")
+    local ok, d = pcall(json.load_file, "ShapeKeySystem/builtin/re4/leon.json")
+    if not ok then return false, "Leon 标定文件无法读取" end
+    local configured, valid, why = pcall(Signals.configure, d)
+    if not configured then return false, "Leon 标定格式无效" end
+    return valid, why
+end
+return A

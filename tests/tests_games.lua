@@ -13,7 +13,7 @@ end
 local function short(path) return path:match("autorun/(.+)$") or path end
 
 check(Games.game_name() == "mhwilds" and Games.pick("mhwilds") == Wilds and SKS.adapter == Wilds, "mhwilds picks the Wilds adapter")
-check(Games.pick("re4") == nil and Games.pick(nil) == nil, "an unknown game picks nothing")
+check(Games.pick("unsupported_test_game") == nil and Games.pick(nil) == nil, "an unknown game picks nothing")
 local Onimusha = Games.pick("onimusha_wots")
 check(Onimusha and Onimusha.raw and Onimusha.bind and Onimusha.read,
     "onimusha_wots picks the bsControl adapter")
@@ -40,9 +40,9 @@ local function run_entry(game)
     return out
 end
 
-local r = run_entry("re4")
+local r = run_entry("unsupported_test_game")
 check(r.regs == "on_draw_ui" and not r.hooked and r.dumps == 0, "unsupported game: only a menu line, no hooks, nothing written (" .. r.regs .. ")")
-check(r.text:find("暂不支持当前游戏（re4）", 1, true) ~= nil, "unsupported game: the menu names the game")
+check(r.text:find("暂不支持当前游戏（unsupported_test_game）", 1, true) ~= nil, "unsupported game: the menu names the game")
 
 local find_type = sdk.find_type_definition
 sdk.find_type_definition = function(n) if n == "app.PlayerManager" then return nil end return find_type(n) end

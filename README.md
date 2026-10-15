@@ -16,8 +16,11 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 |---|---|---|
 | 怪物猎人：荒野 | `ShapeKeySystem_Games/Wilds/` | fcParam 关节 |
 | 鬼武者：剑之道 | `ShapeKeySystem_Games/Onimusha/` | `bsControl` 关节；通道名通过名字哈希反查 |
+| 生化危机4 重制版（本地实验候选） | `ShapeKeySystem_Games/RE4R/` | Leon cha000 的骨骼标定与原生修正通道，尚待游戏验收 |
 
 后续要适配的游戏见 #17。
+
+RE4R 当前边界与配置转换见 [适配说明](docs/plans/re4r-adapter.md)。本地候选不会自动安装或替换旧 RE4R 插件。
 
 ## 功能
 

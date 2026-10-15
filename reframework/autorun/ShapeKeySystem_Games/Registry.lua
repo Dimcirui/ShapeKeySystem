@@ -6,6 +6,7 @@ local R = {}
 
 -- parenthesised: require also returns the loader data, which would become a list entry
 R.list = {
+    (require("ShapeKeySystem_Games.RE4R.Adapter")),
     (require("ShapeKeySystem_Games.Wilds.Adapter")),
     (require("ShapeKeySystem_Games.Onimusha.Adapter")),
 }
