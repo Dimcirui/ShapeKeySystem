@@ -45,7 +45,7 @@ PREVIEW_CMDS = CMDS
 check(find("应用") ~= nil and find("取消") ~= nil, "应用 / 取消 offered")
 check(find("测试") == nil, "read-only: no 测试 buttons while browsing")
 local first = pv.channels[pv.groups[1].channel_slots[1]]
-check(find(first.name) ~= nil, "a channel of the browsed profile is listed: " .. first.name)
+check(find(first.label or first.name) ~= nil, "a channel of the browsed profile is listed: " .. (first.label or first.name))
 -- 取消 -> back to the active profile, preview cleared
 local cancel = find("取消")
 MOUSE.x, MOUSE.y = cancel.x + 4, cancel.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame(); frame()

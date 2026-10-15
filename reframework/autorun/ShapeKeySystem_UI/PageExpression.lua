@@ -140,6 +140,11 @@ local function top_bars(ctx, x, y, w)
     return cy - y
 end
 
+-- tooltip line with the mesh name when the row shows a label instead
+local function key_name(c)
+    return c.label and ("形态键名：" .. c.name .. "\n") or ""
+end
+
 local function channel_row(ctx, c, x, y, w)
     local h = 40
     if not visible(y, h) then return h end
@@ -147,7 +152,7 @@ local function channel_row(ctx, c, x, y, w)
     local v = live.weight[c.slot] or 0
     local nw = max(170, w * 0.3)
     local fg = c.present and C.text or C.faint
-    local nx = x + 8 + D.text(c.name, x + 8, y + 3, fg, W.body(), nw - 60)
+    local nx = x + 8 + D.text(c.label or c.name, x + 8, y + 3, fg, W.body(), nw - 60)
     D.icon_tri(x + 3, y + 12, 3, ctx.state.mapping_draft and ctx.state.mapping_draft.original_name == c.canonical, C.brass)
     if I.click(x, y, nw, h) then
         if ctx.state.mapping_draft and ctx.state.mapping_draft.original_name == c.canonical then ctx.state.mapping_draft = nil
@@ -155,7 +160,7 @@ local function channel_row(ctx, c, x, y, w)
     end
     if c.guessed then W.chip("推测", nx + 6, y + 4, C.warn, 16) end
     D.text((c.source_text or "") .. (c.present and "" or "  · 网格里没有"), x + 8, y + 22, C.faint, W.small(), nw - 12)
-    W.tooltip((c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, nw, h)
+    W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, nw, h)
     local mx = x + nw
     local mw = max(60, (w - nw) * 0.36)
     W.meter(mx, y + 15, mw, 9, v, c.forced and C.brass or (c.has_signal and C.signal or C.faint))
@@ -180,12 +185,12 @@ local function preview_row(ctx, c, x, y, w)
     if not visible(y, h) then return h end
     local nw = max(170, w * 0.3)
     local fg = c.present and C.text or C.faint
-    local nx = x + 8 + D.text(c.name, x + 8, y + 3, fg, W.body(), nw - 60)
+    local nx = x + 8 + D.text(c.label or c.name, x + 8, y + 3, fg, W.body(), nw - 60)
     if c.guessed then W.chip("推测", nx + 6, y + 4, C.warn, 16) end
     if c.extension then W.chip("扩展", nx + 6 + (c.guessed and 44 or 0), y + 4, C.faint, 16) end
     D.text(c.present and ("网格：" .. c.name) or "网格里没有", x + 8, y + 22, C.faint, W.small(), nw - 12)
     D.text(c.source_text or "", x + nw, y + 12, C.muted, W.small(), w - nw - 12)
-    W.tooltip((c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, w, h)
+    W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, w, h)
     return h
 end
 
@@ -220,7 +225,8 @@ function Page.draw(ctx, x, y, w)
             local c = channels[slot]
             local keep = pv and (not s.only_active or c.present) or (not pv and (not s.only_active or (live.weight[slot] or 0) > 0.01))
             local editing = c and not pv and s.mapping_draft and s.mapping_draft.original_name == c.canonical
-            if c and (editing or (keep and (filter == "" or c.name:lower():find(filter, 1, true) or c.canonical:lower():find(filter, 1, true)))) then
+            if c and (editing or (keep and (filter == "" or c.name:lower():find(filter, 1, true) or c.canonical:lower():find(filter, 1, true)
+                or (c.label and c.label:lower():find(filter, 1, true))))) then
                 rows[#rows + 1] = c
             end
         end
