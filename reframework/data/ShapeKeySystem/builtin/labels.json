@@ -1,0 +1,120 @@
+{
+  "schema": "sks.labels/1",
+  "note": "形态键名 -> 界面显示名，只用于显示，不影响匹配和预设。匹配时会先去掉大小写、下划线、连字符和空格，全角、半角也不区分。左右都指模型自己的左右。mod 和用户可以在 names/*.json 的 labels 里覆盖。",
+  "sets": {
+    "arkit": {
+      "source": "Apple ARKit 文档 ARFaceAnchor.BlendShapeLocation（52 个系数）",
+      "labels": {
+        "browDownLeft": "左眉下压",
+        "browDownRight": "右眉下压",
+        "browInnerUp": "眉心上提",
+        "browOuterUpLeft": "左眉外侧上提",
+        "browOuterUpRight": "右眉外侧上提",
+
+        "cheekPuff": "鼓腮",
+        "cheekSquintLeft": "左脸颊上提",
+        "cheekSquintRight": "右脸颊上提",
+
+        "eyeBlinkLeft": "左眼闭眼",
+        "eyeBlinkRight": "右眼闭眼",
+        "eyeLookDownLeft": "左眼向下看",
+        "eyeLookDownRight": "右眼向下看",
+        "eyeLookInLeft": "左眼看向鼻侧",
+        "eyeLookInRight": "右眼看向鼻侧",
+        "eyeLookOutLeft": "左眼看向耳侧",
+        "eyeLookOutRight": "右眼看向耳侧",
+        "eyeLookUpLeft": "左眼向上看",
+        "eyeLookUpRight": "右眼向上看",
+        "eyeSquintLeft": "左眼眯眼",
+        "eyeSquintRight": "右眼眯眼",
+        "eyeWideLeft": "左眼睁大",
+        "eyeWideRight": "右眼睁大",
+
+        "jawForward": "下巴前伸",
+        "jawLeft": "下巴左移",
+        "jawOpen": "张嘴",
+        "jawRight": "下巴右移",
+
+        "mouthClose": "闭唇",
+        "mouthDimpleLeft": "左嘴角后收",
+        "mouthDimpleRight": "右嘴角后收",
+        "mouthFrownLeft": "左嘴角下撇",
+        "mouthFrownRight": "右嘴角下撇",
+        "mouthFunnel": "嘴唇撮圆",
+        "mouthLeft": "嘴左移",
+        "mouthLowerDownLeft": "左下唇下拉",
+        "mouthLowerDownRight": "右下唇下拉",
+        "mouthPressLeft": "左下唇上压",
+        "mouthPressRight": "右下唇上压",
+        "mouthPucker": "嘟嘴",
+        "mouthRight": "嘴右移",
+        "mouthRollLower": "下唇内卷",
+        "mouthRollUpper": "上唇内卷",
+        "mouthShrugLower": "下唇前推",
+        "mouthShrugUpper": "上唇前推",
+        "mouthSmileLeft": "左嘴角上扬",
+        "mouthSmileRight": "右嘴角上扬",
+        "mouthStretchLeft": "左嘴角横拉",
+        "mouthStretchRight": "右嘴角横拉",
+        "mouthUpperUpLeft": "左上唇上提",
+        "mouthUpperUpRight": "右上唇上提",
+
+        "noseSneerLeft": "左鼻翼上提",
+        "noseSneerRight": "右鼻翼上提",
+
+        "tongueOut": "伸舌"
+      }
+    },
+    "mmd": {
+      "source": "MikuMikuDance 自带的あにまさ式初音ミク的表情名。MMD 没有官方的表情命名规范，大多数 PMX 模型沿用这套名字。不带「右」的 wink 键是模型自己的左眼。",
+      "labels": {
+        "真面目": "眉：严肃",
+        "困る": "眉：困扰（八字眉）",
+        "にこり": "眉：微笑",
+        "怒り": "眉：生气",
+        "上": "眉上扬",
+        "下": "眉下压",
+
+        "まばたき": "双眼闭眼",
+        "笑い": "笑眼",
+        "ウィンク": "左眼笑眼闭眼",
+        "ウィンク右": "右眼笑眼闭眼",
+        "ウィンク２": "左眼闭眼",
+        "ウィンク２右": "右眼闭眼",
+        "はぅ": "闭眼（><）",
+        "なごみ": "眼：安详",
+        "びっくり": "睁大眼",
+        "じと目": "半闭眼（斜眼）",
+        "瞳小": "瞳孔缩小",
+
+        "あ": "口型 あ",
+        "い": "口型 い",
+        "う": "口型 う",
+        "え": "口型 え",
+        "お": "口型 お",
+        "▲": "三角嘴",
+        "∧": "嘴：∧ 形",
+        "ω": "猫嘴（ω）",
+        "ω□": "猫嘴张开",
+        "ぺろっ": "吐舌",
+        "にやり": "坏笑"
+      }
+    },
+    "sks_mmd": {
+      "source": "SKS 内置 mmd 表情配置（builtin/profiles/mmd.json）用到、上面没有的通道名",
+      "labels": {
+        "口角上げ": "嘴角上扬",
+        "口角上げ左": "左嘴角上扬",
+        "口角上げ右": "右嘴角上扬",
+        "口角下げ": "嘴角下撇",
+        "口角下げ左": "左嘴角下撇",
+        "口角下げ右": "右嘴角下撇",
+        "口横広げ": "嘴横拉",
+        "口横狭く": "嘴收窄",
+        "口上": "上唇上提",
+        "口下": "下唇下拉",
+        "下瞼上げ": "下眼皮上提"
+      }
+    }
+  }
+}
