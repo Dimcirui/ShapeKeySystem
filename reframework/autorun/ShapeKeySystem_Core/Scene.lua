@@ -79,7 +79,7 @@ local function channel_names(mesh, n, known)
         for i = 0, n - 1 do names[i + 1] = M_CNAME:call(mesh, i) or "" end
         return names
     end
-    return NameHash.names_of(mesh, n, known or {})
+    return NameHash.names_of(mesh, n, known or {}, S.adapter.hash_item_only)
 end
 
 -- Part meshes under one parent: every child the adapter calls a part, with blendshape channels.

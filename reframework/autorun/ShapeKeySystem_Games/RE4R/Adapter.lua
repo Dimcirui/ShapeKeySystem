@@ -3,7 +3,9 @@
 -- Only the current player's cha000 head is supported. No scene-wide cutscene/NPC search is
 -- performed. Objects are resolved per call; rig handles are released when the topology changes.
 local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
-local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true,
+local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
+    rewrite_active_weights = true,
+    input = require("ShapeKeySystem_Games.RE4R.Input"),
     terms = { primary = "Leon", part = "部件" }, raw = Signals.raw,
     bind = Signals.bind, read = Signals.read, channel_writable = Signals.writable }
 local T_MESH

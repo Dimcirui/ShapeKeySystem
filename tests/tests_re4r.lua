@@ -56,10 +56,30 @@ json.dump_file("ShapeKeySystem/mods/names/synthetic.json", {schema="sks.names/1"
 json.dump_file("ShapeKeySystem/mods/profiles/synthetic.json", {schema="sks.profile/1",name="Synthetic",channels={
     {name=CHANNELS[2],group="eye",s="blink.L"}, {name=CHANNELS[3],group="eye",s="blink.R"},
     {name=CHANNELS[4],group="jaw",s="jawOpen"}, {name=native,group="extra",const=1}}})
+local original_type_lookup = sdk.find_type_definition
+sdk.find_type_definition = function(name)
+    local td = original_type_lookup(name)
+    if name ~= "via.render.Mesh" then return td end
+    return {get_method=function(_, signature)
+        if signature == "get_BlendShapeEnable" or signature == "get_BlendShapeReleasedBuffers" then return nil end
+        return td:get_method(signature)
+    end}
+end
 dofile(ENTRY)
+sdk.find_type_definition = original_type_lookup
 local SKS = require("ShapeKeySystem_Core.API")
 local W = require("ShapeKeySystem_Core.Writer")
 local A = SKS.adapter
+local Guard = require("ShapeKeySystem_Core.Guard")
+check(Guard.mesh_ready(m), "absent RE4R enable/release getters do not block an otherwise ready mesh")
+MESH_STATE.ready = false
+check(not Guard.mesh_ready(m), "MeshReady remains mandatory without blendshape flag getters")
+MESH_STATE.ready = true
+count = 0
+check(not Guard.mesh_ready(m), "allocated weight count remains mandatory without blendshape flag getters")
+count = #CHANNELS; length = 0
+check(not Guard.mesh_ready(m), "weight-list bounds remain mandatory without blendshape flag getters")
+length = #CHANNELS
 check(A.id=="re4" and A.primary_ready(), "RE4R adapter resolves nested cha000 head")
 check(pres.UpdateMotion and pres.PrepareRendering, "LOD preparation registered at both pre stages")
 check(A.primary_root()==ROOT and #A.parts(ROOT)==1, "head may be separate from player-root children")
@@ -138,6 +158,42 @@ end
 check(Signals.hashes(m)[Hash.hash(native)]==0,"boxed UInt32 native hashes are accepted")
 local core_names=Hash.names_of(m,#CHANNELS,Hash.table(CHANNELS))
 check(core_names[2]==CHANNELS[2],"Core name resolution supports Item-only boxed collections")
+m.get_ChannelNameHash=original_hashes
+local element_reads = 0
+m.get_ChannelNameHash=function()
+    return {call=call,get_Item=function(_,i) return Hash.hash(CHANNELS[i+1]) end,
+        get_elements=function()
+            element_reads = element_reads + 1
+            local t = {}
+            for i = 1, #CHANNELS do t[i] = {call=function() return "2637986592" end} end
+            return t
+        end}
+end
+local known = Hash.table(CHANNELS)
+local default_names = Hash.names_of(m,#CHANNELS,known)
+check(default_names[2]=="#9D3C7B20", "default boxed-element path remains unchanged")
+element_reads = 0
+local item_names = Hash.names_of(m,#CHANNELS,known,A.hash_item_only)
+check(A.hash_item_only and item_names[2]==CHANNELS[2] and item_names[3]==CHANNELS[3],
+    "RE4R numeric Items override incorrect boxed ToString hashes")
+check(element_reads==0,"numeric Item path never reads boxed elements")
+SKS.call("rescan",{}); ticks(100)
+check(#SKS.state.scene.rigs==1 and #SKS.state.scene.rigs[1].targets>0,
+    "scene scanning creates targets despite incorrect boxed hashes")
+check(not A.channel_writable(native,m,0),"native protection remains active with numeric Item discovery")
+m.get_ChannelNameHash=function()
+    return {call=call,get_Item=function() error("Item unavailable") end,
+        get_elements=function() error("boxed fallback must not be called") end}
+end
+local unavailable = Hash.names_of(m,#CHANNELS,known,true)
+check(unavailable[2]=="","failed numeric Items remain unavailable without boxed fallback")
+for _, value in ipairs({ -1, 0x100000000, 0.5, math.huge }) do
+    m.get_ChannelNameHash=function() return {call=call,get_Item=function() return value end} end
+    check(Hash.names_of(m,1,known,true)[1]=="","invalid numeric Item hash is rejected: "..tostring(value))
+end
+m.get_ChannelNameHash=function() return {call=call,get_Item=function(_,i) return i==0 and 0 or 0xFFFFFFFF end} end
+local edge_names = Hash.names_of(m,2,{},true)
+check(edge_names[1]=="#00000000" and edge_names[2]=="#FFFFFFFF","numeric Item path accepts unsigned boundary hashes")
 m.get_ChannelNameHash=original_hashes
 local diagnostic=A.probe("ShapeKeySystem/hash_probe.txt")
 check(#diagnostic>1,"existing probe action exposes native read diagnostics")

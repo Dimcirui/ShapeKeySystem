@@ -1,5 +1,6 @@
 -- ShapeKeySystem: cached engine methods and blendshape weight writes.
--- Only changed values are written; a mesh is not written until its weight buffer exists
+-- Changed values are written; adapters may also request active values every frame.
+-- A mesh is not written until its weight buffer exists
 -- (writing earlier can freeze the game — same guard as Female Body Sliders).
 
 local W = {}
@@ -72,7 +73,9 @@ function W.write_target(t, vals, force, eps, base, mix, skip)
             local b = base[k]
             if b and b > 0 and not (skip and skip[s]) then w = mix(b, w) end
         end
-        if force or abs(w - last[k]) > eps then
+        -- Some games refresh animated weights each frame: keep active values asserted.
+        local active = W.adapter.rewrite_active_weights and (w ~= 0 or last[k] ~= 0)
+        if force or active or abs(w - last[k]) > eps then
             -- always a float: a Lua integer (e.g. a value clamped to the integer 1 from
             -- settings.json) reaches the System.Single parameter as raw bits (1 -> 1.4e-45)
             if W.set_weight(mesh, idxs[k], w, t.names and t.names[idxs[k] + 1]) then

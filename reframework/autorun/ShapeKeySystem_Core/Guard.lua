@@ -32,7 +32,8 @@ end
 -- checked: it is true on the drawn, working hunter face too.)
 function G.mesh_ready(mesh)
     if not call(M_READY, mesh) then return false, "MeshReady=false" end
-    if not call(M_BS_ON, mesh) then return false, "BlendShapeEnable=false" end
+    -- Engines without this flag still require MeshReady and allocated channel buffers below.
+    if M_BS_ON and not call(M_BS_ON, mesh) then return false, "BlendShapeEnable=false" end
     if call(M_BS_REL, mesh) then return false, "BlendShapeReleasedBuffers" end
     local cn, wc = call(M_CN, mesh), call(M_WC, mesh)
     if not cn or not wc then return false, "channel count unreadable" end
