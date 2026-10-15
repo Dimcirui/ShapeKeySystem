@@ -132,10 +132,15 @@ function H.names_of(mesh, n, known)
     if not ok or not arr then return nil end
     local ok2, elems = pcall(arr.get_elements, arr)
     -- REF can expose get_elements() as an indexed userdata container instead of a Lua table.
-    if not ok2 or (type(elems) ~= "table" and type(elems) ~= "userdata") then return nil end
+    if not ok2 or (type(elems) ~= "table" and type(elems) ~= "userdata") then elems = nil end
     local names = {}
     for i = 1, n do
-        local h = unbox(elems[i])
+        local h
+        if elems then pcall(function() h = unbox(elems[i]) end) end
+        if h == nil then
+            local got, v = pcall(arr.call, arr, "get_Item", i - 1)
+            if got then h = unbox(v) end
+        end
         names[i] = h and (known[h] or H.label(h)) or ""
     end
     return names

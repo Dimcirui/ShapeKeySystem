@@ -29,6 +29,15 @@ if not ok then
 end
 DebugUI.attach(SKS)
 
+if Game.prepare_mesh and re.on_pre_application_entry then
+    for _, stage in ipairs({ "UpdateMotion", "PrepareRendering" }) do
+        re.on_pre_application_entry(stage, function()
+            local ok, err = pcall(SKS.prepare_targets)
+            if not ok then SKS.state.debug.status = "prepare error: " .. tostring(err) end
+        end)
+    end
+end
+
 re.on_application_entry("LateUpdateBehavior", function()
     local ok, err = pcall(SKS.tick)
     if not ok then SKS.state.debug.status = "tick error: " .. tostring(err) end

@@ -256,7 +256,11 @@ local function queue_zero_all()
 end
 
 -- sculpt + expression targets of ready meshes back to 0 (disable / script reset)
-local function zero_sculpt() pcall(Sculpt.zero_all) end
+local function zero_sculpt()
+    if SKS.adapter.strict_bounds and
+        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then return end
+    pcall(Sculpt.zero_all)
+end
 
 -- effective gain per slot
 local function recompute_gains()
@@ -849,7 +853,7 @@ local function do_scan()
     local scan_start = clock()
     if not C.prog then return end
     local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
-                             known = not Writer.M_CNAME and known_names() or nil })
+                             known = (not Writer.M_CNAME or SKS.adapter.hash_names) and known_names() or nil })
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
     -- rescans neither pause writing nor rewrite every channel
     local old = {}
@@ -1172,6 +1176,10 @@ local function tick()
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
     Sculpt.frame = f
     local stable, why, kind = Guard.game_stable(f)
+    if SKS.adapter.strict_bounds and #(C.instances or {}) > 0 and
+        (not stable or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
+        drop_rigs(why or "part signature changed", Guard.SETTLE_FRAMES)
+    end
     if not stable and C.cond_live ~= false then
         C.cond_live = false
         CondExpr.reset(); Cnd.reset(); Touch.reset()
@@ -1976,6 +1984,7 @@ function SKS.init(adapter)
         if ok == false then return false, why end
     end
     SKS.adapter = adapter
+    Writer.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
     Cnd.install(adapter.conditions)
     Trail.open()
@@ -2071,6 +2080,10 @@ function SKS.shutdown()
     Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
     C.unpublish_api()
+    if SKS.adapter.strict_bounds and
+        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
+        drop_rigs("shutdown after rebuild", nil)
+    end
     if not C.paused then
         for _, r in ipairs(C.rigs) do
             for _, t in ipairs(r.targets) do
@@ -2080,6 +2093,20 @@ function SKS.shutdown()
         zero_sculpt()
     end
     if C.save_at then save_now() end
+end
+
+-- Optional pre-animation/render preparation uses the current scan only; it keeps no second
+-- target cache and never touches a mesh after a failed gate or a changed signature.
+function SKS.prepare_targets()
+    local A = SKS.adapter
+    if not A.prepare_mesh or not cfg.enabled or #(C.instances or {}) == 0 then return end
+    if not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig then
+        drop_rigs("preparation after rebuild", Guard.SETTLE_FRAMES)
+        return
+    end
+    for _, part in ipairs(C.instances) do
+        if Guard.mesh_ready(part.mesh) then A.prepare_mesh(part.mesh) end
+    end
 end
 
 -- ---------------------------------------------------------------- conditional expressions
@@ -2297,6 +2324,9 @@ end
 function PUB.set(owner, name, value, opts)
     if not check_owner(owner) then return bad("owner: non-empty string up to 64 chars") end
     if type(name) ~= "string" or name == "" then return bad("name: string") end
+    if SKS.adapter.channel_writable and not SKS.adapter.channel_writable(name) then
+        return bad("channel is read-only or unresolved")
+    end
     value = tonumber(value)
     if not value or value ~= value then return bad("value: number") end
     local ttl = Ext.DEFAULT_TTL

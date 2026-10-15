@@ -3,6 +3,7 @@
 -- (writing earlier can freeze the game — same guard as Female Body Sliders).
 
 local W = {}
+W.adapter = {}
 
 local T_MESH = sdk.find_type_definition("via.render.Mesh")
 W.M_SET   = T_MESH:get_method("setBlendShapeChannelWeightParam(System.UInt64, System.Single)")
@@ -21,11 +22,43 @@ W.MOTION_TYPE = sdk.typeof("via.motion.Motion")
 local abs = math.abs
 local M_SET, M_WC, M_CN = W.M_SET, W.M_WC, W.M_CN
 
+-- Strict adapters require the live managed list as well as WeightCount; failures deny access.
+function W.limit(mesh)
+    local ok, n = pcall(function()
+        local cn, wc = M_CN:call(mesh), M_WC:call(mesh)
+        if type(cn) ~= "number" or type(wc) ~= "number" or cn ~= cn or wc ~= wc
+            or cn < 0 or wc < 0 or cn == math.huge or wc == math.huge then return 0 end
+        local limit = math.min(cn, wc)
+        if W.adapter.strict_bounds then
+            local list = mesh:call("get_ChannelWeightList")
+            local length = list and list:call("get_Length")
+            if type(length) ~= "number" or length ~= length or length < 0 or length == math.huge then return 0 end
+            limit = math.min(limit, length)
+        end
+        return limit == limit and math.max(0, math.floor(limit)) or 0
+    end)
+    return ok and n or 0
+end
+
+function W.set_weight(mesh, idx, value, name)
+    if W.adapter.strict_bounds then
+        if idx < 0 or idx >= W.limit(mesh) then return false end
+        if W.adapter.channel_writable and not W.adapter.channel_writable(name, mesh, idx) then return false end
+    end
+    M_SET:call(mesh, idx, value + 0.0)
+    return true
+end
+
 -- t = { mesh, slots = {slot...}, idxs = {channel index...}, last = {...}, count, ready }
 -- vals[slot] -> weight. Returns writes, skipped.
 -- base[k] (optional): sculpt rest value of channel k, mixed in by mix(base, w) unless the slot is
 -- in skip (held by another plugin, written as is).
 function W.write_target(t, vals, force, eps, base, mix, skip)
+    if W.adapter.strict_bounds and
+        (W.limit(t.mesh) < (t.channels or 0) or M_CN:call(t.mesh) ~= t.channels) then
+        t.ready, t.stable = false, 0
+        return 0, t.count
+    end
     if not t.ready then
         if (M_WC:call(t.mesh) or 0) < (M_CN:call(t.mesh) or 0) then return 0, 0 end
         t.ready = true
@@ -42,9 +75,10 @@ function W.write_target(t, vals, force, eps, base, mix, skip)
         if force or abs(w - last[k]) > eps then
             -- always a float: a Lua integer (e.g. a value clamped to the integer 1 from
             -- settings.json) reaches the System.Single parameter as raw bits (1 -> 1.4e-45)
-            M_SET:call(mesh, idxs[k], w + 0.0)
-            last[k] = w
-            writes = writes + 1
+            if W.set_weight(mesh, idxs[k], w, t.names and t.names[idxs[k] + 1]) then
+                last[k] = w
+                writes = writes + 1
+            end
         else
             skipped = skipped + 1
         end
@@ -59,6 +93,7 @@ function W.zero_target(t)
 end
 
 function W.read_weight(mesh, idx)
+    if W.adapter.strict_bounds and (idx < 0 or idx >= W.limit(mesh)) then return nil end
     local ok, v = pcall(W.M_GETW.call, W.M_GETW, mesh, idx)
     return ok and v or nil
 end

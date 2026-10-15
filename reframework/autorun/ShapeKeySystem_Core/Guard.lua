@@ -37,11 +37,13 @@ function G.mesh_ready(mesh)
     local cn, wc = call(M_CN, mesh), call(M_WC, mesh)
     if not cn or not wc then return false, "channel count unreadable" end
     if wc < cn then return false, "weight buffer not allocated" end
+    if W.adapter.strict_bounds and W.limit(mesh) < cn then return false, "weight list not allocated" end
     return true
 end
 
 -- Cheap per-frame check once a target is stable (2 calls).
 function G.mesh_still_ready(mesh)
+    if W.adapter.strict_bounds then return G.mesh_ready(mesh) end
     return call(M_READY, mesh) == true and call(M_BS_REL, mesh) ~= true
 end
 
