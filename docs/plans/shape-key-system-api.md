@@ -81,6 +81,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 { slot = 12,                     -- live 数组下标
   name = "MouthSmileLeft",       -- 网格里的实际名字
   canonical = "mouthSmileLeft",  -- 标准名（ARKit 写法）；扩展通道为原名
+  label = "左嘴角上扬",           -- 显示名，没有时为 nil（见第 8 节 labels.json）；命令照旧用 name / canonical
   group = "mouth",
   source_text = "smile.L + smileMinor.L×0.5",  -- 来源摘要，显示用
   has_signal = true,             -- false 表示没有游戏信号，只能手动或捏脸
@@ -129,6 +130,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 `SculptKey`：
 ```lua
 { name = "Waist_thin",
+  label = "腰变细",                               -- 显示名，没有时为 nil；同一部件里两个键显示名相同时，后面加「（原名）」
   group = "body",
   parts = { "ch03_012_0012", "ch03_012_0014" },  -- 出现在哪些部件
   part_labels = { "躯干", "腿部" },               -- parts 的显示名；都属于同一件已知装备时只写部位，认不出的保留 id
@@ -296,7 +298,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ```
 reframework/data/ShapeKeySystem/
   settings.json
-  builtin/  profiles/*.json, aliases.json                   （随插件发布，只读；各游戏通用）
+  builtin/  profiles/*.json, aliases.json, labels.json      （随插件发布，只读；各游戏通用）
             <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
                        recording_catalog.json, recordings/*.json       （内置面部动画测试数据）
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
@@ -305,6 +307,12 @@ reframework/data/ShapeKeySystem/
 ```
 
 `names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有 `getBlendShapeChannelName` 时用到（鬼武者）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
+
+显示名（`Labels.lua`）：界面上用中文名代替形态键名，鼠标悬停时显示原名，搜索两种都能搜到。显示名只用于显示，匹配、预设、绑定和命令都还用原名。
+- `builtin/labels.json`（`sks.labels/1`）：`{"sets": {"arkit": {"source": "…", "labels": {"eyeBlinkLeft": "左眼闭眼", …}}, …}}`。按命名体系分组，每组的 `source` 写明出处。现有 `arkit`（Apple ARFaceAnchor.BlendShapeLocation）、`mmd`（MikuMikuDance 自带的あにまさ式ミク）、`sks_mmd`（内置 mmd 配置的其余通道名）。
+- `names/*.json` 可以加 `"labels": {"Breasts_big": "胸部变大", "#1A2B3C4D": "眼睛大小"}`，给 mod 自己的键起名，也可以覆盖内置的。
+- 查找顺序：`user/names` → `mods/names` → 内置表 → 通过别名表对应到 ARKit 名的内置显示名 → 没有（显示原名）。名字比较和通道匹配用同一套规则（大小写、下划线、空格、全角半角、`节点.` 前缀、`_LODn` 都忽略）。
+- 有显示名的名字也加进哈希反查用的名字列表。
 
 父预设查找顺序：`user/bindings/<部件ID>.json` → `mods/bindings/<部件ID>.json` → 同系列 `<ch03_012>_*.json`（先 user 后 mods）→ `default.json`。
 
