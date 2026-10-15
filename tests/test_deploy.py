@@ -19,7 +19,8 @@ class RecordingDeploymentTest(unittest.TestCase):
             source, target = root / "repo", root / "game"
             script = source / "tools" / "deploy.ps1"
             script.parent.mkdir(parents=True)
-            shutil.copyfile(Path(__file__).resolve().parents[1] / "tools" / "deploy.ps1", script)
+            for name in ("deploy.ps1", "sks-files.ps1"):
+                shutil.copyfile(Path(__file__).resolve().parents[1] / "tools" / name, script.parent / name)
             target.mkdir()
             official = ("recording_catalog.json", "recordings/Speak.json", "recordings/CampMeals.json")
             preserved = {
