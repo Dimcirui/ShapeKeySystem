@@ -1,8 +1,14 @@
 # ShapeKeySystem (SKS)
 
-RE 引擎游戏的 REFramework 插件。SKS 读取游戏自身的表情数据，用它驱动角色脸上的形态键；内置 ARKit、MMD、VRChat 等表情配置，还支持实时捏脸、条件表情、面部互动和面部动画测试，并向其他插件提供公开 API。主包是纯 Lua，加载时根据 `reframework:get_game_name()` 选择游戏适配器。
+RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或叫 Blend Shape、Shape Key），并提供图形界面。操作方式有三种：
 
-作者：谛听（Dimcirui）、MK（MonkeySama）。版本号和更新记录见 `reframework/autorun/ShapeKeySystem_Core/Version.lua`。
+- 自动驱动：读取游戏自身的表情数据，实时驱动形态键，让带形态键的 mod 模型跟着游戏做表情；条件表情和面部互动也属于这一类。
+- 手动修改：直接调节形态键的数值，实现捏脸等效果，并可按角色和装备保存为预设。
+- 外部接口：其他插件可以通过公开 API 接管形态键，例如接入外部面捕。
+- 优先级：外部接口持有某个形态键时，直接覆盖其他方式；手动修改优先于自动驱动，自动驱动会在手动修改的范围基础上重映射。
+
+作者：谛听（Dimcirui）、MK（MonkeySama）。
+版本号和更新记录见 `reframework/autorun/ShapeKeySystem_Core/Version.lua`。
 
 ## 支持的游戏
 
