@@ -1,81 +1,92 @@
 # ShapeKeySystem (SKS)
 
-怪物猎人荒野的 REFramework 插件：用游戏的表情数据（fcParam）驱动猎人脸上的形态键（ARKit / Shinano / MMD 等配置），并支持实时捏脸、条件表情、脸部互动，以及给其他插件用的公开 API。面板用 reframework-d2d 绘制，没装 d2d 时用 REFramework 自带的 ImGui 绘制。
+RE 引擎游戏的 REFramework 插件。SKS 读取游戏自身的表情数据，用它驱动角色脸上的形态键；内置 ARKit、MMD、VRChat 等表情配置，还支持实时捏脸、条件表情、面部互动和面部动画测试，并向其他插件提供公开 API。主包是纯 Lua，加载时根据 `reframework:get_game_name()` 选择游戏适配器。
 
-作者：谛听 Dimcirui。版本见 `reframework/autorun/ShapeKeySystem_Core/Version.lua`。
+作者：谛听（Dimcirui）、MK（MonkeySama）。版本号和更新记录见 `reframework/autorun/ShapeKeySystem_Core/Version.lua`。
+
+## 支持的游戏
+
+| 游戏 | 适配器 | 表情数据来源 |
+|---|---|---|
+| 怪物猎人：荒野 | `ShapeKeySystem_Games/Wilds/` | fcParam 关节 |
+| 鬼武者：剑之道 | `ShapeKeySystem_Games/Onimusha/` | `bsControl` 关节；通道名通过名字哈希反查 |
+
+后续要适配的游戏见 #17。
+
+## 功能
+
+- **表情驱动**：信号字典把各游戏的原始数据转换成通用的语义信号，再由表情配置映射到形态键。
+- **捏脸**：实时调节形态键，保存成捏脸预设。
+- **预设与绑定**：按装备或模型绑定表情配置和捏脸预设。
+- **条件表情**：满足条件（受伤、战斗、血量等）时叠加一组表情。
+- **面部互动**：在面部导航图上点击额头、脸颊或眼睛，播放对应的反应；拖动嘴部可以改变口型。
+- **面部动画测试**：回放录制的面部动画，检查映射效果（目前只支持荒野）。
+- **公开 API**：其他插件可以通过 `ShapeKeySystemAPI` 临时接管形态键的值，优先级高于表情和捏脸。
+
+面板默认用 Delete 键打开。操作说明见 [docs/guide.md](docs/guide.md)。
+
+## 依赖
+
+- REFramework。
+- [REF-IME](https://github.com/Monkeysama/REF-IME/releases/latest)：中文输入，通用 REF 插件，支持各 RE 游戏。没有安装时也能用普通输入和剪贴板快捷键。
+- reframework-d2d（可选）：没有安装时，面板改用 REFramework 自带的 ImGui 绘制（需要 2025-07 之后的 REFramework），这时基础页不显示面部图。设置页的「绘制方式」可以强制使用 ImGui，适用于 d2d 掉帧、Linux / Proton 等情况。
+- 和 ArmorVariantManager 共存：SKS 的默认热键是 Delete（AVM 用 Home，游戏暂停用 End），和 AVM 共用输入屏蔽表，也不替换 d2d 的全局对象。
 
 ## 目录
 
 | 路径 | 内容 |
 |---|---|
-| `reframework/` | 和游戏的 `reframework/` 同结构，安装时整个拷过去 |
+| `reframework/` | 结构和游戏里的 `reframework/` 一致，部署时整个复制过去 |
 | `reframework/autorun/ShapeKeySystem.lua` | 入口 |
-| `reframework/autorun/ShapeKeySystem_Core/` | 后端：扫描、写入、表情、捏脸、预设、条件、API |
-| `reframework/autorun/ShapeKeySystem_UI/` | 面板（d2d / ImGui 两种绘制后端，见 `Draw.lua`） |
-| `reframework/autorun/ShapeKeySystem_Games/` | 游戏注册表与各游戏适配器，当前提供 `Wilds/` |
-| `reframework/data/ShapeKeySystem/builtin/` | 通用 profile、别名表；`<游戏 ID>/` 下放信号字典、装备名、专属 profile、录制与参数表 |
-| `reframework/data/ShapeKeySystem/faces/` + `reframework/images/ShapeKeySystem/` | 面部导航图样式 |
-| `tools/install-ref-ime.ps1` | 从 REF-IME 最新 Release 安装输入法依赖，可指定其他 RE 游戏目录 |
-| `tests/` | 离线测试（Python lupa 跑 Lua 5.4 + REFramework mock） |
-| `tools/deploy.ps1` | repo 和游戏目录之间同步 |
+| `reframework/autorun/ShapeKeySystem_Core/` | 后端：扫描、写入、表情、捏脸、预设、条件、播放、API |
+| `reframework/autorun/ShapeKeySystem_UI/` | 面板，有 d2d 和 ImGui 两种绘制后端（见 `Draw.lua`） |
+| `reframework/autorun/ShapeKeySystem_Games/` | 游戏注册表 `Registry.lua`，以及各游戏的适配器 |
+| `reframework/data/ShapeKeySystem/builtin/` | 各游戏通用的表情配置和别名表；`<游戏 id>/` 下放信号字典、装备名、专属配置和录制 |
+| `reframework/data/ShapeKeySystem/faces/`、`reframework/images/ShapeKeySystem/` | 面部导航图的样式 |
+| `tools/deploy.ps1` | 在仓库和游戏目录之间同步 |
+| `tools/package.ps1` | 生成 Fluffy Mod Manager 发布包，附带 REF-IME 附加包 |
+| `tools/sks-files.ps1` | 发布文件清单，部署和打包共用 |
+| `tools/install-ref-ime.ps1` | 从上游 Release 安装 REF-IME |
+| `tools/onimusha_signals.py` | 从鬼武者原版 jcns 生成信号字典 |
+| `tools/vrc_profiles/` | 生成 VRChat 模型的表情配置 |
 | `tools/face_gen/` | 面部导航图生成器 |
-| `toys/SKS_Mocap/` | 个人玩具：iFacialMocap → ARKit 形态键（不属于 SKS，不随 SKS 发布） |
-| `docs/plans/` | 设计文档和 UI ↔ 后端接口约定 |
+| `tools/profile_offline.py` | 离线性能复测 |
+| `tests/` | 离线测试：用 Python lupa 运行 Lua 5.4，配合 REFramework mock |
+| `toys/SKS_Mocap/` | 个人玩具：iFacialMocap → ARKit 形态键，不属于 SKS，也不随 SKS 发布 |
+| `docs/plans/` | 设计文档和接口约定 |
+| `docs/writing/` | 书写规范：注释、提交、发布说明、issue、版本 |
+| `docs/releases/unreleased.md` | 下一版发布说明的草稿 |
 
-## 依赖
+## 开发
 
-- REFramework（MH Wilds 版）
-- reframework-d2d（可选，官方版本，单独安装；SKS 不打包自己的 d2d）。没装时面板改用 REFramework 自带的 ImGui 绘制（需要 2025-07 之后的 REFramework），这时基础页不显示面部图；设置页的「绘制方式」可以强制选择 ImGui（d2d 掉帧、Linux / Proton 时用）
-- 输入法：[REF-IME 最新 Release](https://github.com/Monkeysama/REF-IME/releases/latest)（当前为 `v1.0.0`），将 ZIP 解压至游戏根目录，得到 `reframework/plugins/REF-IME.dll`。该插件使用通用 REF 接口，支持各 RE 游戏，要求兼容的 REFramework（当前 REF API 1.15+ / ImGui 1.92.0 WCHAR32，具体以上游说明为准）。SKS 的表情数据和装备功能仍按游戏提供支持。
-  - 搜索框直接在原位置输入；保存命名、新建配置和表情组合在对应操作栏下展开编辑行，点击「确定」或「取消」。Enter/Esc 留给输入法选字，不触发保存。
-  - d2d 和 ImGui 绘制后端使用同一套标准 ImGui 输入控件；不再依赖差分管理器 UI DLL，也不打开游戏输入弹窗。未安装 REF-IME 时仍可使用普通输入和系统剪贴板快捷键。
-  - 已安装差分管理器时保留它自己的 DLL；SKS 仍保留双方输入屏蔽和光标的兼容逻辑。
-
-## 打包规则
-
-- **主包是纯 Lua**（`reframework/` 下的 autorun、data、images），任何游戏都可以装；游戏相关的功能在运行时按 `reframework.get_game_name()` 判断。
-- **REF-IME 独立安装**，主包不捆绑第三方 DLL。依赖始终从上游最新 Release 获取，不再发布 `addons/WildsChineseInput/`。
-- `tools/deploy.ps1` 只部署主包并清理旧的 SKS 输入模块；`tools/install-ref-ime.ps1` 单独安装 REF-IME，不删除其他插件的 DLL。
-
-## 开发流程
-
-repo 是唯一的源。改完代码后同步到游戏：
+仓库是唯一的源。改完代码后同步到游戏：
 
 ```powershell
-tools\deploy.ps1 -Check   # 只看差异
-tools\deploy.ps1          # repo -> 游戏
-tools\deploy.ps1 -Pull    # 游戏 -> repo（在游戏目录里直接改过时用）
-tools\install-ref-ime.ps1 -Check  # 查询最新 REF-IME 版本
-tools\install-ref-ime.ps1         # 退出游戏后安装至默认荒野目录
-tools\install-ref-ime.ps1 -GameDirectory "D:\Games\RE4" # 也可用于其他 RE 游戏
+tools\deploy.ps1 -Check   # 只列出差异
+tools\deploy.ps1          # 仓库 -> 游戏
+tools\deploy.ps1 -Pull    # 游戏 -> 仓库（直接在游戏目录里改过时用）
 ```
 
-脚本只碰 SKS 自己的文件，玩家数据（`settings.json`、`user/`、`mods/`、`trail.log`）不读也不写。
+脚本默认的游戏目录是 `C:\Steam\steamapps\common\MonsterHunterWilds\reframework`，在其他位置时需要设置环境变量 `SKS_GAME_REFRAMEWORK`。脚本只处理 SKS 自己的文件，不读也不写玩家数据（`settings.json`、`user/`、`mods/`、`trail.log`）。
 
-离线测试（需要 `pip install lupa pillow`）：
+离线测试（需要先 `pip install lupa pillow`）：
 
 ```powershell
 cd tests
-python run.py           # 全部检查，末尾打印各组 FAILS
-python run.py --shots   # 另外把面板各页渲染成 PNG（tests/shots/）
-python test_deploy.py   # 在独立目录验证部署迁移和用户文件保留，需要 PowerShell
+python run.py            # 运行全部检查，最后打印每组的 FAILS
+python run.py --shots    # 另外把面板各页渲染成 PNG，存到 tests/shots/
+python test_deploy.py    # 在独立目录里验证部署
+python test_package.py   # 验证发布包的结构，不联网
 ```
 
-## 表情详情里的映射编辑
+发布时按 [版本规范](docs/writing/version_guideline.md) 定版，然后运行 `tools\package.ps1` 生成 `dist/ShapeKeySystem-<版本>.zip`，作为附件上传到 GitHub release。
 
-「表情详情」底部的「视线设置」下方提供可折叠的「面部动画测试」，内置荒野的 `Speak`、`CampMeals` 原版输入重播，支持暂停、循环、调速和跳转。下方分析日志按本次信号命中次数排序，显示用途与当前形态键绑定，支持分页、未绑定筛选和直接添加映射。播放器通过当前游戏适配器的可选 `playback` 接口运行；未实现该接口的游戏显示不可用提示，不安装荒野的播放回调。
+设计文档：
 
-内置录制放在 `data/ShapeKeySystem/builtin/mhwilds/recordings/`，参数表为同一游戏目录下的 `recording_catalog.json`。自有录制放在 `data/ShapeKeySystem/user/recordings/`；旧的 `user/games/mhwilds/recordings/` 仍可读取，同名文件以新目录为准。部署只清理旧 `games/mhwilds/` 下的三个内置文件，不移动或删除用户录制。文件格式见 [接口文档的面部动画测试章节](docs/plans/shape-key-system-api.md#15-面部动画测试)。
-
-打开「进阶 → 表情详情」，点击形态键名称可展开配置；「＋ 新建映射」可从已扫描网格选择形态键，也可直接输入名称。部位可选眉、眼、视线、鼻·颊、嘴、下颌、舌或扩展。
-
-- 节点支持面部信号、求和（sum）、取最大值（max）、取最小值（min）、相乘（mul）、相减（sub）、引用其他映射、原始 fcParam、常量及眼球旋转。混合节点可继续展开、添加或移除输入。
-- 编辑时使用「映射结构 + 当前节点设置」：树里显示混合关系、信号名、fcParam 和系数，点击节点只编辑该节点。宽窗口左右分栏，窄窗口上下排列；映射说明、标记及网格匹配规则默认折叠。应用和取消放在工作区顶部，编辑时暂时收起通道列表及全局强度控件。
-- 形态键名称和面部信号使用可输入的选择框，输入时在下方联想过滤候选，选中后收起。形态键按名称搜索，也可直接输入未扫描的名称；信号按别名、fcParam 或用途搜索，只有选择候选才修改绑定，长列表可翻页。
-- 信号选择显示语义别名（例如 `blink.L`）、骨骼名（`fcParam_001`）、用途、角色左右侧、实时值和推测标记。
-- 每个输入可设置系数和响应曲线（死区、幂指数、增益）；映射可编辑说明、扩展/推测标记、其他网格名称和排除规则。
-- 点击「应用映射」立即在运行配置生效；「取消编辑」丢弃未应用的草稿。「保存映射」写入用户配置；内置或 mod 自带配置需要起新名字，写入 `data/ShapeKeySystem/user/profiles/`，不会改动原文件。保存后可点「设为默认」绑定当前装备。
-- 「恢复配置」放弃未保存的运行修改。引用循环、未知信号和无效数值会被拒绝；仍被其他节点引用的映射不能删除。切换配置前需先保存或恢复映射。
+- [shape-key-system.md](docs/plans/shape-key-system.md)：整体架构和里程碑
+- [shape-key-system-api.md](docs/plans/shape-key-system-api.md)：UI 与后端的约定、命令、文件格式
+- [multi-game-adapter.md](docs/plans/multi-game-adapter.md)：游戏适配器接口
+- [onimusha-adapter.md](docs/plans/onimusha-adapter.md)：鬼武者适配的探查结果和待查问题
 
 ## 第三方代码
 
