@@ -10,7 +10,9 @@ def sculpt_key(name):
     return re.sub(r"_[Ll][Oo][Dd]\d+$", "", name.rsplit(".", 1)[-1])
 
 
-def convert(source, arkit, profile_id):
+def convert(source, arkit, profile_id, actor="leon"):
+    if actor not in {"leon", "ada"}:
+        raise ValueError("actor must be leon or ada")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", profile_id):
         raise ValueError("profile id must be an ASCII basename")
     if not isinstance(source.get("keys"), list) or not source["keys"]:
@@ -72,16 +74,16 @@ def convert(source, arkit, profile_id):
     return {
         "profiles/" + profile_id + ".json": {"schema": "sks.profile/1", "name": source.get("title", profile_id), "channels": channels},
         "names/" + profile_id + ".json": {"schema": "sks.names/1", "names": names, "labels": labels},
-        "leon/sculpt/" + profile_id + ".json": {"schema": "sks.sculpt/1", "name": profile_id,
+        actor + "/sculpt/" + profile_id + ".json": {"schema": "sks.sculpt/1", "name": profile_id,
             "values": {sculpt_key(name): 0 for name in names}},
-        "leon/leon.json": {"schema": "sks.binding/1", "part": "leon", "profile": profile_id,
+        actor + "/" + actor + ".json": {"schema": "sks.binding/1", "part": actor, "profile": profile_id,
             "sculpt": profile_id, "global": True},
-        "conversion-report.json": {"source_native_map": native_map, "skipped_read_only": skipped, "manual_only": manual,
+        "conversion-report.json": {"actor": actor, "source_native_map": native_map, "skipped_read_only": skipped, "manual_only": manual,
             "sculpt_only": sculpt,
             "notes": ["Original settings and presets are not migrated.",
                       "SKS remaps expressions above sculpt rest values; it does not reproduce legacy additive mixing.",
                       "Identical names on several parts follow SKS merging; inspect coverage before driving.",
-                      "Leon calibration only; game verification is still required."]},
+                      "Actor calibration is selected by the RE4R adapter."]},
     }
 
 
@@ -89,10 +91,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
     parser.add_argument("--id", required=True)
+    parser.add_argument("--actor", choices=("leon", "ada"), default="leon")
     parser.add_argument("--output", type=Path, required=True, help="New directory containing mod data")
     args = parser.parse_args()
     arkit = Path(__file__).resolve().parents[1] / "reframework/data/ShapeKeySystem/builtin/profiles/arkit.json"
-    files = convert(json.loads(args.input.read_text(encoding="utf-8-sig")), json.loads(arkit.read_text(encoding="utf-8")), args.id)
+    files = convert(json.loads(args.input.read_text(encoding="utf-8-sig")), json.loads(arkit.read_text(encoding="utf-8")), args.id, args.actor)
     # The entire conversion is validated before creating any directory; existing outputs are never overwritten.
     if args.output.exists():
         parser.error("output already exists; choose a new directory")
