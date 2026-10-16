@@ -16,7 +16,7 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 |---|---|---|
 | 怪物猎人：荒野 | `ShapeKeySystem_Games/Wilds/` | fcParam 关节 |
 | 鬼武者：剑之道 | `ShapeKeySystem_Games/Onimusha/` | `bsControl` 关节；通道名通过名字哈希反查 |
-| 生化危机4 重制版 | `ShapeKeySystem_Games/RE4R/` | Leon 面部骨骼姿态与原生修正通道权重 |
+| 生化危机4 重制版 | `ShapeKeySystem_Games/RE4R/` | 已适配里昂、艾达：读取面部骨骼姿态、眼球旋转与原生修正通道权重 |
 
 后续要适配的游戏见 #17。
 

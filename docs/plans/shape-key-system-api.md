@@ -605,6 +605,8 @@ UI 通过 `SKS.call("playback", args)` 提交命令，`args.action` 为 `refresh
 
 适配器的可选接口 `native_snapshot()` 返回纯数据快照。`source` 为角色及部件身份签名；`joints` 按名字保存局部位置 xyz 与旋转四元数 xyzw，位置单位为米；`measurements` 为标定轴上的测量值，单位由标定的 kind 决定（pos 为毫米、rot 为度）；`taps` 为原生通道权重；`outputs` 为适配器归一化输出；`status` 保存缺失或不可读来源的原因。
 
+可选字段 `buffers` 保存头部权重状态：`channels` 为通道数，`count` 为可写数量，`length` 为现有权重列表长度。
+
 `SKS.call("native_signals", {action = ..., label = ...})` 支持 `start`、`stop`、`baseline`、`snapshot` 和 `retry`。命令在下一次更新中处理，采样先于 SKS 权重写入。`state.native_signals` 提供支持状态、录制状态、样本数、已录时长、骨骼变化、提示和保存路径。中立位只参与诊断比较，不改变运行标定。
 
 录制格式为 `sks.native-signals/1`，包含 `game`、`label`、`rate_hz`、`duration`、`calibration`、`summary`、`reason` 和 `samples`。目标采样率为 20 Hz，每个样本以 `t` 保存实际经过秒数，`values` 保存快照；标定表只在文件顶层保存一次。录制最长 90 秒，来源消失或身份变化时自动结束。文件保存在 `ShapeKeySystem/native_signals_<game>_*.json`，保存失败时保留数据用于重试。
@@ -618,3 +620,5 @@ RE4R 的播放适配器通过可选的 `decode` 使用 `sks.native-signals/1`，
 可选的 `recording_dirs` 扩展录制目录；`describe(data)` 过滤格式并提供显示名称和轨道支持信息；`default_mode`、`modes` 和 `message(decoded)` 提供播放模式与说明。解码器返回通用的 `frames`、`map`、`hashes`、`n`、`duration` 和 `track`，沿用分片准备、时间采样和分析。
 
 RE4R 的解码帧另存 `eye_columns`，指向录制视线的 yaw/pitch 列。可选的 `apply_angles(rig, values, clip, eyes)` 在输入覆盖时应用视线；未提供时沿用最终信号测试的眼球角度归零行为。
+
+录制标定表包含 `eye_reference` 时，解码先消除对应眼球的参考旋转，再计算视线角，以兼容已有录制。当前实时视线沿用 SKS 的眼球中立位设置。
