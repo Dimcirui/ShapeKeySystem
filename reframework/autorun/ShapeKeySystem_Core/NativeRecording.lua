@@ -26,7 +26,7 @@ function N.describe(data, game)
     return { final = true, name = type(data.label) == "string" and data.label ~= "" and data.label or nil }
 end
 
-local function angle(pose)
+local function angle(pose, reference)
     if type(pose) ~= "table" then return end
     local q, length = {}, 0
     for i, axis in ipairs({"x", "y", "z", "w"}) do
@@ -37,6 +37,20 @@ local function angle(pose)
     if length < 0.25 or length > 2.25 then return end
     length = math.sqrt(length)
     for axis, value in pairs(q) do q[axis] = value / length end
+    if reference then
+        assert(array(reference, 4, "eye_reference") == 4, "eye_reference 需要四元数")
+        local norm = 0
+        for _, value in ipairs(reference) do
+            assert(Recording.finite(value, 1), "eye_reference 数值无效")
+            norm = norm + value*value
+        end
+        assert(math.abs(norm - 1) < 0.001, "eye_reference 需要单位四元数")
+        local n = reference
+        q = {x = n[4]*q.x - n[1]*q.w - n[2]*q.z + n[3]*q.y,
+             y = n[4]*q.y + n[1]*q.z - n[2]*q.w - n[3]*q.x,
+             z = n[4]*q.z - n[1]*q.y + n[2]*q.x - n[3]*q.w,
+             w = n[4]*q.w + n[1]*q.x + n[2]*q.y + n[3]*q.z}
+    end
     local yaw, pitch = X.quat_to_yaw_pitch(q)
     return {yaw, pitch}
 end
@@ -89,7 +103,8 @@ function N.decode(data, track, catalog, game, checkpoint)
         assert(joints == nil or type(joints) == "table", "录制骨骼数据无效")
         eyes[i] = {}
         for _, side in ipairs({"L", "R"}) do
-            eyes[i][side] = angle(joints and joints[side .. "_Eye"])
+            local references = type(data.calibration) == "table" and data.calibration.eye_reference
+            eyes[i][side] = angle(joints and joints[side .. "_Eye"], type(references) == "table" and references[side])
             if not eyes[i][side] then has_eyes[side] = false end
         end
         frames[i] = row

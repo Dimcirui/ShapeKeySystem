@@ -23,7 +23,7 @@ end
 
 function A.connect()
     local address, signature = resolve()
-    assert(address, "请进入 Leon 可用的游戏场景")
+    assert(address, "请进入角色可用的游戏场景")
     session = {address = address, signature = signature}
 end
 

@@ -1,7 +1,7 @@
--- ShapeKeySystem: Leon bone measurements and read-only correction channels.
+-- ShapeKeySystem: calibrated face measurements and read-only correction channels.
 --
 -- Positions are projected in millimetres from the calibrated neutral pose; rotations use the
--- quaternion log in degrees. Rules clamp before gain and sum, matching the Leon calibration.
+-- quaternion log in degrees. Each handle keeps its actor calibration; rules clamp before gain and sum.
 -- Handles belong to a rig and are discarded with it; this module retains no engine objects.
 local Hash = require("ShapeKeySystem_Core.NameHash")
 local Names = require("ShapeKeySystem_Core.Names")
@@ -23,7 +23,7 @@ local function number(v)
     return s and math.tointeger(tonumber(s)) or nil
 end
 
-function S.configure(calibration)
+function S.validate(calibration)
     if type(calibration) ~= "table" or type(calibration.joints) ~= "table" or type(calibration.rules) ~= "table" then
         return false, "Leon 标定数据缺失"
     end
@@ -43,6 +43,12 @@ function S.configure(calibration)
             for _, v in ipairs(j.neutral) do if not finite(v) then return false, "中立位无效" end end
         elseif type(rule.taps) ~= "table" or #rule.taps == 0 then return false, "标定缺少来源" end
     end
+    return true
+end
+
+function S.configure(calibration)
+    local ok, why = S.validate(calibration)
+    if not ok then return false, why end
     data, protected = calibration, {}
     for _, name in ipairs(calibration.native_names or {}) do protected[Hash.hash(name)] = true end
     for _, r in ipairs(data.rules) do
@@ -79,18 +85,20 @@ function S.writable(name, mesh, idx)
 end
 
 S.raw = {
-    term = "Leon 标定信号",
+    term = "角色标定信号",
     parse = function(value)
         local key = type(value) == "string" and by_name[value]
         if key then return key end
-        return nil, "未知 Leon 标定信号"
+        return nil, "未知角色标定信号"
     end,
     label = function(key) return by_key[key] or "?" end,
 }
 
-function S.bind(face, keys)
+function S.bind(face, keys, calibration)
+    local data = calibration or data
     local mesh = call(call(face, "get_GameObject"), "getComponent(System.Type)", sdk.typeof("via.render.Mesh"))
-    local h = { mesh = mesh, keys = keys, joints = {}, taps = {}, status = {}, count = call(mesh, "get_BlendShapeChannelNum") }
+    local h = { mesh = mesh, keys = keys, joints = {}, taps = {}, status = {}, calibration = data,
+        count = call(mesh, "get_BlendShapeChannelNum") }
     local hashes = S.hashes(mesh)
     for name, spec in pairs(data.joints) do
         h.joints[name] = call(face, "getJointByName(System.String)", spec.bone or name)
@@ -121,6 +129,7 @@ function S.measure(spec, position, rotation)
 end
 
 function S.read(h, P, inv_full)
+    local data = h.calibration or data
     local values, fallback, measured, taps = {}, {}, {}, {}
     local mesh = h.mesh
     local cn, wc = call(mesh, "get_BlendShapeChannelNum"), call(mesh, "get_BlendShapeChannelWeightCount")
@@ -176,8 +185,9 @@ local DIAGNOSTIC_JOINTS = {
 }
 
 -- Snapshots contain numbers and names only; every sample resolves fresh engine references.
-function S.snapshot(face)
-    local h = S.bind(face, {})
+function S.snapshot(face, calibration)
+    local data = calibration or data
+    local h = S.bind(face, {}, data)
     local outputs, measured = S.read(h, {}, 1)
     local result = { joints = {}, measurements = {}, taps = {}, outputs = outputs,
         status = {}, calibration = data }
@@ -198,6 +208,7 @@ function S.snapshot(face)
     local hashes = S.hashes(h.mesh)
     local cn, wc = call(h.mesh, "get_BlendShapeChannelNum"), call(h.mesh, "get_BlendShapeChannelWeightCount")
     local length = call(call(h.mesh, "get_ChannelWeightList"), "get_Length")
+    result.buffers = {channels = cn, count = wc, length = length}
     local limit = finite(cn) and finite(wc) and finite(length) and cn == h.count and math.min(cn, wc, length) or 0
     for _, name in ipairs(data.native_names or {}) do
         local idx = hashes[Hash.hash(name)]

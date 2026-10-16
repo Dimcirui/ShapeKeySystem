@@ -1,7 +1,7 @@
--- ShapeKeySystem: Leon discovery, calibrated native signals and shape-key targets.
+-- ShapeKeySystem: player discovery, actor calibration and shape-key targets for RE4R.
 --
--- Only the current player's cha000 head is supported. No scene-wide cutscene/NPC search is
--- performed. Objects are resolved per call; rig handles are released when the topology changes.
+-- The current player's head selects its calibration. Objects are resolved per call;
+-- rig handles are released when the topology changes.
 local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
 local Conditions = require("ShapeKeySystem_Games.RE4R.Conditions")
 local Playback = require("ShapeKeySystem_Games.RE4R.Playback")
@@ -10,9 +10,10 @@ local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_nam
     conditions = Conditions,
     playback = Playback,
     input = require("ShapeKeySystem_Games.RE4R.Input"),
-    terms = { primary = "Leon", part = "部件" }, raw = Signals.raw,
-    bind = Signals.bind, read = Signals.read, channel_writable = Signals.writable }
+    terms = { primary = "主角色", part = "部件" }, raw = Signals.raw,
+    read = Signals.read, channel_writable = Signals.writable }
 local T_MESH
+local calibrations = {}
 local function call(obj, method, ...)
     if not obj then return nil end
     local ok, value = pcall(obj.call, obj, method, ...)
@@ -33,13 +34,23 @@ local function head()
         or call(ctx, "get_HeadGameObject")
     return transform(go)
 end
+local function actor_of_path(p)
+    if p:find("/cha000/", 1, true) then return "leon" end
+    for _, id in ipairs({"cha200", "cha800", "cha801", "cha803"}) do
+        if p:find("/" .. id .. "/", 1, true) then return "ada" end
+    end
+end
+
+function A.bind(face, keys)
+    return Signals.bind(face, keys, calibrations[actor_of_path(path(face))])
+end
 
 function A.primary_root()
     local ctx = context()
     return transform(call(ctx, "get_BodyGameObject") or call(ctx, "get_GameObject"))
 end
 function A.is_face(tr)
-    return path(tr):find("/cha000/", 1, true) ~= nil
+    return actor_of_path(path(tr)) ~= nil
         and call(tr, "getJointByName(System.String)", "C_Chin") ~= nil
 end
 function A.primary_ready()
@@ -71,11 +82,16 @@ function A.part_id(tr)
     local name = call(call(tr, "get_GameObject"), "get_Name") or "part"
     return (p or name):gsub("[^%w_%-]", "_")
 end
-function A.model_of(part) return "leon", part end
-function A.representative_of() return "leon" end
+function A.model_of(part)
+    if part == "leon" or part == "ada" then return part, part end
+    local id = part:match("^(cha%d%d%d)_")
+    local actor = id and actor_of_path("/" .. id .. "/") or actor_of_path(path(head()))
+    return actor or "leon", part
+end
+function A.representative_of(part) return (A.model_of(part)) end
 function A.eye_joints(face)
-    return { L = call(face, "getJointByName(System.String)", "L_Eye"),
-             R = call(face, "getJointByName(System.String)", "R_Eye") }
+    return {L = call(face, "getJointByName(System.String)", "L_Eye"),
+            R = call(face, "getJointByName(System.String)", "R_Eye")}
 end
 function A.signature(root)
     local out = {}
@@ -88,14 +104,15 @@ function A.signature(root)
     return table.concat(out, "|")
 end
 function A.gate()
-    if not A.primary_ready() then return false, "Leon player or head unavailable" end
+    if not A.primary_ready() then return false, "Player or supported head unavailable" end
     return true
 end
 
 -- Core passes only current targets after checking the player's signature and readiness.
 function A.prepare_mesh(m) call(m, "set_LodLevel", 0) end
 
--- Called during a stable LateUpdate scan; the native head keeps its engine-owned count.
+-- Called during a stable LateUpdate scan. Ada's custom head uses the same buffer preparation
+-- as extra meshes; Leon keeps its engine-owned head count.
 function A.prepare_parts(parts)
     local hm = mesh(head())
     for _, part in ipairs(parts) do
@@ -107,7 +124,8 @@ function A.prepare_parts(parts)
             if Signals.writable(name, m, i - 1) then custom = true; break end
         end
         local same_head = hm and call(hm, "get_GameObject") == call(m, "get_GameObject")
-        if not same_head and custom and type(wc) == "number" and wc >= 0 and wc < n
+        local ada_head = same_head and actor_of_path(path(head())) == "ada"
+        if (not same_head or ada_head) and custom and type(wc) == "number" and wc >= 0 and wc < n
             and type(length) == "number" and length >= n and call(m, "get_BlendShapeChannelNum") == n
             and call(m, "get_MeshReady") == true and call(m, "get_BlendShapeReleasedBuffers") ~= true then
             call(m, "set_BlendShapeChannelWeightCount", n)
@@ -118,19 +136,20 @@ function A.prepare_parts(parts)
 end
 
 function A.native_snapshot()
-    if not A.primary_ready() then return nil, "Leon 头部尚未就绪" end
-    local result = Signals.snapshot(head())
+    if not A.primary_ready() then return nil, "角色头部尚未就绪" end
+    local h = head()
+    local result = Signals.snapshot(h, calibrations[actor_of_path(path(h))])
     result.source = A.signature(A.primary_root())
     return result
 end
 
 function A.probe(output)
-    local lines = { "RE4R Leon (cha000); native inputs are read-only" }
+    local lines = { "RE4R " .. tostring(actor_of_path(path(head()))) .. "; native inputs are read-only" }
     local input = A.input.diagnostics()
     pcall(json.dump_file, "ShapeKeySystem\\re4r_input_status.json", input, 2)
     lines[#lines + 1] = A.input.status()
-    if not A.primary_ready() then return { "Leon player or head unavailable" } end
-    local h = Signals.bind(head(), { Signals.raw.parse("jawOpen") })
+    if not A.primary_ready() then return { "Player or supported head unavailable" } end
+    local h = A.bind(head(), { Signals.raw.parse("jawOpen") })
     Signals.read(h, {}, 1)
     for name, state in pairs(h.status) do lines[#lines + 1] = name .. ": " .. state end
     table.sort(lines)
@@ -148,10 +167,14 @@ function A.init()
         local root = A.primary_root()
         return root:get_address(), A.signature(root)
     end)
-    local ok, d = pcall(json.load_file, "ShapeKeySystem/builtin/re4/leon.json")
-    if not ok then return false, "Leon 标定文件无法读取" end
-    local configured, valid, why = pcall(Signals.configure, d)
-    if not configured then return false, "Leon 标定格式无效" end
-    return valid, why
+    for _, actor in ipairs({"leon", "ada"}) do
+        local ok, d = pcall(json.load_file, "ShapeKeySystem/builtin/re4/" .. actor .. ".json")
+        if not ok then return false, actor .. " 标定文件无法读取" end
+        local configured, valid, why = pcall(Signals.validate, d)
+        if not configured then return false, actor .. " 标定格式无效" end
+        if not valid then return false, why end
+        calibrations[actor] = d
+    end
+    return Signals.configure(calibrations.leon)
 end
 return A
