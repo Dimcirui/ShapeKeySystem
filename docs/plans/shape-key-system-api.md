@@ -187,6 +187,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `region_activity[i]` | number | 各部位的活跃度（该部位通道权重的最大值，面部图标提亮用）。只在面板打开时计算 |
 | `signal[slot]` | number | 各信号归一化后的值（0..1）。只在映射编辑或调试页打开时计算 |
 | `eye_angle` | `{L = {yaw, pitch}, R = {yaw, pitch}}` | |
+| `procedural.blink` | number | 自动眨眼生成器当前的左眼值（0..1，关闭时为 0），见「自动表情」一节 |
 
 ## 5. 命令（`SKS.call(cmd, args)`）
 
@@ -215,6 +216,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `calibrate_eye_neutral` | `{}` | 把当前眼球朝向设为正前方 | 同上 |
 | `gaze_hold` | `{yaw, pitch, frames?}` | 两眼都看向给定角度（度，已含反转；+yaw = 角色自身的右，+pitch = 上），覆盖游戏视线；`frames` 帧内（默认 15）不续就自动失效。面板在眼睛上按住拖动时每次绘制都发 | `E_BAD_ARGS` |
 | `gaze_release` | `{}` | 立刻交还给游戏视线 | — |
+| `set_procedural` | `{patch}` | 修改自动表情设置（`enabled`、`mode`、`frequency`、`speed`、`blink.*`），见「自动表情」一节；数值超出范围时截到范围内，未知的 `mode` 返回 `E_BAD_ARGS` | settings |
 
 增益类修改先只改内存，界面显示"未保存"。用户点保存后才写进父预设，避免拖动滑块时反复写文件。
 
@@ -627,3 +629,36 @@ RE4R 的播放适配器通过可选的 `decode` 使用 `sks.native-signals/1`，
 RE4R 的解码帧另存 `eye_columns`，指向录制视线的 yaw/pitch 列。可选的 `apply_angles(rig, values, clip, eyes)` 在输入覆盖时应用视线；未提供时沿用最终信号测试的眼球角度归零行为。
 
 录制标定表包含 `eye_reference` 时，解码先消除对应眼球的参考旋转，再计算视线角，以兼容已有录制。当前实时视线沿用 SKS 的眼球中立位设置。
+
+## 自动表情（程序化表情层）
+
+Core 的 `Procedural.lua` 生成通用信号 `blink.L` / `blink.R`（与信号字典同名），所以内置的 ARKit、MMD、VRC 配置不用改。
+`Profile` 编译这两个名字的 `s` 节点时套一层合成：节点值 = 游戏信号与生成值按 `mode` 合成。生成器关闭或 `mode` 为 `game` 时不产生值，节点就是原来的游戏信号。
+字典里没有原始通道（`raw` 为 null，或游戏没有字典）的这两个信号不标 `no_signal`，来源文字显示「（自动表情）」。
+
+| `mode` | 合成 |
+|---|---|
+| `game` | 只用游戏信号 |
+| `fallback`（默认） | 只作用于游戏缺失的信号：max(游戏, 生成)。缺失 = 字典没有原始通道，或适配器的 `procedural` 表列出了这一组（崛起 `procedural = { blink = true }`：眼睑骨有标定，但待机从不眨眼）。荒野、鬼武者、RE4R 都有眨眼信号，行为不变 |
+| `add` | 所有生成的信号：游戏 + 生成，游戏值不超过 1 时结果截到 1 |
+
+生成器的时钟只在连续帧上前进：门（`gate`）关闭、过场不驱动等跳过的帧不计时，恢复后第一帧步长为 0；单帧步长最多 0.1 秒。所有角色共用一个时钟。
+
+`settings.json` 的 `procedural`（不随父预设的调整保存）：
+
+```json
+"procedural": { "enabled": true, "mode": "fallback", "frequency": 2.0, "speed": 1.0,
+  "blink": { "interval_min": 7.0, "interval_max": 12.0, "close": 0.075, "hold": 0.035, "open": 0.12,
+             "double_chance": 0.15, "double_gap": 0.1, "asym": 0.0 } }
+```
+
+- 两次眨眼之间的间隔在 `interval_min`..`interval_max` 秒间均匀取值，再除以 `frequency`（0.2–4，默认 2，即约 3.5–6 秒一次）；
+- 单次眨眼分闭眼 `close`、保持 `hold`、睁眼 `open` 三段（秒），闭眼和睁眼用 smoothstep，各段除以 `speed`（0.25–3）；
+- `double_chance` 为连眨两次的概率，两次之间隔 `double_gap` 秒，第二次不会再连眨；
+- `asym` 为右眼滞后的秒数（0–0.1）。
+
+修改间隔或频率时，若等待中的间隔比新的最长间隔还长，就重新取一次；切换开关或合成方式时重排眨眼时间。
+
+`state.procedural`：`enabled`、`mode`、`frequency`、`speed`、`blink`（同上），`modes`（顺序）、`mode_names`（界面文字），
+`lacking[name]`（这个信号是否按「缺失」处理）。「表情详情」页的「自动表情」区提供开关、合成方式、眨眼频率和速度。
+视线微动和呼吸还没有实现。
