@@ -1,71 +1,64 @@
 # RE4R Leon 适配器
 
-RE4R 适配器接入 Leon cha000 的自定义形态键驱动和面板鼠标屏蔽，复用 SKS 的表情配置、捏脸、预设绑定、面板和外部接口。
+适配器接口见 `multi-game-adapter.md`，表情配置与绑定格式见 `shape-key-system-api.md`。本文记录 RE4R 的信号来源、写入方式和后续适配。
 
-## 功能组成
+## 现状
 
-| 文件 | 职责 |
+- 游戏 id 为 `re4`，当前角色为 Leon cha000。适配器从玩家 context 查找头部与部件，按网格身份和通道数识别重建。
+- 表情有两种来源：面部骨骼相对中立位的位移或旋转，以及头部网格的原生修正通道权重。
+- 信号字典 `builtin/re4/signals.json` 的 63 个通用信号中，39 个有映射，24 个为 `raw: null`；近似映射标为 `guessed`。
+- 眼球使用 `L_Eye` / `R_Eye`，由 Core 换算视线。
+- 自定义形态键在活动期间逐帧写入，归零时同步写回。
+- 面板打开时屏蔽鼠标点击、滚轮和移动，面板关闭后恢复游戏输入。
+- 游戏内眨眼、张嘴、面板操作、过场和读档正常。
+
+## 实现
+
+### 文件
+
+| 文件 | 内容 |
 |---|---|
-| `Adapter.lua` | 查找玩家、头部和部件，提供网格重建签名、眼球关节与写入策略 |
-| `Signals.lua` | 将面部骨骼姿态和原生修正通道换算为通用表情信号 |
-| `Input.lua` | 面板打开时屏蔽游戏鼠标输入，关闭后恢复 |
-| `builtin/re4/leon.json` | Leon 骨骼中立位、标定规则和原生通道名字 |
-| `builtin/re4/signals.json` | 将 Leon 标定输出连接到 SKS 通用信号名 |
+| `ShapeKeySystem_Games/RE4R/Adapter.lua` | 角色、脸和部件查找，重建签名，LOD 准备和适配器入口 |
+| `ShapeKeySystem_Games/RE4R/Signals.lua` | 骨骼姿态换算、原生修正通道采样与通道保护 |
+| `ShapeKeySystem_Games/RE4R/Input.lua` | 鼠标输入屏蔽和光标恢复 |
+| `builtin/re4/leon.json` | Leon 中立位、标定规则和原生通道名字 |
+| `builtin/re4/signals.json` | 通用信号字典 |
+| `tools/convert_re4r_profile.py` | 旧模型配置转换 |
 
-标定采用 [RE4R-ShapeKey-System](https://github.com/Funnyguysmz/RE4R-ShapeKey-System) 0.4.5-rc.1 的 Leon 48 条规则，第三方声明见 `THIRD_PARTY.md`。信号字典连接了 39 项通用信号，近似映射以 `guessed` 标记。
+### 信号
 
-## 表情信号
+Leon 标定取自 [RE4R-ShapeKey-System](https://github.com/Funnyguysmz/RE4R-ShapeKey-System) 0.4.5-rc.1，共 48 条规则；许可见 `THIRD_PARTY.md`。
 
-旋转取相对中立位的四元数对数并投影到标定轴，单位为度；位移投影单位为毫米。各条规则依次限幅、乘增益、合成并限幅，输出范围为 0–1。`jawOpen` 等 raw 名称在配置加载时编译为整数索引，采样句柄由当前 rig 持有。
+旋转用相对中立位的四元数对数投影到标定轴，单位为度；位移投影单位为毫米。每条规则限幅后乘增益，同名输出合成后再次限幅。`jawOpen` 等标定输出作为适配器的 raw 通道，范围为 0–1，字典 `full = 1`。Core 按通用信号计算 Profile。
 
-视线使用 Core 的眼球接口。眨眼映射、骨骼中立位和眼嘴标定沿用旧 System。
+原生修正通道先采样，再写入自定义形态键。91 个原生名字用于哈希识别；实际采样按当前网格的通道和数组长度确定。
 
-## 通道解析与持续写入
+### 通道和写入
 
-RE4R 使用 `get_ChannelNameHash():get_Item()` 的数值结果解析通道名，解决装箱元素 `ToString()` 返回错误数值造成的识别问题。
+RE4R 的装箱元素 `ToString()` 会返回错误的数值，通道哈希改从 `get_ChannelNameHash():get_Item()` 读取。适配器通过 `hash_item_only` 选择这条路径。
 
-网格就绪判断兼容 RE4R 的接口集合，通过 MeshReady、当前通道数、已分配权重数组、稳定帧数和对象签名控制写入时机。重建时释放旧 rig，再绑定当前网格。
+网格就绪判断检查 MeshReady、通道数、权重数组长度和稳定帧数，并兼容 RE4R 缺少的可选启用标志。每帧通过 gate 和网格签名检查当前 rig，重建后重新绑定。
 
-原生通道按名字哈希识别，91 个候选原生名字用于保护原生表情数据。表情、捏脸和外部接口共同遵循通道保护与数组边界检查。原生 tap 先采样，再计算自定义形态键输出。
+扫描、表情、捏脸和外部接口共同使用通道保护规则，保留游戏驱动的原生修正通道。`strict_bounds` 在读取和写入时检查当前数组边界。
 
-RE4R 开启活动权重逐帧写入：最终权重非零时持续写入，回到零时写入归零值。荒野、鬼武者继续使用原来的变化阈值策略。
+游戏对照中，按变化阈值跳过写入时，眨眼过快且缺少过渡。因此当前为 RE4R 单独启用活动权重逐帧写入，后续继续改进写入策略。`rewrite_active_weights` 在当前或上次权重非零时持续写入，零到零可以跳过。荒野和鬼武者沿用变化阈值策略。
 
-## 面板鼠标屏蔽
+### 鼠标输入
 
-有效入口为 `share.hid.Device.update()` 的后处理。面板打开时，清理游戏托管鼠标的触发、按下、抬起、重复、滚轮和移动状态；面板从原生鼠标读取点击、移动和滚轮，保持界面操作正常。
+`Input.lua` 在 `share.hid.Device.update()` 后清理游戏托管鼠标的触发、按下、抬起、重复、滚轮和移动字段。面板从原生鼠标读取操作数据。
 
-鼠标字段位置由 TDB 读取，并检查类型、尺寸、对象边界和字段重叠。一次 hook 调用完成后释放设备引用。关闭面板时等待鼠标按键和抬起事件结束，再恢复游戏输入与光标模式。共用输入登记表协调其他面板的接管与恢复。
+字段偏移由类型信息取得，并检查类型、尺寸、对象边界和重叠。设备引用保留在一次 hook 调用内。关闭面板时，等按键与抬起事件结束后恢复输入和光标模式；共用登记表协调其他面板的接管。
 
-## Core 和 UI 接口
+## 模型配置转换
 
-| 接口 | 用途 |
-|---|---|
-| `A.faces(root)`、`A.face_root(face, root)` | 提供脸候选及扫描组根 |
-| `A.parts(root)`、`A.part_id(tr)` | 提供部件列表和稳定 ID |
-| `A.signature(root)` | 识别网格身份和通道数变化 |
-| `A.channel_writable(name, mesh?, index?)` | 判断通道写入权限 |
-| `A.strict_bounds` | 启用当前通道数和权重数组检查 |
-| `A.hash_names`、`A.hash_item_only` | 按数值 Item 哈希解析通道 |
-| `A.rewrite_active_weights` | 持续写入活动权重 |
-| `A.prepare_mesh(mesh)` | 将当前就绪目标设为 LOD0 |
-| `A.input.left_down`、`take_wheel`、`status` | 提供面板鼠标读取与输入状态 |
+运行 `tools/convert_re4r_profile.py INPUT --id ID --output NEW_DIRECTORY`，输出 profiles、names 和 leon/leon 绑定。转换保留自定义形态键名，将 ARKit/MMD 映射转换为 SKS Profile 节点，并为两种 Leon 标定表选择对应信号。
 
-这些接口按适配器选择启用。RE4R 类型查询与 hook 安装在适配器初始化阶段执行。
-
-## Profile 转换
-
-`tools/convert_re4r_profile.py INPUT --id ID --output NEW_DIRECTORY` 将旧 Profile 转换为 SKS 的 profiles、names 和 leon/leon 绑定，输出至独立目录。
-
-转换保留自定义通道名，将 ARKit/MMD 映射转换为现有 Profile 节点，并为两种 Leon 标定表提供对应规则。转换报告说明旧手动叠加与当前捏脸基值重映射的差异。面部导航互动复用 Core，可通过 interactions 配置模型专属键名。
-
-## 游戏测试结果
-
-用户确认眨眼过渡、张嘴、面板点击、拖动、滚动及关闭后的输入恢复正常，左键、右键、滚轮和鼠标移动穿透已解决。过场和读档正常。
-
-RE4R 离线检查入口为 `python tests/run.py --re4r-only`，Profile 转换检查入口为 `python tests/test_re4r_conversion.py`。已有 gaze 和 about-card 检查由 [#22](https://github.com/Dimcirui/ShapeKeySystem/issues/22) 跟踪。
+旧手动叠加与当前捏脸基值重映射的差异写入转换报告。面部导航互动沿用 Core 的名字匹配，也可以通过条件集的 `interactions` 配置模型专属键名。
 
 ## 后续适配
 
-当前角色目标为 Leon cha000。后续可继续接入其他角色与槽位、独立过场角色、键盘和手柄屏蔽、游戏状态条件、录制回放及权重数组分配。
+- 角色与部件：其他角色、服装槽位及独立过场副本。
+- 输入：键盘和手柄屏蔽。
+- 可选能力：游戏状态条件、面部动画回放和权重数组分配。
 
-跨游戏适配进度见 [#17](https://github.com/Dimcirui/ShapeKeySystem/issues/17)，通用骨骼信号来源见 [#21](https://github.com/Dimcirui/ShapeKeySystem/issues/21)。
+跨游戏进度见 [#17](https://github.com/Dimcirui/ShapeKeySystem/issues/17)，通用骨骼信号来源见 [#21](https://github.com/Dimcirui/ShapeKeySystem/issues/21)。

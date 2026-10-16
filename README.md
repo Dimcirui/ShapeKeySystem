@@ -16,11 +16,9 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 |---|---|---|
 | 怪物猎人：荒野 | `ShapeKeySystem_Games/Wilds/` | fcParam 关节 |
 | 鬼武者：剑之道 | `ShapeKeySystem_Games/Onimusha/` | `bsControl` 关节；通道名通过名字哈希反查 |
-| 生化危机4 重制版 | `ShapeKeySystem_Games/RE4R/` | Leon cha000 的骨骼标定与原生修正通道；包含面板鼠标屏蔽 |
+| 生化危机4 重制版 | `ShapeKeySystem_Games/RE4R/` | Leon 面部骨骼姿态与原生修正通道权重 |
 
 后续要适配的游戏见 #17。
-
-RE4R 的实现、配置转换与适配进度见 [适配说明](docs/plans/re4r-adapter.md)。
 
 ## 功能
 
@@ -57,6 +55,7 @@ RE4R 的实现、配置转换与适配进度见 [适配说明](docs/plans/re4r-a
 | `tools/sks-files.ps1` | 发布文件清单，部署和打包共用 |
 | `tools/install-ref-ime.ps1` | 从上游 Release 安装 REF-IME |
 | `tools/onimusha_signals.py` | 从鬼武者原版 jcns 生成信号字典 |
+| `tools/convert_re4r_profile.py` | 将旧 RE4R 模型配置转换为 SKS 配置 |
 | `tools/vrc_profiles/` | 生成 VRChat 模型的表情配置 |
 | `tools/face_gen/` | 面部导航图生成器 |
 | `tools/profile_offline.py` | 离线性能复测 |
@@ -96,6 +95,7 @@ python test_package.py   # 验证发布包的结构，不联网
 - [shape-key-system-api.md](docs/plans/shape-key-system-api.md)：UI 与后端的约定、命令、文件格式
 - [multi-game-adapter.md](docs/plans/multi-game-adapter.md)：游戏适配器接口
 - [onimusha-adapter.md](docs/plans/onimusha-adapter.md)：鬼武者适配的探查结果和待查问题
+- [re4r-adapter.md](docs/plans/re4r-adapter.md)：RE4R Leon 的信号来源、写入方式和后续适配
 
 ## 第三方代码
 
