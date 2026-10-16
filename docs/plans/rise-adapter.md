@@ -113,6 +113,8 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）同�
   - 重启游戏后部件重新生成、没有 `BlendShapeController`，只补权重数也能正常写，所以**不需要加组件**。
   - 通道名：mod 的 663 个名字大多不在 SKS 已知的名字里，显示成 `#XXXXXXXX`。用 `tools/mesh_names.py` 从 mod 的 `.mesh` 生成名字表
     放进 `mods/names/` 后全部反查成功（Blender 场景里 726 个键，导出后网格里留下 663 个）。
+    之后加了各游戏共用的内置名字表 `builtin/names/`（VRChat / MMD 模型调查的形态键名）：这个模型除了基型以外的键里，
+    约 100 个（含 `----------EYELID----------` 这类分隔键）原来反查不到，加上内置名字表后全部能反查，不再需要 mod 自带名字表。
 - **暂停**：`snow.TimeScaleManager:get__Pausing()` 存在，村里读出 false。
 
 ## 2. 探查方法

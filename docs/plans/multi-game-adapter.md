@@ -279,6 +279,7 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）不�
 
 ```
 builtin/aliases.json            通用
+builtin/names/*.json            通用名字表（只保留名字哈希的游戏用来反查通道名）
 builtin/profiles/*.json         通用 profile（只用 s 节点）
 builtin/<id>/signals.json       信号字典
 builtin/<id>/armor_names.json   模型显示名（由 A.model_names 指定文件名）

@@ -303,7 +303,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ```
 reframework/data/ShapeKeySystem/
   settings.json
-  builtin/  profiles/*.json, aliases.json, labels.json      （随插件发布，只读；各游戏通用）
+  builtin/  profiles/*.json, aliases.json, labels.json, names/*.json   （随插件发布，只读；各游戏通用）
             <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
                        recording_catalog.json, recordings/*.json       （内置面部动画测试数据）
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
@@ -311,7 +311,7 @@ reframework/data/ShapeKeySystem/
             recordings/*.json                             （用户面部动画录制）
 ```
 
-`names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有可用的 `getBlendShapeChannelName` 时用到（鬼武者、崛起；`tools/mesh_names.py` 能从 mod 的 `.mesh` 生成）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
+`names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有可用的 `getBlendShapeChannelName` 时用到（鬼武者、崛起；`tools/mesh_names.py` 能从 mod 的 `.mesh` 生成）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键、显示名表里的名字，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。名字表按 `user/names` → `mods/names` → `builtin/names` 的顺序读，同一个哈希先到先得。`builtin/names/` 随插件发布、每个游戏都一样：`vrc.json`、`mmd.json` 是 VRChat / MMD 模型调查里的全部形态键名（`tests/vrc_faces.json`、`tests/mmd_names.json` 的并集），用常见命名的 mod 不用自带名字表。哈希数组的读法由适配器的 `hash_item_only` 决定：为 true 时只读 `get_Item`（有的游戏装箱的元素读出来是错数），否则先读 `get_elements()`、读不到再用 `get_Item`；RE4R 的原生通道查找用同一个读取函数。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
 
 显示名（`Labels.lua`）：打开面板右上角的「翻译形态键」（设置 `translate_keys`）后，界面上用中文名代替形态键名，鼠标悬停时显示原名，搜索两种都能搜到。译名表只有中文，界面语言不是中文时仍显示原名。显示名只用于显示，匹配、预设、绑定和命令都还用原名。
 - `builtin/labels.json`（`sks.labels/1`）：`{"sets": {"arkit": {"source": "…", "labels": {"eyeBlinkLeft": "左眼闭眼", …}}, …}}`。按命名体系分组，每组的 `source` 写明出处。现有 `arkit`（Apple ARFaceAnchor.BlendShapeLocation）、`mmd`（MikuMikuDance 自带的あにまさ式ミク）、`sks_mmd`（内置 mmd 配置的其余通道名），以及 `avatar_*`（VRChat / MMD 模型调查里确定的译名，按类别分组；来源和不确定的名字记在 `docs/labels/`）。
