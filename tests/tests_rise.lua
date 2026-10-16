@@ -169,11 +169,25 @@ SKS.call("set_procedural", { patch = { frequency = 4, blink = { interval_min = 0
 local m = run_for(0.6)
 check(#st.scene.rigs == 1 and m > 0.5,
     string.format("Rise, fallback: the mod head blinks with neutral face_base bones (max %.2f)", m))
+check(st.procedural.lacking.jawOpen and st.procedural.lacking.gaze,
+    "Rise: jawOpen lacking (adapter procedural.breath), gaze lacking (no eye joints)")
+SKS.call("set_procedural", { patch = { breath = { amplitude = 0.1, interval_min = 0.5, interval_max = 0.5,
+                                                  open = 0.1, hold = 0.05, close = 0.1 } } })
+local jaw_max, stop = 0, os.clock() + 1.2
+while os.clock() < stop do
+    local w = os.clock() + 0.01
+    while os.clock() < w do end
+    ticks(1)
+    jaw_max = math.max(jaw_max, WEIGHTS[1] or 0)
+end
+check(math.abs(jaw_max - 0.1) < 0.02, string.format("Rise, fallback: the mouth opens slightly at idle (jawOpen max %.3f)", jaw_max))
 flags.ready = false; ticks(2)
 local t_closed = Pr.time
 run_for(0.2)
 check(Pr.time == t_closed, "gate closed: the generator's clock stands still")
-flags.ready = true; ticks(2)
+flags.ready = true; ticks(1)
+do local w = os.clock() + 0.02; while os.clock() < w do end end   -- the second frame needs real time to pass
+ticks(1)
 check(Pr.time > t_closed and Pr.time - t_closed <= 0.1 + 1e-9, "gate open again: the clock resumes without a jump")
 SKS.call("set_procedural", { patch = { mode = "game" } })
 ticks(60)

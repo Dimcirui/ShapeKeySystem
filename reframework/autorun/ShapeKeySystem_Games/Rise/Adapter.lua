@@ -11,8 +11,10 @@
 --   weight list is already that long: writing past the buffer can freeze the game.
 -- - face_base (the player's face) only anchors the rig and is not a part: Core zeroes parts when it
 --   lets go, which would wipe the character's face sculpt values.
--- - The player face never blinks; eyeBlink only follows expression eyelids. `procedural.blink`
---   lets Core's procedural layer supply the blinking in its default (fallback) mode.
+-- - The player face never blinks; eyeBlink only follows expression eyelids, and the idle mouth
+--   breathing stays below jawOpen's `lo`. `procedural` lets Core's procedural layer supply the
+--   blinking and the idle mouth opening in its default (fallback) mode; gaze follows from the
+--   missing eye joints.
 local B = require("ShapeKeySystem_Core.BoneSignals")
 local A = {
     id = "mhrise",
@@ -21,7 +23,7 @@ local A = {
     hash_names = true, hash_item_only = true,
     scene_search = false,
     raw = B.raw, read = B.read,
-    procedural = { blink = true },
+    procedural = { blink = true, breath = true },
 }
 
 local M_JBN, T_MOTION
