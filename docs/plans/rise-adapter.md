@@ -209,12 +209,12 @@ tests/tests_rise.lua                                            -- 离线检查
 `multi-game-adapter.md` 2.1 设计了 `caps`，但 Core 现在还没有读 `caps` 的代码（2026-10-15 检查：Core 和 UI 里没有 `caps.`）。
 荒野和鬼武者都有驱动骨骼，所以一直没用上。崛起是第一个需要降级路径的游戏：
 
-- 适配器没有 `A.raw` 时：表情 rig 不读游戏信号，表情页显示「本游戏没有表情信号」，捏脸、预设、外部 API 照常。
+- 适配器没有 `A.raw` 时：表情 rig 不读游戏信号，表情页显示「本游戏目前暂不支持表情」，捏脸、预设、外部 API 照常。
   `Expression.read` 已经是 `if A.read then ... end`，要再查 `Profile.lua:42,177`、`API.lua:229,416,2077` 这几处在 `raw` 为 nil 时是否会出错。
 - 先用接口是否存在来判断（`A.raw == nil`），等第二种降级需求出现再引入 `caps` 表，避免现在就定一张用不全的表。
 - 2026-10-16 检查结果：上面几处在 `raw` 为 nil 时都不会出错（`Profile.load_signals` 把所有信号标成无信号，`p` 节点报「本游戏没有原始通道」，
   `bind_raw` 和 `X.read` 跳过）；`tests_fake.lua` 的假适配器早就在没有 `raw` 的情况下跑捏脸和预设。
-  补上的只有界面提示：`SKS.init` 设 `state.expression.no_signals = (A.raw == nil)`，表情页信息行显示「本游戏没有表情信号，表情只来自外部 API」。
+  补上的只有界面提示：`SKS.init` 设 `state.expression.no_signals = (A.raw == nil)`，「表情」和「表情详情」两页顶部显示「本游戏目前暂不支持表情」。
 
 ### 4.4 第一阶段的验收
 

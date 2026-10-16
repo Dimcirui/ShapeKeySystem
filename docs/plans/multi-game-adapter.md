@@ -63,8 +63,8 @@ local A = {
 function A.init(events) end       -- 唯一允许调用 sdk 的入口，见 2.5
 ```
 
-`caps.expression = false` 时 Core 不建表情 rig，只保留捏脸、预设和外部 API；表情页显示「本游戏没有表情信号」。
-**现状（2026-10-16）**：Core 还不读 `caps`，降级按接口是否存在判断。适配器没有 `A.raw` 时，rig 照常建立但不读游戏信号，`state.expression.no_signals` 为 true，表情页信息行显示「本游戏没有表情信号，表情只来自外部 API」；崛起是第一个这样的游戏。等第二种降级需求出现再引入 `caps` 表（`rise-adapter.md` 4.3）。
+`caps.expression = false` 时 Core 不建表情 rig，只保留捏脸、预设和外部 API；表情页显示「本游戏目前暂不支持表情」。
+**现状（2026-10-16）**：Core 还不读 `caps`，降级按接口是否存在判断。适配器没有 `A.raw` 时，rig 照常建立但不读游戏信号，`state.expression.no_signals` 为 true，「表情」和「表情详情」两页顶部显示「本游戏目前暂不支持表情」；崛起是第一个这样的游戏。等第二种降级需求出现再引入 `caps` 表（`rise-adapter.md` 4.3）。
 
 适配器可设 `scene_search = false`，由 Core 向面板提供 `state.settings.scene_search_available = false`，隐藏全场景搜索开关。省略时沿用原有显示。
 
