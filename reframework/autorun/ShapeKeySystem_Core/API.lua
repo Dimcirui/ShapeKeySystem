@@ -2033,6 +2033,8 @@ function SKS.init(adapter)
     SKS.adapter = adapter
     Writer.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
+    -- no raw channels: rigs read nothing from the game; sculpt, presets and the external API still write
+    state.expression.no_signals = adapter.raw == nil
     Cnd.install(adapter.conditions)
     Trail.open()
     load_settings()
