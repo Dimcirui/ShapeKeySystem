@@ -14,7 +14,7 @@ local min, max = math.min, math.max
 local TYPES = { "none", "s", "sum", "max", "min", "mul", "sub", "ref", "p", "const", "eye" }
 local LABELS = { "无自动信号（手动）", "面部信号", "求和（sum）", "取最大值（max）", "取最小值（min）",
     "相乘（mul）", "相减（sub）", "引用映射", "原始通道", "常量", "眼球旋转" }
-local HELP = { none = "不读取自动信号，可由捏脸、条件表情或外部插件控制。",
+local HELP = { none = "不读取自动信号，可由捏脸、条件规则或外部插件控制。",
     s = "读取游戏面部动画信号，按 SKS 信号词典归一化。",
     sum = "将所有输入相加；可以超过 1，最终是否截断由全局设置决定。",
     max = "取所有输入中的最大值，常用于左右信号任一生效时驱动。",

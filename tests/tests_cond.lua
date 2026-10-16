@@ -124,7 +124,7 @@ local function frame() CB.tick(); CB.frame(); DRAWS, DRAWN_IMAGES, CMDS = {}, {}
 local function find(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then return d end end end
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 Panel.ui.page = "cond"; frame(); frame()
-check(find("页面出错") == nil and find("靠上的状态优先生效，同一个状态的规则满足一种即生效") ~= nil, "条件表情 page draws")
+check(find("页面出错") == nil and find("靠上的状态优先生效，同一个状态的规则满足一种即生效") ~= nil, "条件规则 page draws")
 check(find("＋ 添加条件") == nil and find("（回差 5）") ~= nil and find(" 或 ") ~= nil,
     "states start collapsed and show their conditions on the header line")
 local function exact0(s2) for _, dd in ipairs(DRAWS) do if dd.s == s2 then return dd end end end
@@ -132,11 +132,11 @@ local st1o = exact0("1")
 if st1o then MOUSE.x, MOUSE.y = st1o.x - 8, st1o.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 check(Panel.ui.page_state.cond.closed[1] == false and find("＋ 添加条件") ~= nil, "a collapsed state expands")
 check(find("实时条件") ~= nil or true, "live values section")
-SNAPS[#SNAPS + 1] = { name = "条件表情", cmds = CMDS }
+SNAPS[#SNAPS + 1] = { name = "条件规则", cmds = CMDS }
 local add = find("＋ 添加条件")
 if add then MOUSE.x, MOUSE.y = add.x + 4, add.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 check(find("添加") ~= nil and find("页面出错") == nil, "add-condition form opens")
-SNAPS[#SNAPS + 1] = { name = "条件表情-添加", cmds = CMDS }
+SNAPS[#SNAPS + 1] = { name = "条件规则-添加", cmds = CMDS }
 Panel.ui.page_state.cond.form = nil
 local function click(d) MOUSE.x, MOUSE.y = d.x + 4, d.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 local function exact(s2) for _, dd in ipairs(DRAWS) do if dd.s == s2 then return dd end end end

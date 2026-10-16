@@ -1,4 +1,6 @@
--- ShapeKeySystem panel, advanced page "条件表情": condition sets (pick / new / save / delete),
+-- ShapeKeySystem panel, advanced page "条件规则" (formerly 条件表情; rules can drive sculpt keys
+-- too). Only the UI was renamed: the backend keeps "conditions" (cond_* commands, conditions/*.json,
+-- binding field) so existing player files still load. Pages: condition sets (pick / new / save / delete),
 -- states in priority order with their rules, expression clips (keys, fades, preview) and the
 -- live value of every condition. Edits go through cond_edit with a full copy of the set.
 
@@ -97,7 +99,7 @@ local function top_bar(ctx, x, y, w)
         return clicked
     end
     if btn("新建") then
-        W.start_text(s, "name_form", { title = "新建条件表情配置", on_submit = function(name)
+        W.start_text(s, "name_form", { title = "新建条件规则配置", on_submit = function(name)
             if name ~= "" then call("cond_new", { name = name }) end
         end })
     end
@@ -125,7 +127,7 @@ local function top_bar(ctx, x, y, w)
     local h = 52
     if pd and pd.kind == "conditions" then
         D.rrect(x, y + 52, w, 36, 3, C.ink); D.outline(x, y + 52, w, 36, 3, 1, C.warn)
-        D.text_mid("删除条件表情配置「" .. pd.name .. "」？", x + 10, y + 56, 28, C.warn, W.body(), w - 200)
+        D.text_mid("删除条件规则配置「" .. pd.name .. "」？", x + 10, y + 56, 28, C.warn, W.body(), w - 200)
         if W.button("删除", x + w - 160, y + 56, 70, 28, { kind = "danger" }) then call("confirm_delete") end
         if W.button("取消", x + w - 82, y + 56, 70, 28, { kind = "ghost" }) then call("cancel_delete") end
         h = 96

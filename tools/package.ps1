@@ -102,7 +102,7 @@ try {
         name = "ShapeKeySystem"
         version = $version
         author = "谛听 Dimcirui, MonkeySama"
-        description = "用游戏表情驱动猎人脸上的形态键（ARKit / Shinano / MMD 等），支持实时捏脸、条件表情和脸部互动。需要 REFramework。"
+        description = "用游戏表情驱动猎人脸上的形态键（ARKit / Shinano / MMD 等），支持实时捏脸、条件规则和脸部互动。需要 REFramework。"
     }
     if ($hasShot) { $info.screenshot = "screenshot.jpg" }
     Add-Bytes "ShapeKeySystem/modinfo.ini" (Write-ModInfo $info)

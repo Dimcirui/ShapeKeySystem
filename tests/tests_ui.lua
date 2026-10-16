@@ -241,7 +241,7 @@ MOUSE.down = false; frame(); CB.tick()
 check(st.settings.window.x == w0 + 50, "title drag moves the window and saves it")
 
 -- every page draws without a page error
-for _, name in ipairs({ "表情", "捏脸", "表情详情", "条件表情", "设置与调试" }) do
+for _, name in ipairs({ "表情", "捏脸", "表情详情", "条件规则", "设置与调试" }) do
     click_text(name, true); MOUSE.x, MOUSE.y = 1500, 900; frame()
     SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
     local e = find("页面出错", false)
@@ -321,7 +321,7 @@ check(title ~= nil, "imgui: title drawn from re.on_frame")
 check(title and title.c == 0xFF4AA2D6, "imgui: colours converted ARGB -> ABGR")
 check(n_frame == #DRAWS, "imgui: the d2d callback draws nothing")
 check(#DRAWN_IMAGES == 0 and #IMGUI_ERR == 0, "imgui: no images; points are {x, y}, colours integers" .. (IMGUI_ERR[1] and (": " .. IMGUI_ERR[1]) or ""))
-for _, name in ipairs({ "表情", "捏脸", "表情详情", "条件表情", "设置与调试" }) do
+for _, name in ipairs({ "表情", "捏脸", "表情详情", "条件规则", "设置与调试" }) do
     iclick(name); MOUSE.x, MOUSE.y = 1500, 900; iframe()
     local e = find("页面出错", false)
     check(e == nil and #IMGUI_ERR == 0, "imgui: page " .. name .. " draws" .. (e and (": " .. e.s) or "") .. (IMGUI_ERR[1] and (": " .. IMGUI_ERR[1]) or ""))

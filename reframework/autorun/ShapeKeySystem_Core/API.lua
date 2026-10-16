@@ -2302,7 +2302,7 @@ function C.select_conditions()
         if not cur or cur.id ~= want then
             if not CondExpr.select(want) then
                 local key = "cond:" .. want
-                if not C.warned[key] then C.warned[key] = true; notice("warn", "条件表情配置不存在：" .. want) end
+                if not C.warned[key] then C.warned[key] = true; notice("warn", "条件规则配置不存在：" .. want) end
             end
             C.build_cond_state()
         end
@@ -2352,7 +2352,7 @@ function cmds.cond_save(a)
     if not ok then return false, code, msg end
     if not (C.binding and C.binding.data and C.binding.data.conditions) then cfg.conditions = res.id; save_soon() end
     C.build_cond_state()
-    notice("info", "已保存条件表情：" .. CondExpr.current.name)
+    notice("info", "已保存条件规则：" .. CondExpr.current.name)
     return true, nil, nil, res
 end
 

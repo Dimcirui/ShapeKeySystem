@@ -21,7 +21,7 @@ local PAGES = {
     { key = "basic",   name = "表情",     mod = "ShapeKeySystem_UI.PageBasic" },
     { key = "sculpt",  name = "捏脸",     mod = "ShapeKeySystem_UI.PageSculpt" },
     { key = "expr",    name = "表情详情", mod = "ShapeKeySystem_UI.PageExpression", adv = true },
-    { key = "cond",    name = "条件表情", mod = "ShapeKeySystem_UI.PageConditions", adv = true },
+    { key = "cond",    name = "条件规则", mod = "ShapeKeySystem_UI.PageConditions", adv = true },
     { key = "debug",   name = "设置与调试", mod = "ShapeKeySystem_UI.PageDebug",    adv = true },
 }
 local page_impl = {}
