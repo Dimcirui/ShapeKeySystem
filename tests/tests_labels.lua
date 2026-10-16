@@ -15,12 +15,13 @@ Labels.load()
 local n_arkit = 0
 for _, n in ipairs(Names.ARKIT52) do if Labels.builtin[U.norm(n)] then n_arkit = n_arkit + 1 end end
 check(n_arkit == 52, "every ARKit name has a builtin label (" .. n_arkit .. ")")
-check(Labels.of("eyeBlinkLeft") == "左眼闭眼", "ARKit name")
-check(Labels.of("blendShape1.EyeBlinkLeft_LOD1") == "左眼闭眼", "node prefix and _LODn suffix")
-check(Labels.of("Eye_Left_Blink") == "左眼闭眼", "alias falls back to its ARKit label")
-check(Labels.of("ｳｨﾝｸ２右") == "右眼闭眼", "MMD name, half-width kana")
+check(Labels.of("eyeBlinkLeft") == "左眼：闭眼", "ARKit name")
+check(Labels.of("blendShape1.EyeBlinkLeft_LOD1") == "左眼：闭眼", "node prefix and _LODn suffix")
+check(Labels.of("Eye_Left_Blink") == "左眼：闭眼", "alias falls back to its ARKit label")
+check(Labels.of("ｳｨﾝｸ２右") == "右眼：wink2", "MMD name, half-width kana")
 check(Labels.of("口角上げ") == "嘴角上扬", "SKS mmd profile channel")
 check(Labels.of("Waist_thin") == nil, "unknown name -> nil")
+check(Labels.of("vrc.v_aa") == "嘴型：a", "surveyed avatar name (avatar_expr set)")
 check(Labels.of("") == nil and Labels.of(nil) == nil, "empty / nil name -> nil")
 
 -- mod and user tables: user wins over mod, both win over builtin
@@ -47,12 +48,25 @@ if k1 and c1 then
     json.dump_file("ShapeKeySystem\\user\\names\\LabelUser.json", { schema = "sks.names/1",
         labels = { Waist_thin = "腰变细", [kname] = "测试键", [cname] = "测试通道" } })
     Labels.load()
+    SKS.call("set_setting", { key = "translate_keys", value = false }); ticks(1)
+    local off = true
+    for _, x in ipairs(st.sculpt.keys) do if x.label then off = false end end
+    for _, x in ipairs(st.expression.channels) do if x.label then off = false end end
+    check(off, "translate_keys off: no labels in state")
+    SKS.call("set_setting", { key = "translate_keys", value = true }); ticks(1)
+    check(st.settings.translate_keys == true, "translate_keys reported in state.settings")
     SKS.call("set_profile", { id = SKS.state.expression.profile.id }); SKS.call("sculpt_scan"); ticks(3)
     local k, c
     for _, x in ipairs(st.sculpt.keys) do if x.name == kname then k = x end end
     for _, x in ipairs(st.expression.channels) do if x.name == cname then c = x end end
     check(k and k.label == "测试键" and k.name == kname, "sculpt key carries its label, name unchanged")
     check(c and c.label == "测试通道" and c.name == cname, "expression channel carries its label, name unchanged")
+    SKS.call("set_setting", { key = "language", value = "en" }); ticks(1)
+    local en = true
+    for _, x in ipairs(st.sculpt.keys) do if x.label then en = false end end
+    check(en, "another UI language keeps mesh names")
+    SKS.call("set_setting", { key = "language", value = "zh" })
+    SKS.call("set_setting", { key = "translate_keys", value = false }); ticks(1)
 end
 
 -- the mock has no file delete: empty the tables so later groups see builtin labels only
