@@ -580,7 +580,7 @@ end)
 
 差分值替换前一帧的对应列，不是增量相加；缺失或空差分保留前一帧。解码同时校验已声明的两条轨道，
 再在相邻帧间线性插值。raw 解码结果为引擎输入单位，不能再乘信号字典的 `full`。
-final 解码结果经适配器的 `final_unit / 字典 full` 换算后用于 SKS 求值，只作用于匹配会话的主角色；缺失参数和眼球角度置零。
+final 解码结果经适配器的 `final_unit / 字典 full` 换算后用于 SKS 求值，只作用于匹配会话的主角色；缺失参数置零，眼球角度默认归零，也可由适配器应用录制视线。
 
 ### 命令与状态
 
@@ -600,3 +600,21 @@ UI 通过 `SKS.call("playback", args)` 提交命令，`args.action` 为 `refresh
 分析按实际经过的录制帧统计绝对幅值超过 1% 的信号，raw 用适配器的 `raw_unit` 判断，final 用归一化幅值判断。
 暂停不累计，循环累计，跳转只计目标显示帧；同命中数按参数编号排序。
 绑定从当前已应用配置的完整依赖树计算，包含原始通道和间接引用；停止保留统计并可刷新绑定，重新播放清零。
+
+## 原生信号诊断
+
+适配器的可选接口 `native_snapshot()` 返回纯数据快照。`source` 为角色及部件身份签名；`joints` 按名字保存局部位置 xyz 与旋转四元数 xyzw，位置单位为米；`measurements` 为标定轴上的测量值，单位由标定的 kind 决定（pos 为毫米、rot 为度）；`taps` 为原生通道权重；`outputs` 为适配器归一化输出；`status` 保存缺失或不可读来源的原因。
+
+`SKS.call("native_signals", {action = ..., label = ...})` 支持 `start`、`stop`、`baseline`、`snapshot` 和 `retry`。命令在下一次更新中处理，采样先于 SKS 权重写入。`state.native_signals` 提供支持状态、录制状态、样本数、已录时长、骨骼变化、提示和保存路径。中立位只参与诊断比较，不改变运行标定。
+
+录制格式为 `sks.native-signals/1`，包含 `game`、`label`、`rate_hz`、`duration`、`calibration`、`summary`、`reason` 和 `samples`。目标采样率为 20 Hz，每个样本以 `t` 保存实际经过秒数，`values` 保存快照；标定表只在文件顶层保存一次。录制最长 90 秒，来源消失或身份变化时自动结束。文件保存在 `ShapeKeySystem/native_signals_<game>_*.json`，保存失败时保留数据用于重试。
+
+独立快照格式为 `sks.native-snapshot/1`，包含 `game` 和 `snapshot`，文件保存在 `ShapeKeySystem/native_snapshot_<game>_*.json`。诊断数据供信号分析和标定使用，与面部动画测试的 `fcparam.recording` 格式分别处理。
+
+### 命名信号回放
+
+RE4R 的播放适配器通过可选的 `decode` 使用 `sks.native-signals/1`，沿用播放命令与状态；模式为 `final`，界面显示“录制信号回放”。`outputs` 中的 ARKit 名称映射为适配器原始通道编号，数值维持 0..1，当前 Profile 继续负责形态键映射。
+
+可选的 `recording_dirs` 扩展录制目录；`describe(data)` 过滤格式并提供显示名称和轨道支持信息；`default_mode`、`modes` 和 `message(decoded)` 提供播放模式与说明。解码器返回通用的 `frames`、`map`、`hashes`、`n`、`duration` 和 `track`，沿用分片准备、时间采样和分析。
+
+RE4R 的解码帧另存 `eye_columns`，指向录制视线的 yaw/pitch 列。可选的 `apply_angles(rig, values, clip, eyes)` 在输入覆盖时应用视线；未提供时沿用最终信号测试的眼球角度归零行为。
