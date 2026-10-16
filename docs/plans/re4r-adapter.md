@@ -34,11 +34,14 @@ Ada 的自定义头部在扫描时补齐可写数量，检查 MeshReady、通道
 | `ShapeKeySystem_Games/RE4R/Signals.lua` | 骨骼姿态换算、原生修正通道采样与通道保护 |
 | `ShapeKeySystem_Games/RE4R/Input.lua` | 鼠标与键盘游戏命令屏蔽、光标恢复 |
 | `ShapeKeySystem_Games/RE4R/Conditions.lua` | 玩家动作、血量、生命状态与护甲网格条件 |
+| `ShapeKeySystem_Games/RE4R/Cutscene.lua` | 时间线播放状态与过场驱动开关 |
 | `ShapeKeySystem_Games/RE4R/Playback.lua` | 录制信号回放、玩家身份检查和录制视线 |
 | `ShapeKeySystem_Core/NativeSignals.lua` | 原生信号诊断状态、录制和保存 |
 | `ShapeKeySystem_Core/NativeRecording.lua` | 命名信号录制解码和眼球姿态换算 |
 | `builtin/re4/leon.json` | Leon 中立位、标定规则和原生通道名字 |
 | `builtin/re4/ada.json` | Ada 中立位、眨眼标定、骨骼补充规则和原生通道名字 |
+| `builtin/re4/character_names.json` | 里昂与艾达的显示名称 |
+| `builtin/re4/recordings/leon.json`、`ada.json` | 两名角色的表情与视线测试片段 |
 | `builtin/re4/signals.json` | 通用信号字典 |
 | `tools/convert_re4r_profile.py` | 旧模型配置转换 |
 
@@ -86,7 +89,7 @@ RE4R 的装箱元素 `ToString()` 会返回错误的数值，通道哈希改从 
 
 表情详情页的“面部动画测试”读取 `sks.native-signals/1`，将录制的标定输出送入当前 Profile，继续使用当前增益、平滑和捏脸基值。支持播放、暂停、跳转、速度调节和循环；停止后恢复实时信号。
 
-录制列表包含默认诊断输出目录中的 `native_signals_re4_*.json`，以及 `user/recordings/` 下的同格式文件。新录制保存后点击“刷新列表”即可播放。
+录制列表包含默认诊断输出目录中的 `native_signals_re4_*.json`，以及 `user/recordings/` 下的同格式文件。新录制保存后点击“刷新列表”即可播放。内置列表提供“里昂 · 表情与视线”和“艾达 · 表情与视线”，各约 20 秒，取自游戏录制，保留标定输出和两侧眼球姿态。
 
 回放使用文件中已保存的输出。修改标定后重新录制，旧文件保留录制时的信号覆盖。
 
@@ -113,6 +116,14 @@ RE4R 的装箱元素 `ToString()` 会返回错误的数值，通道哈希改从 
 血量来自 `get_HitPoint()` 的 `get_CurrentHitPoint` 和 `get_DefaultHitPoint`；Core 计算 `hp_pct`、`hp_decreased` 和 `hp_increased`。血量变化事件配合规则的保持时间使用。玩家身份变化时清除比较基线，避免把角色切换识别为受伤。差分管理器的 `hp_ratio` 在 SKS 中对应 `hp_pct`，其余动作条件沿用 `is_*` 标识。
 
 `hp_vital` 读取 `getHitPointVital`，选项优先从 `chainsaw.character.Vital` 枚举取得。护甲条件只表示 `get_HasArmorMesh`，不表示角色处于战斗或穿着某件自定义衣服。
+
+## 过场驱动开关
+
+开启“过场动画中驱动”时沿用当前玩家的实时驱动。关闭时逐帧读取 `TimelineEventManager._PlayerInfoList`，通过 `TimelineEventPlayerInfo.get_CurrentStatus()` 识别播放、暂停、恢复及跳过状态，暂停 SKS 写入；过场结束或重新开启后重扫并恢复。状态枚举在初始化时按名字取得，每次采样重新查找管理器和列表。过场中关闭、重新开启与恢复驱动已通过游戏反馈。
+
+## 面板显示
+
+捏脸分组、场景部件和绑定信息显示角色与部位名称，例如“里昂 · 头部”“艾达 · 头发”。部件标识、指纹与绑定路径沿用资源名称。当前扫描对象为玩家头部及身体部件，设置页隐藏全场景搜索开关。里昂、艾达的内置录制播放、中文部位名称、资源编号保留及开关隐藏均已通过游戏反馈。
 
 ## 模型配置转换
 

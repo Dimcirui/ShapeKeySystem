@@ -65,6 +65,10 @@ function A.init(events) end       -- 唯一允许调用 sdk 的入口，见 2.5
 
 `caps.expression = false` 时 Core 不建表情 rig，只保留捏脸、预设和外部 API；表情页显示「本游戏没有表情信号」。
 
+适配器可设 `scene_search = false`，由 Core 向面板提供 `state.settings.scene_search_available = false`，隐藏全场景搜索开关。省略时沿用原有显示。
+
+`gate(frame, cutscene_drive)` 的第二个参数为当前过场驱动设置。RE4R 关闭该设置时由适配器暂停当前玩家驱动；使用 Core 过场分段流程的适配器继续返回 `playing` 状态。
+
 ### 2.2 找角色和脸
 
 Core 保留扫描框架（`Scene.scan`：一个父节点只保留一张脸、子节点签名缓存、`read_parts`、

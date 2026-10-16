@@ -54,6 +54,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 `Part`：
 ```lua
 { id = "ch03_012_0012",        -- 部件 ID，同时也是父预设的文件名
+  display = "希望 α · 躯干",   -- 角色或模型名称与部位名称；原始 ID 保留在 id
   slot = "body",               -- head / body / arm / waist / leg / other
   channels = 55,               -- 网格通道总数
   fingerprint = "a1b2c3",      -- 通道名集合的哈希
@@ -164,6 +165,9 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ```
 
 ### 3.8 `state.settings`
+
+`scene_search_available` 由适配器的 `scene_search` 提供；适配器设为 `false` 时，两个面板均隐藏全场景搜索开关。该字段属于运行能力，不写入设置文件。
+
 `hotkey`、`ui_scale`、`language`、`scene_search_always`、`periodic_scan_sec`、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`。修改后立即持久化。
 
 ### 3.9 `state.debug`
