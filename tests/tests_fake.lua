@@ -36,7 +36,7 @@ ticks(60)
 check(tick_ok(), "ticks run (" .. tostring(st.debug.status) .. ")")
 local ex = st.expression
 -- the channels left are eye nodes (no eye joints here), channels without a source ("—") and the
--- blink channels, which the procedural layer drives
+-- blink and jawOpen channels, which the procedural layer drives
 local live, n_none, n_proc = {}, 0, 0
 for _, c in ipairs(ex.channels) do
     local src = tostring(c.source_text)
@@ -44,8 +44,8 @@ for _, c in ipairs(ex.channels) do
     elseif src:find("自动表情", 1, true) then n_proc = n_proc + 1
     elseif src ~= "—" and not src:find("^eye%.") then live[#live + 1] = c.name end
 end
-check(ex.profile and ex.profile.id == "arkit" and n_none > 0 and n_proc == 2 and #live == 0,
-    "no dictionary: ARKit loads, every signal channel but the two blinks no_signal " .. table.concat(live, ", "))
+check(ex.profile and ex.profile.id == "arkit" and n_none > 0 and n_proc == 3 and #live == 0,
+    "no dictionary: ARKit loads, every signal channel but the blinks and jawOpen no_signal " .. table.concat(live, ", "))
 
 SKS.call("sculpt_scan"); ticks(5)
 local waist

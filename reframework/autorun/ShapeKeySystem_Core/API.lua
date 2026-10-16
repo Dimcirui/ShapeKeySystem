@@ -140,7 +140,7 @@ local state = {
 local live = {
     weight = {}, region_activity = { 0, 0, 0, 0 }, signal = {},
     eye_angle = { L = { yaw = 0, pitch = 0 }, R = { yaw = 0, pitch = 0 } },
-    procedural = { blink = 0 },
+    procedural = { blink = 0, mouth = 0, gaze = { 0, 0 } },
 }
 SKS.state, SKS.live = state, live
 state.playback = Playback.state
@@ -315,18 +315,24 @@ local function sanitize_procedural()
     local c, d = cfg.procedural, Proc.DEFAULTS
     if type(c.enabled) ~= "boolean" then c.enabled = d.enabled end
     if not Proc.MODE_NAMES[c.mode] then c.mode = d.mode end
-    if type(c.blink) ~= "table" then c.blink = U.copy(d.blink) end
-    for k, lim in pairs(Proc.LIMITS) do
-        local t = (d.blink[k] ~= nil) and c.blink or c
-        local v = tonumber(t[k])
-        t[k] = v and v == v and U.clamp(v, lim[1], lim[2]) or (d.blink[k] or d[k])
+    for grp, limits in pairs(Proc.LIMITS) do
+        local t, dt = c, d
+        if grp ~= "top" then
+            if type(c[grp]) ~= "table" then c[grp] = U.copy(d[grp]) end
+            t, dt = c[grp], d[grp]
+            if type(t.enabled) ~= "boolean" then t.enabled = dt.enabled end
+        end
+        for k, lim in pairs(limits) do
+            local v = tonumber(t[k])
+            t[k] = v and v == v and U.clamp(v, lim[1], lim[2]) or dt[k]
+        end
     end
 end
 
 local function build_procedural_state()
     local st, c = state.procedural, cfg.procedural
     st.enabled, st.mode, st.frequency, st.speed = c.enabled, c.mode, c.frequency, c.speed
-    st.blink = U.copy(c.blink)
+    for _, grp in ipairs(Proc.GROUPS) do st[grp] = U.copy(c[grp]) end
     st.modes, st.mode_names = Proc.MODES, Proc.MODE_NAMES
     -- groups the game has no usable signal for: fallback mode fills them
     local lacking = {}
@@ -334,6 +340,9 @@ local function build_procedural_state()
         local sig = Profile.signals.by_name[name]
         lacking[name] = Proc.lacking(name, sig == nil or sig.no_signal)
     end
+    -- gaze is decided per rig (eye joints): the panel shows the primary rig's, rebuilt on every scan
+    local rig = C.rigs[1]
+    lacking.gaze = Proc.lacking_group("gaze") or (rig ~= nil and Proc.gaze_lacking(rig))
     st.lacking = lacking
     bump("procedural")
 end
@@ -955,6 +964,7 @@ local function do_scan()
         rigs[i] = { label = r.label, primary = r.primary, targets = ts, reads = r.n_reads }
     end
     sc.rigs = rigs
+    build_procedural_state()
     resolve_bindings(res.parts)
     local parts = {}
     for i, p in ipairs(res.parts) do
@@ -1086,6 +1096,7 @@ local function drive(rig, primary)
         rig.W, rig.V, rig.playback_epoch = {}, {}, Playback.epoch
     end
     -- panel gaze drag: both eyes look at the held angle instead of following the game
+    Proc.apply_gaze(rig)
     local gh = C.gaze_hold
     if gh then
         if C.frame > gh.until_frame then
@@ -1352,7 +1363,10 @@ local function tick()
     if Touch.update() then Sculpt.mark_dirty() end
     if state.runtime.ui_open then C.update_cond_live() end
     -- only reached while the gate lets the rigs be driven: a skipped frame stops the generator's clock
-    live.procedural.blink = Proc.tick(clock(), f)
+    local lp = live.procedural
+    lp.blink = Proc.tick(clock(), f)
+    lp.mouth = Proc.out.jawOpen or 0
+    lp.gaze[1], lp.gaze[2] = Proc.gaze[1], Proc.gaze[2]
     if cfg.enabled and C.prog then
         for i, rig in ipairs(C.rigs) do
             local ok, err = pcall(drive, rig, i == 1)
@@ -1569,19 +1583,31 @@ function cmds.set_procedural(a)
     if p.mode ~= nil and not Proc.MODE_NAMES[p.mode] then return false, "E_BAD_ARGS", "mode: game / fallback / add" end
     if p.enabled ~= nil and type(p.enabled) ~= "boolean" then return false, "E_BAD_ARGS", "enabled must be boolean" end
     local c = cfg.procedural
-    if p.enabled ~= nil then c.enabled = p.enabled end
-    if p.mode ~= nil then c.mode = p.mode end
-    for k, lim in pairs(Proc.LIMITS) do
+    -- validate everything before changing anything
+    local writes, switched = {}, p.enabled ~= nil or p.mode ~= nil
+    for grp, limits in pairs(Proc.LIMITS) do
         local src, dst = p, c
-        if Proc.DEFAULTS.blink[k] ~= nil then src, dst = type(p.blink) == "table" and p.blink or {}, c.blink end
-        if src[k] ~= nil then
-            local v = num(src[k], lim[1], lim[2])
-            if not v then return false, "E_BAD_ARGS", k .. ": number expected" end
-            dst[k] = v
+        if grp ~= "top" then
+            src, dst = type(p[grp]) == "table" and p[grp] or {}, c[grp]
+            if src.enabled ~= nil then
+                if type(src.enabled) ~= "boolean" then return false, "E_BAD_ARGS", grp .. ".enabled must be boolean" end
+                writes[#writes + 1] = { dst, "enabled", src.enabled }
+                switched = true
+            end
+        end
+        for k, lim in pairs(limits) do
+            if src[k] ~= nil then
+                local v = num(src[k], lim[1], lim[2])
+                if not v then return false, "E_BAD_ARGS", k .. ": number expected" end
+                writes[#writes + 1] = { dst, k, v }
+            end
         end
     end
-    -- the schedule restarts on a switch; slider drags keep the blink in progress
-    if p.enabled ~= nil or p.mode ~= nil then Proc.reset() else Proc.retime() end
+    if p.enabled ~= nil then c.enabled = p.enabled end
+    if p.mode ~= nil then c.mode = p.mode end
+    for _, w in ipairs(writes) do w[1][w[2]] = w[3] end
+    -- the schedules restart on a switch; slider drags keep a motion in progress
+    if switched then Proc.reset() else Proc.retime() end
     build_procedural_state(); save_soon()
     return true
 end

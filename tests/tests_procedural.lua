@@ -15,7 +15,7 @@ local function cfg_with(patch)
     local c = U.copy(Pr.DEFAULTS)
     c.frequency = 1   -- the checks below are written against the base interval
     for k, v in pairs(patch or {}) do
-        if k == "blink" then for bk, bv in pairs(v) do c.blink[bk] = bv end else c[k] = v end
+        if type(v) == "table" then for bk, bv in pairs(v) do c[k][bk] = bv end else c[k] = v end
     end
     return c
 end
@@ -95,8 +95,71 @@ merge_cfg("game")
 check(not Pr.active() and Pr.tick(0, 1) == 0 and Pr.out["blink.L"] == nil, "game: no procedural values at all")
 Pr.configure(cfg_with({ enabled = false }))
 check(not Pr.active() and Pr.tick(0, 1) == 0 and Pr.out["blink.L"] == nil, "switched off: no procedural values")
-check(Pr.lacking("blink.L", true) and not Pr.lacking("blink.L", false) and not Pr.lacking("jawOpen", true),
+check(Pr.lacking("blink.L", true) and not Pr.lacking("blink.L", false) and not Pr.lacking("smile.L", true),
     "lacking: no raw channel for a procedural signal (the Wilds adapter claims nothing)")
+
+-- gaze: jumps within the amplitude, each `move` long, holding in between
+local function gaze_run(seed)
+    Pr.configure(cfg_with({ blink = { enabled = false }, breath = { enabled = false },
+                            gaze = { amplitude = 4, interval_min = 0.5, interval_max = 1, move = 0.05, center_chance = 0.3 } }))
+    Pr.seed(seed); Pr.reset()
+    local jumps, moving, max_y, max_p, frames, prev = 0, 0, 0, 0, 0, { 0, 0 }
+    for _ = 1, 30 * 100 do
+        Pr.step(0.01)
+        local y, p = Pr.gaze[1], Pr.gaze[2]
+        if y ~= prev[1] or p ~= prev[2] then moving = moving + 1 end
+        max_y, max_p = math.max(max_y, math.abs(y)), math.max(max_p, math.abs(p))
+        prev[1], prev[2] = y, p
+        frames = frames + 1
+    end
+    return moving, max_y, max_p, Pr.out["blink.L"], Pr.out.jawOpen
+end
+local mv, my, mp, bl, jo = gaze_run(42)
+check(my <= 4 + 1e-9 and mp <= 2.4 + 1e-9 and my > 1, string.format("gaze within ±4° yaw, ±2.4° pitch (%.2f, %.2f)", my, mp))
+-- about 40 jumps in 30 s, each 5 frames of motion: the eyes hold still most of the time
+check(mv > 60 and mv < 400, "gaze moves in short jumps and holds in between (" .. mv .. " moving frames of 3000)")
+check(bl == nil and jo == nil, "blink and mouth switched off: their names stay empty")
+local mv2, my2 = gaze_run(42)
+check(mv2 == mv and my2 == my, "gaze repeats under the same seed")
+
+-- breath: jawOpen rises to the amplitude over `open`, holds, closes; 7-12 s apart
+Pr.configure(cfg_with({ blink = { enabled = false }, gaze = { enabled = false } }))
+Pr.seed(42); Pr.reset()
+local peak, starts, prevj, t = 0, {}, 0, 0
+for _ = 1, 60 * 100 do
+    Pr.step(0.01); t = t + 0.01
+    local v = Pr.out.jawOpen
+    if v > peak then peak = v end
+    if v > 0 and prevj == 0 then starts[#starts + 1] = t end
+    prevj = v
+end
+local gaps_ok = #starts >= 4
+for i = 2, #starts do
+    local gap = starts[i] - starts[i - 1]
+    if gap < 7 + 3.2 - 0.02 or gap > 12 + 3.2 + 0.02 then gaps_ok = false end
+end
+check(near(peak, 0.1) and gaps_ok, string.format("breath: jawOpen peaks at 0.1, %d openings 7-12 s apart after each", #starts))
+check(Pr.gaze[1] == 0 and Pr.gaze[2] == 0 and Pr.out["blink.L"] == nil, "gaze switched off: offset 0")
+
+-- apply_gaze: a rig without eye joints gets the offset itself, never an accumulating one, and goes
+-- back to 0 once gaze stops applying; a rig with joints only in add mode
+Pr.configure(cfg_with({ gaze = { amplitude = 4, interval_min = 0.1, interval_max = 0.1, center_chance = 0 } }))
+local norig = { use_eyes = true, eyes = {}, angles = { L = { 0, 0 }, R = { 0, 0 } } }
+Pr.step(0.3)
+local oy = Pr.gaze[1]
+Pr.apply_gaze(norig); Pr.apply_gaze(norig)
+check(oy ~= 0 and near(norig.angles.L[1], oy) and near(norig.angles.R[1], oy), "no eye joints, fallback: angles = offset, applied twice still once")
+local jrig = { use_eyes = true, eyes = { L = {}, R = {} }, angles = { L = { 5, 1, fresh = true }, R = { 5, 1, fresh = true } } }
+Pr.apply_gaze(jrig)
+check(jrig.angles.L[1] == 5 and not jrig.gaze_applied, "eye joints, fallback: game angles untouched")
+Pr.config().mode = "add"
+Pr.apply_gaze(jrig)
+check(near(jrig.angles.L[1], 5 + oy), "eye joints, add: game angle + offset")
+Pr.apply_gaze(jrig)
+check(near(jrig.angles.L[1], 5 + oy), "add again without a new reading: still one offset")
+Pr.config().mode = "game"
+Pr.apply_gaze(jrig); Pr.apply_gaze(norig)
+check(jrig.angles.L[1] == 5 and norig.angles.L[1] == 0 and not norig.gaze_applied, "game only: angles back on their base")
 
 -- the clock runs on consecutive frames only
 Pr.configure(cfg_with({}))
