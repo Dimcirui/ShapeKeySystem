@@ -93,16 +93,19 @@ local function top_bars(ctx, x, y, w)
             x + 12, cy + 3, 28, C.brass, W.small(), w - 24)
         cy = cy + 42
     end
+    if ex.no_signals then
+        D.text("本游戏目前暂不支持表情", x + 2, cy, C.warn, W.body(), w)
+        cy = cy + 26
+    end
     -- one info line: coverage, gains tuned for another profile
     if not pv then
     local info = {}
-    if ex.no_signals then info[#info + 1] = "本游戏没有表情信号，表情只来自外部 API" end
     local cov = ex.coverage
     if cov then info[#info + 1] = string.format("ARKit 覆盖 %d/%d · 扩展 %d", cov.arkit_hit or 0, cov.arkit_total or 0, cov.extra or 0) end
     if tu and tu.profile_mismatch then info[#info + 1] = "单通道增益属于 " .. tostring(tu.for_profile) .. "，切回它时生效" end
     if tu and tu.source == "binding" and tu.dirty then info[#info + 1] = "调整未保存" end
     if #info > 0 then
-        D.text(table.concat(info, " · "), x + 2, cy, (ex.no_signals or (tu and (tu.profile_mismatch or tu.dirty))) and C.warn or C.muted, W.small(), w)
+        D.text(table.concat(info, " · "), x + 2, cy, (tu and (tu.profile_mismatch or tu.dirty)) and C.warn or C.muted, W.small(), w)
         cy = cy + 22
     end
     end

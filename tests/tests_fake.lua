@@ -95,8 +95,8 @@ KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 for _, page in ipairs({ "basic", "sculpt", "expr", "cond", "debug" }) do
     Panel.ui.page = page; frame(); frame()
     check(not find("页面出错"), "page draws: " .. page)
-    if page == "expr" then
-        check(st.expression.no_signals == true and find("本游戏没有表情信号"), "no raw channels: the expression page says so")
+    if page == "basic" or page == "expr" then
+        check(st.expression.no_signals == true and find("本游戏目前暂不支持表情"), "no raw channels: " .. page .. " says expressions are unsupported")
     end
 end
 print("FAKE FAILS:", ff)
