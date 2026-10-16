@@ -124,6 +124,11 @@ local function draw_titlebar(st, x, y, w)
             for _, p in ipairs(PAGES) do if p.key == ui.page and p.adv then goto_page("basic") end end
         end
     end
+    tw = D.measure(W.body(), "翻译形态键") + 38
+    rx = rx - 16 - tw
+    ch, v = W.toggle("翻译形态键", rx, y + 6, st.settings.translate_keys == true)
+    if ch then call("set_setting", { key = "translate_keys", value = v }) end
+    W.tooltip("形态键显示中文译名，悬停可看原名；只影响显示", rx, y + 6, tw, 28)
     return rx - 10   -- right end of the drag area
 end
 

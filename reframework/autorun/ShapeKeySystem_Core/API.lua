@@ -20,6 +20,7 @@ local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch   = require("ShapeKeySystem_Core.Touch")
 local Playback = require("ShapeKeySystem_Core.Playback")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
+local Labels  = require("ShapeKeySystem_Core.Labels")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -35,6 +36,8 @@ local DEFAULTS = {
     -- Delete: Home opens ArmorVariantManager's panel (same audience), End is the game's pause key,
     -- Insert is REFramework's menu. hotkey_rev 2 = the End -> Delete move has been applied.
     hotkey = "Delete", hotkey_migrated = false, hotkey_rev = 2, ui_scale = 1.0, language = "zh",
+    -- show shape key labels (builtin/labels.json) instead of mesh names; Chinese only for now
+    translate_keys = false,
     scene_search_always = false, periodic_scan_sec = 10, write_epsilon = 0.001, clamp = true,
     -- drive the hunter while a cutscene plays (released on skip / stop, re-armed per segment)
     cutscene_drive = true,
@@ -281,10 +284,18 @@ local function recompute_gains()
 end
 
 -- ---------------------------------------------------------------- state builders
+-- display label for a key while "translate shape keys" is on; the label tables are Chinese, so
+-- another UI language keeps the mesh names
+local function label_of(name)
+    if cfg.translate_keys and cfg.language == "zh" then return Labels.of(name) end
+    return nil
+end
+
 local function build_settings_state()
     local st = state.settings
     for _, k in ipairs({ "hotkey", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
-                         "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend" }) do st[k] = cfg[k] end
+                         "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend",
+                         "translate_keys" }) do st[k] = cfg[k] end
     st.window = U.copy(cfg.window)
     state.runtime.enabled = cfg.enabled
     state.runtime.advanced = cfg.advanced
@@ -314,6 +325,7 @@ local function build_expression_state()
     for s, c in ipairs(prog.channels) do
         channels[s] = {
             slot = s, name = present[s] or c.name, canonical = c.name, group = c.group,
+            label = label_of(present[s] or c.name) or label_of(c.name),
             source_text = c.source_text, has_signal = c.has_signal, no_signal = c.no_signal, guessed = c.guessed,
             extension = c.extension, gaze_set = c.gaze_set, note = c.note, edited = c.edited,
             gain = tonumber(eg.channel_gains[c.name]) or 1.0,
@@ -378,6 +390,7 @@ function build_preview_state()
     for sl, c in ipairs(prog.channels) do
         if present[sl] then hit = hit + 1 end
         channels[sl] = { slot = sl, name = present[sl] or c.name, canonical = c.name, group = c.group,
+                         label = label_of(present[sl] or c.name) or label_of(c.name),
                          source_text = c.source_text, has_signal = c.has_signal, no_signal = c.no_signal, guessed = c.guessed,
                          extension = c.extension, note = c.note, present = present[sl] ~= nil }
         by_group[c.group] = by_group[c.group] or {}
@@ -533,7 +546,7 @@ local function build_sculpt_state()
     for i, k in ipairs(Sculpt.K.keys) do
         local o = {}
         for p, v in pairs(k.overrides) do o[p] = v end
-        keys[i] = { name = k.name, group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts), value = k.value,
+        keys[i] = { name = k.name, label = label_of(k.name), group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts), value = k.value,
                     default = k.default, overrides = o, owner = k.owner,
                     locked = false, mixed = k.owner == "expression", in_preset = k.in_preset == true,
                     range = { Sculpt.RANGE[1], Sculpt.RANGE[2] } }
@@ -544,6 +557,18 @@ local function build_sculpt_state()
             gi[k.group] = g; groups[#groups + 1] = g
         end
         g.key_indices[#g.key_indices + 1] = i
+    end
+    -- two keys of one part with the same label: both show their mesh name too
+    for _, g in ipairs(groups) do
+        local seen = {}
+        for _, i in ipairs(g.key_indices) do
+            local l = keys[i].label
+            if l then seen[l] = (seen[l] or 0) + 1 end
+        end
+        for _, i in ipairs(g.key_indices) do
+            local k = keys[i]
+            if k.label and seen[k.label] > 1 then k.label = k.label .. "（" .. k.name .. "）" end
+        end
     end
     sc.keys, sc.groups = keys, groups
     sc.edit_mode, sc.ab_preview = C.edit_mode, C.preview
@@ -822,7 +847,7 @@ end
 -- alias tables, every profile's channels and "any" lists, sculpt preset and condition clip keys)
 -- plus the user / mod name tables. Rebuilt when one of those lists was reloaded.
 local function known_names()
-    local key = tostring(Profile.list) .. tostring(Presets.sculpt_list) .. tostring(Names.alias_sets) .. tostring(CondExpr.list)
+    local key = tostring(Profile.list) .. tostring(Presets.sculpt_list) .. tostring(Names.alias_sets) .. tostring(CondExpr.list) .. tostring(Labels.names)
     if C.known and C.known_key == key then return C.known end
     local list = {}
     local function add(n) if type(n) == "string" and n ~= "" and n:sub(1, 1) ~= "#" then list[#list + 1] = n end end
@@ -845,6 +870,7 @@ local function known_names()
         for _, c in pairs(e.data and e.data.clips or {}) do add_keys(c.values) end
     end
     for _, n in ipairs(NameHash.table_names()) do add(n) end
+    for _, n in ipairs(Labels.names) do add(n) end
     C.known, C.known_key = NameHash.table(list), key
     return C.known
 end
@@ -1347,7 +1373,7 @@ local SETTING_TYPES = {
     scene_search_always = "boolean", periodic_scan_sec = { 0, 120 }, write_epsilon = { 0, 0.05 },
     clamp = "boolean", window = "table", advanced = "boolean",
     cutscene_drive = "boolean", sculpt_max = { 1, Sculpt.MAX_LIMIT }, face_style = "string",
-    ui_backend = "string",
+    ui_backend = "string", translate_keys = "boolean",
 }
 local UI_BACKENDS = { auto = true, d2d = true, imgui = true }
 function cmds.set_setting(a)
@@ -1364,6 +1390,9 @@ function cmds.set_setting(a)
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end
     if a.key == "sculpt_max" then cfg.sculpt_max = Sculpt.set_max(v); build_sculpt_state() end
+    if a.key == "translate_keys" or a.key == "language" then
+        build_sculpt_state(); build_expression_state()   -- the expression build refreshes a preview too
+    end
     build_settings_state(); save_soon()
     return true
 end
@@ -1999,6 +2028,7 @@ function SKS.init(adapter)
     end
     cfg.sculpt_max = Sculpt.set_max(cfg.sculpt_max)
     Names.load_aliases()
+    Labels.load()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
     for _, s in ipairs(sig.list) do
