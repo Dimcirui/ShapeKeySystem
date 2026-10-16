@@ -9,7 +9,8 @@ U.save_json(U.path("mods", "names", "rise-test.json"),
 -- the engine's getBlendShapeChannelName answers "" here; the adapter must not depend on it
 W.M_CNAME = { call = function() return "" end }
 HASH = NameHash.hash
-CHANNELS = { "eye_close", "jawOpen", "Waist_thin", "Mystery_key" }
+-- eye_nagomi_1 is known only through builtin/names (shared by every game)
+CHANNELS = { "eye_close", "jawOpen", "Waist_thin", "Mystery_key", "eye_nagomi_1" }
 
 local face = ROOT:get_Child()
 face._name = "face_base"
@@ -76,6 +77,11 @@ local by = {}
 for _, k in ipairs(st.sculpt.keys) do by[k.name] = k end
 check(by.eye_close and by.Waist_thin and by[NameHash.label(HASH("Mystery_key"))],
     "names come from get_Item hashes")
+check(by.eye_nagomi_1 ~= nil, "the builtin names table resolves a mod key no profile or label knows")
+local t0 = os.clock()
+local table_size = 0
+for _ in pairs(NameHash.table(NameHash.table_names())) do table_size = table_size + 1 end
+print(string.format("     [rise] name table: %d hashes in %.0f ms", table_size, (os.clock() - t0) * 1000))
 -- the newly allocated buffer must stay ready for Guard.STABLE_FRAMES before the first write
 SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.6 }); ticks(40)
 check(math.abs((WEIGHTS[2] or 0) - 0.6) < 1e-6, "a sculpt value is written (" .. tostring(WEIGHTS[2]) .. ")")
