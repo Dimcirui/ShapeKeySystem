@@ -158,9 +158,9 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）同�
 2. **形态键写入。**（已查，见 1.6：mod 部件要补权重缓冲区，名字走 `get_Item` 哈希加名字表；原版脸是烘焙的） 拿一个带形态键的 mod 部件（或原版 `pl_face000` 的捏脸键），确认 `get_BlendShapeChannelWeightCount` 是否等于通道数、
    `getBlendShapeChannelName` 能否读名字、`setBlendShapeChannelWeightParam` 写进去后画面是否变化、同帧后面是否被覆盖
    （捏脸系统可能每帧写回原版脸的键）。一次只写一个明显的键。
-3. **捏脸是否改变面部骨的静止姿态。** 换两个差别大的捏脸存档（或在捏脸界面里拖鼻子、眼睛），读 `L_Up_Eyelib`、`Jaw_00` 等骨骼的局部位置和旋转。
+3. **捏脸是否改变面部骨的静止姿态。**（部分已查，见 7.1：眼睑、嘴、眉骨的父骨链静止旋转都是单位四元数，捏脸看起来是形态键；没用第二个捏脸存档核对） 换两个差别大的捏脸存档（或在捏脸界面里拖鼻子、眼睛），读 `L_Up_Eyelib`、`Jaw_00` 等骨骼的局部位置和旋转。
    变了就说明中性姿态必须按角色在运行时采集，不能写死在表里。
-4. **原版面部动画在 mod 脸上是否还在。** 原版脸隐藏或被 mod 替换后，面部骨骼是否仍按 motlist 运动（骨骼投影的信号来源是否存在）。
+4. **原版面部动画在 mod 脸上是否还在。**（已查，见 7.1：在，从 `face_base` 读） 原版脸隐藏或被 mod 替换后，面部骨骼是否仍按 motlist 运动（骨骼投影的信号来源是否存在）。
    再看面部骨骼局部值的量级：张嘴、眨眼时 `Jaw_00`、`Up_Eyelib` 的转角和位移各是多少。
 5. **辅助骨写入时机。** 在 LateUpdateBehavior 前写 mod 网格里一根辅助骨的 `set_LocalPosition`，画面是否生效、是否晚一帧；
    不生效就改到 `UpdateMotion` 之后（狂三 mod 的时机）。
@@ -179,7 +179,8 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）同�
 ```
 reframework/autorun/ShapeKeySystem_Games/Rise/Adapter.lua       -- 适配器
 reframework/autorun/ShapeKeySystem_Games/Rise/Input.lua         -- 输入屏蔽（可后做）
-reframework/data/ShapeKeySystem/builtin/<id>/signals.json       -- 信号字典（骨骼投影阶段才需要）
+reframework/data/ShapeKeySystem/builtin/mhrise/signals.json     -- 信号字典（第 7 节）
+reframework/data/ShapeKeySystem/builtin/mhrise/face.json        -- face_base 骨骼标定表（第 7 节，tools/rise_calibrate.py 生成）
 tests/tests_rise.lua                                            -- 离线检查
 ```
 
@@ -202,7 +203,7 @@ tests/tests_rise.lua                                            -- 离线检查
 | `model_of` / `representative_of` | `f_arm279` → 模型 `f_279`、槽位 `arm`；整套由 `f_body279` 代表。男女同编号是两个模型（9.3） |
 | `slot_names` | `arm` 腕甲、`body` 铠甲、`helm` 头盔、`leg` 腿甲、`wst` 腰甲 |
 | `eye_joints(face)` | 第一阶段返回空表；`{ L = L_Eye, R = R_Eye }` 等 3.7 确认后再给 |
-| `raw` / `bind` / `read` | 第一阶段不给；骨骼投影阶段见第 7 节 |
+| `raw` / `bind` / `read` | Core `BoneSignals`，标定表 `builtin/mhrise/face.json`，绑定在 `face_base` 上（第 7 节） |
 | `input` | 先不给（面板打开时游戏照常收输入）；之后参照 Wilds / Onimusha 的 `Input.lua` |
 | `conditions` | 先不给；之后用通用 id（`hp_pct`、`dead`、`combat`）实现 |
 
@@ -315,35 +316,69 @@ mod 随附一份描述，和狂三的 `blink.json` 类似但支持多个键，�
 
 ## 7. 骨骼投影信号
 
-### 7.1 做法
+### 7.1 游戏内实测（2026-10-16）
 
-RE4R 适配器已经实现了同类方案（`ShapeKeySystem_Games/RE4R/Signals.lua`、`builtin/re4/leon.json`、`ada.json`，见 `re4r-adapter.md`）：
-每个关节记中立位（局部位置 + 四元数）和标定轴，位移按毫米、旋转按四元数对数换成度投影到轴上，每条规则 `lo` / `hi` 归一化、限幅、乘增益，
-同名输出相加。计算部分（`S.measure` 和规则求值）不依赖 RE4R，录制和诊断（`NativeSignals.lua`、`A.native_snapshot`）已经在 Core 里。
-崛起要做的是把计算部分搬成 Core 的通用模块（#21），再按崛起的骨骼名写一份标定表；RE4R 专有的部分（`crct_*` 原生修正通道、
-通道保护、按角色选表）不需要。下面是原来的设计，按这个实现修正。
+探针 `reframework\autorun\sks_rise_bones.lua`（游戏目录，不进仓库；只读，按钮触发）：列出 `player00` 每个子物体的关节表，
+逐帧录制 `face_base` 全部关节和其他部件同名关节的局部姿态，以及面部 `via.motion.Motion` 的动作层。录制 CSV 只留在本地。
 
-适配器实现 `A.raw` / `A.bind` / `A.read`：
+- **信号来源存在（3.4）。** mod 套装（279 号，mod 头在 `f_leg279`）上 `face_base` 是隐藏的（`get_Draw` 为 false；脚本里 `set_Draw(true)`
+  会被游戏改回去），但它的 54 个关节照样按面部动作运动：做手势时 `Jaw_00` 转 13°，嘴角动约 9 mm，和原版套装上同一个手势的数值相同。
+- **mod 部件没有原版面部骨。** `f_leg279` 的 79 个关节和 `face_base` 同名的只有 `Root`、`Spine_01`、`Neck_00`、`Head_00`，
+  其他部件同样。所以信号只能从 `face_base` 读，再驱动 mod 头的形态键；mod 头里蒙皮到自己骨骼的顶点不跟着动。
+- **动作层。** 层 1、层 2 在待机时是 bank 12 的 30 号和 1 号，嘴部有约 3 秒一周期的呼吸循环（1–2 mm）。手势时两层每 0.3–0.5 秒切到
+  bank 12 的 140–146 号之一并停在第 0.5 帧：7 个离散口型轮流出现，不是连续曲线。
+- **玩家脸从不眨眼。** 原版套装和 mod 套装上待机都没有眨眼（用户目视确认），眼睑只在个别表情姿态里动。眨眼只能由程序化层生成（第 5 节）。
+- **量级。** `Jaw_00` 绕局部 x 最大 13°；上眼睑最多 7.8 mm（单侧的表情姿态）；下眼睑 3 mm；嘴角 9–17 mm；眉骨 1.3–2.8 mm；
+  `L_Eye` / `R_Eye` 最多 4–7°。
+- **坐标（3.3 相关）。** `face_base` 各骨骼父骨链的静止旋转都是单位四元数，局部轴与 `Head_00` 一致：+x 角色左、+y 上、+z 前。
+  眼睑和眼球挂在 `L/R_Make_Eye` 下，嘴部骨挂在 `Make_Mouth` / `Jaw_01` 下。捏脸用的是 56 个形态键，`Make_*` 的作用没有用第二个捏脸存档核对，
+  标定表暂时写死中立位。
 
-- `raw.parse` 接受 `"Jaw_00.rot"`、`"L_Up_Eyelib.rot"`、`"Lo_Mouth.pos"` 这种「骨骼名.种类」的写法；key 是适配器内部的整数。
-- `bind`：在脸上按名字找关节，记下每个 key 对应的关节、种类、标定轴。
-- `read`：每帧算关节相对中性姿态的位移（毫米）或转角（度），投影到标定轴上，写进 `P[key]`。归一化用信号字典的 `lo` / `hi`（D10）。
+### 7.2 实现
 
-信号字典 `builtin/<id>/signals.json` 列出全部通用信号名（D6），推不出来的写 `"raw": null`。
-预计能推的：眨眼、眯眼（眼睑骨）、张嘴（`Jaw_00` / `Chin`）、下唇、嘴角上扬（`Corner_Mouth`）、眉毛上下（`Brow_00/01`）、视线；
-嘟嘴、舌头大概推不出来。
+- **Core `BoneSignals`（#21）。** 从 RE4R 的 `Signals.lua` 搬出与游戏无关的部分：`measure`（位移按毫米、旋转按四元数对数换成度，投影到标定轴）、
+  规则求值（`lo` / `hi` 归一化、限幅、乘增益，同名键相加再限幅，`fallback` 规则只补主规则没给出的键）、标定表校验、按名字绑定关节、关节快照。
+  输出键是 ARKit 52 个名字，`raw` 和 RE4R 相同。RE4R 保留 `crct_*` 原生通道、通道保护和按角色选表，通过 `source` 回调把原生通道值交给 `evaluate`。
+  核对：在 leon.json / ada.json 上用 2000 组随机姿态比较搬迁前后的 `S.read`，20.8 万个输出（其中 3.9 万个非零）差值全为 0；RE4R 离线检查 58 条全部通过。
+- **崛起适配器。** `raw = BoneSignals.raw`，`bind` 在 `face_base` 上按 `face.json` 找关节，`read = BoneSignals.read`。
+  `native_snapshot` 记下 `face_base` 的 46 个面部关节、各规则的测量值和输出、动作层 1 的 `bank/id`（字段 `motion`），
+  所以「设置与调试」页的「原生信号诊断与录制」可以直接录标定数据。
+- **信号字典。** `builtin/mhrise/signals.json` 沿用 RE4R 字典的 63 个通用信号名（D6），通用名到 ARKit 键的对应也相同；标定表里没有规则的键写 `"raw": null`。
+  现在有 25 个信号可用。
 
-### 7.2 中性姿态和标定
+### 7.3 标定
 
-- 3.3 证明捏脸会改变静止姿态的话，中性姿态在运行时采集：主角色装配完成后、处于闲置时取若干帧平均，或者读关节的绑定姿态（如果能读到）。
-- 标定轴和 `lo` / `hi`：先写一个只读的录制探针，播放几种表情（表情动作、受击、说话），导出各骨骼的位移曲线，离线定出轴和范围，
-  不手调。原始录制只留在本地。
-- 张嘴时下唇、嘴角也会动，这类耦合在配置里用减法或优先级处理，参考 RE4R 的规则。
+`tools/rise_calibrate.py` 从录制生成 `face.json` 和 `signals.json`，不手调。每条规则只指定 ARKit 键、骨骼、种类和语义方向（例如上眼睑「向下」），其余由数据决定：
+
+- 中立位：待机帧（全程待机的录制，或动作层 1 为 12/30、12/1 的帧）逐分量取中位数；
+- 标定轴：超出待机范围、且与语义方向夹角小于 60° 的帧的平均位移；
+- `lo`：待机帧的最大投影（呼吸循环不会触发键）；`hi`：所有帧的最大投影；
+- 左右成对的规则共用两侧较大的 `lo` / `hi`（单侧眨眼的姿态不会让另一侧提前到 1）；方向帧少于 30 帧或范围太小的规则成对删除。
+
+```
+python -I tools/rise_calibrate.py --idle <待机录制> <动作录制...> -o reframework/data/ShapeKeySystem/builtin/mhrise/face.json \
+    --signals reframework/data/ShapeKeySystem/builtin/re4/signals.json reframework/data/ShapeKeySystem/builtin/mhrise/signals.json
+```
+
+当前的表来自 2026-10-16 的 4 段探针录制（2 段待机、2 段手势，一个角色）。可用的键：眨眼、眯眼、内眉上扬、眉毛下压、外眉上扬、皱鼻、眯颊、张嘴、
+嘴角上扬、嘴角下拉、嘟嘴（嘴角向内向前）、上唇上提、下唇下拉。没有数据的键：睁大眼（录制里上眼睑没有向上动）、嘴角横向拉伸（只有单侧凑够了帧）、
+抿嘴、卷唇、鼓腮、舌头。
+
+### 7.4 限制和后续
+
+- 信号只覆盖游戏里出现过的面部动作：待机的嘴部呼吸、手势的 7 个口型，以及录制没碰到的受击、发力表情。录更多种动作后重跑脚本即可补全。
+- 眨眼要靠第 5 节的程序化层；视线（3.7）还是 `eye_joints` 返回空表，眼球转角没有进标定表。
+- 口型是离散切换，信号会跳变；需要平滑的话在 Core 的表情读数上加，不改标定表。
+
+### 7.5 验收
+
+部署到崛起后，在 mod 头上选一份通道名能对上的表情配置（ARKit / MMD / 用户配置），做会张嘴的手势，mod 头应当跟着张嘴、嘴角动、眉毛动；
+待机时不眨眼是预期行为。状态（2026-10-16）：已在游戏里验收，mod 头（`f_leg279`）随手势张嘴、动嘴角和眉毛；荒野回归正常。
 
 ## 8. 测试和部署
 
 - 离线：`cd tests; python run.py`。基线以当时的结果为准（2026-10-16：FAILS 2、TOUCH FAILS 1、PREVIEW FAILS 1，其余 0；
-  RE4R 那组在 HEAD 上就在 `RE4R/Cutscene.lua:11` 报 `get_field` 为 nil 而中断，所以 Rise 那组放在它前面跑）。
+  RE4R 那组补上过场类型后能跑完，0 失败）。
   新适配器自动进入 `tests_games.lua` 的检查：加载时不调 sdk、Core / UI 代码不出现游戏专属名、内置配置都能编译。
   Core / UI 里同样不能出现 `snow.`（已加进 `tests_games.lua` 的 token 扫描）。
 - 程序化层和骨骼编码写入端是 Core 功能，要在 `tests_*.lua` 里加检查：生成器在固定随机种子下的输出、合成方式、Writer 的辅助骨目标。
