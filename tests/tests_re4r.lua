@@ -57,7 +57,19 @@ json.dump_file("ShapeKeySystem/mods/profiles/synthetic.json", {schema="sks.profi
     {name=CHANNELS[2],group="eye",s="blink.L"}, {name=CHANNELS[3],group="eye",s="blink.R"},
     {name=CHANNELS[4],group="jaw",s="jawOpen"}, {name=native,group="extra",const=1}}})
 local original_type_lookup = sdk.find_type_definition
+-- timeline playback state for the cutscene drive setting: no timeline is playing
+local STATUS = { Play = 1, Pausing = 2, Pause = 3, Resume = 4, Skip = 5 }
+local timeline_types = {
+    ["chainsaw.TimelineEventManager"] = { get_field = function()
+        return { get_data = function() return { call = function(_, m) if m == "get_Count" then return 0 end end } end }
+    end },
+    ["chainsaw.TimelineEventPlayerInfo"] = { get_method = function() return { call = function() return 0 end } end },
+    ["chainsaw.TimelineEventPlayer.Status"] = { get_field = function(_, n)
+        return { get_data = function() return STATUS[n] end }
+    end },
+}
 sdk.find_type_definition = function(name)
+    if timeline_types[name] then return timeline_types[name] end
     local td = original_type_lookup(name)
     if name ~= "via.render.Mesh" then return td end
     return {get_method=function(_, signature)
@@ -66,7 +78,7 @@ sdk.find_type_definition = function(name)
     end}
 end
 dofile(ENTRY)
-sdk.find_type_definition = original_type_lookup
+sdk.find_type_definition = function(name) return timeline_types[name] or original_type_lookup(name) end
 local SKS = require("ShapeKeySystem_Core.API")
 local W = require("ShapeKeySystem_Core.Writer")
 local A = SKS.adapter
@@ -207,7 +219,7 @@ for i=before_reset+1,#writes do check(writes[i][1]~=0,"reset never zeroes a nati
 local saved_loader=json.load_file
 json.load_file=function() error("synthetic malformed JSON") end
 local init_ok, init_value=pcall(A.init)
-check(init_ok and init_value==false,"malformed calibration fails adapter init without starting the plugin")
+check(init_ok and init_value==false,"malformed calibration fails adapter init without starting the plugin ("..tostring(init_ok).." "..tostring(init_value)..")")
 json.load_file=saved_loader
 local saved_find=sdk.find_type_definition
 sdk.find_type_definition=function(name) if name=="chainsaw.CharacterManager" then return nil end; return saved_find(name) end
