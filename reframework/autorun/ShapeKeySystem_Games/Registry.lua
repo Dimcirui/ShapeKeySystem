@@ -9,6 +9,7 @@ R.list = {
     (require("ShapeKeySystem_Games.RE4R.Adapter")),
     (require("ShapeKeySystem_Games.Wilds.Adapter")),
     (require("ShapeKeySystem_Games.Onimusha.Adapter")),
+    (require("ShapeKeySystem_Games.Rise.Adapter")),
 }
 
 -- "mhwilds", ...; nil when REFramework does not tell. Both call forms are tried: which one this

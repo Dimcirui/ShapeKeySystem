@@ -35,15 +35,17 @@ check(not st.playback.supported and st.playback.game == "fake", "no playback ada
 ticks(60)
 check(tick_ok(), "ticks run (" .. tostring(st.debug.status) .. ")")
 local ex = st.expression
--- the channels left are eye nodes (no eye joints here) and channels without a source ("—")
-local live, n_none = {}, 0
+-- the channels left are eye nodes (no eye joints here), channels without a source ("—") and the
+-- blink and jawOpen channels, which the procedural layer drives
+local live, n_none, n_proc = {}, 0, 0
 for _, c in ipairs(ex.channels) do
     local src = tostring(c.source_text)
     if c.no_signal then n_none = n_none + 1
+    elseif src:find("自动表情", 1, true) then n_proc = n_proc + 1
     elseif src ~= "—" and not src:find("^eye%.") then live[#live + 1] = c.name end
 end
-check(ex.profile and ex.profile.id == "arkit" and n_none > 0 and #live == 0,
-    "no dictionary: ARKit loads, every signal channel no_signal " .. table.concat(live, ", "))
+check(ex.profile and ex.profile.id == "arkit" and n_none > 0 and n_proc == 3 and #live == 0,
+    "no dictionary: ARKit loads, every signal channel but the blinks and jawOpen no_signal " .. table.concat(live, ", "))
 
 SKS.call("sculpt_scan"); ticks(5)
 local waist
@@ -95,5 +97,8 @@ KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 for _, page in ipairs({ "basic", "sculpt", "expr", "cond", "debug" }) do
     Panel.ui.page = page; frame(); frame()
     check(not find("页面出错"), "page draws: " .. page)
+    if page == "basic" or page == "expr" then
+        check(st.expression.no_signals == true and find("本游戏目前暂不支持表情"), "no raw channels: " .. page .. " says expressions are unsupported")
+    end
 end
 print("FAKE FAILS:", ff)

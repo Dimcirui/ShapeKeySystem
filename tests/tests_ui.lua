@@ -86,6 +86,27 @@ click_text("在表情详情中查看", false)
 check(Panel.ui.page == "expr", "region card button jumps to 表情详情")
 frame()
 check(find("ARKit 覆盖", false) ~= nil or find("表情配置", true) ~= nil, "表情详情 page drawn")
+-- 自动表情 section: closed by default, the switch submits set_procedural (a tall window shows the page's end)
+local h_before = Panel.ui.win.h
+Panel.ui.win.h = 3000; frame()
+check(find("自动表情", true) ~= nil and not find("自动眨眼", true), "自动表情 header drawn, section closed")
+Panel.ui.page_state.expr.procedural_open = true; frame()
+check(find("启用", true) and find("合成方式", true) and find("自动眨眼", true) and find("眨眼频率", true)
+    and find("眨眼速度", true) and find("视线微动", true) and find("微动幅度", true) and find("微微张嘴", true)
+    and find("张嘴幅度", true), "自动表情 section: switch, mode, blink, gaze and mouth rows")
+check(find("秒眨一次", false) ~= nil and find("本游戏自带眨眼", false) ~= nil and find("本游戏有眼球角度", false) ~= nil,
+    "interval line and the Wilds hints")
+SNAPS[#SNAPS + 1] = { name = "自动表情", cmds = CMDS }
+local was_on = st.procedural.blink.enabled
+click_text("自动眨眼", true, -20)
+check(st.procedural.blink.enabled == not was_on, "the blink switch toggles state.procedural.blink.enabled")
+SKS.call("set_procedural", { patch = { blink = { enabled = was_on } } })
+local gaze_on = st.procedural.gaze.enabled
+click_text("视线微动", true, -20)
+check(st.procedural.gaze.enabled == not gaze_on, "the gaze switch toggles state.procedural.gaze.enabled")
+SKS.call("set_procedural", { patch = { gaze = { enabled = gaze_on } } })
+Panel.ui.page_state.expr.procedural_open = nil
+Panel.ui.win.h = h_before; frame()
 
 -- debug page
 click_text("设置与调试", true)

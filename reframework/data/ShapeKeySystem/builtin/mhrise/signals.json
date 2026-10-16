@@ -1,0 +1,325 @@
+{
+  "schema": "sks.signals/2",
+  "full": 1,
+  "signals": [
+    {
+      "name": "blink.L",
+      "raw": "eyeBlinkLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "blink.R",
+      "raw": "eyeBlinkRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "eyeWide.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "eyeWide.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "eyeSquint.L",
+      "raw": "eyeSquintLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "eyeSquint.R",
+      "raw": "eyeSquintRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "browBring.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "browBring.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "browDown.L",
+      "raw": "browDownLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "browDown.R",
+      "raw": "browDownRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "browInnerUp.L",
+      "raw": "browInnerUp",
+      "note": "face_base 骨骼标定",
+      "guessed": true
+    },
+    {
+      "name": "browInnerUp.R",
+      "raw": "browInnerUp",
+      "note": "face_base 骨骼标定",
+      "guessed": true
+    },
+    {
+      "name": "browOuterUp.L",
+      "raw": "browOuterUpLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "browOuterUp.R",
+      "raw": "browOuterUpRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "sneer.L",
+      "raw": "noseSneerLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "sneer.R",
+      "raw": "noseSneerRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "upperLipUp.L",
+      "raw": "mouthUpperUpLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "upperLipUp.R",
+      "raw": "mouthUpperUpRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "smileMinor.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "smileMinor.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "smile.L",
+      "raw": "mouthSmileLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "smile.R",
+      "raw": "mouthSmileRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "dimple.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "dimple.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "stretch.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "stretch.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "frown.L",
+      "raw": "mouthFrownLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "frown.R",
+      "raw": "mouthFrownRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "lowerLipDown.L",
+      "raw": "mouthLowerDownLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "lowerLipDown.R",
+      "raw": "mouthLowerDownRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "funnel.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "funnel.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "press.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "press.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "mouthMove.left",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "mouthMove.right",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "mouthMove.up",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "mouthMove.down",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "chinRaise",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "jawOpen",
+      "raw": "jawOpen",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "cheekShrink",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "upperLipRoll",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "lowerLipRoll",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "puff.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "puff.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.01",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.02",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.03",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.04",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.05",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.06",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.07",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.08",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.09",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.10",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.11",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "pose.12",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "cheekSquint.L",
+      "raw": "cheekSquintLeft",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "cheekSquint.R",
+      "raw": "cheekSquintRight",
+      "note": "face_base 骨骼标定"
+    },
+    {
+      "name": "funnelTogether.L",
+      "raw": "mouthPucker",
+      "note": "face_base 骨骼标定",
+      "guessed": true
+    },
+    {
+      "name": "funnelTogether.R",
+      "raw": "mouthPucker",
+      "note": "face_base 骨骼标定",
+      "guessed": true
+    },
+    {
+      "name": "lipsTogether.L",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    },
+    {
+      "name": "lipsTogether.R",
+      "raw": null,
+      "note": "本游戏没有这个信号"
+    }
+  ]
+}

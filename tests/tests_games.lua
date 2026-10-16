@@ -65,8 +65,8 @@ for _, f in ipairs(lua_files("ShapeKeySystem_Games")) do
 end
 sdk = real_sdk
 
--- Core and UI name no game: no app.* types, fcParam joints or ch02 / ch03 parts outside comments
-local TOKENS = { "app.", "fcParam_", "ch02", "ch03" }
+-- Core and UI name no game: no app.* / snow.* types, fcParam joints or ch02 / ch03 parts outside comments
+local TOKENS = { "app.", "snow.", "fcParam_", "ch02", "ch03" }
 local hits = {}
 for _, sub in ipairs({ "ShapeKeySystem_Core", "ShapeKeySystem_UI" }) do
     for _, f in ipairs(lua_files(sub)) do

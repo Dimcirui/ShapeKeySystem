@@ -89,11 +89,12 @@ function H.spellings(name)
     return out
 end
 
--- The name tables mods and users add: <src>/names/*.json, { "schema": "sks.names/1",
--- "names": ["Breasts_big", ...] }. Names only: the hash says which mesh channel is which.
+-- The name tables: <src>/names/*.json, { "schema": "sks.names/1", "names": ["Breasts_big", ...] }.
+-- Names only: the hash says which mesh channel is which. builtin/names ships with SKS and is the
+-- same in every game; user and mods come first, so their spelling wins a shared hash.
 function H.table_names()
     local out = {}
-    for _, src in ipairs({ "user", "mods" }) do
+    for _, src in ipairs({ "user", "mods", "builtin" }) do
         for _, f in ipairs(U.list_json(src .. "\\names")) do
             local d = U.load_json(f.path)
             if d and (d.schema == nil or d.schema == H.NAMES_SCHEMA) and type(d.names) == "table" then
@@ -126,33 +127,52 @@ local function unbox(v)
     return n and math.tointeger(n) or nil
 end
 
--- names[1..n] of a mesh from its name hashes (known: H.table); nil when the mesh has none
-function H.names_of(mesh, n, known, numeric_items)
+-- The hash of channel i (0-based) in a get_ChannelNameHash array; nil when it cannot be read.
+-- item_only: only get_Item is read. Some engines box the elements with incorrect but numeric
+-- ToString values, so those adapters (`hash_item_only`) never read the elements. Otherwise the
+-- boxed elements (elems = the array's get_elements()) come first and get_Item is the fallback.
+function H.hash_at(arr, i, item_only, elems)
+    local h
+    if item_only then
+        local got, v = pcall(function() return arr:call("get_Item", i) end)
+        if not got then return nil end
+        -- a number outside UInt32 is a broken read, not a hash to mask
+        if type(v) == "number" then
+            h = math.tointeger(v)
+            return h and h >= 0 and h <= M and h or nil
+        end
+        return unbox(v)
+    end
+    if elems then pcall(function() h = unbox(elems[i + 1]) end) end
+    if h == nil then
+        local got, v = pcall(arr.call, arr, "get_Item", i)
+        if got then h = unbox(v) end
+    end
+    return h
+end
+
+-- hashes[i + 1] of every channel of a mesh (nil entries where unreadable); nil without a hash array
+function H.hashes(mesh, n, item_only)
     local ok, arr = pcall(mesh.call, mesh, "get_ChannelNameHash")
     if not ok or not arr then return nil end
-    -- Some engines return incorrect but numeric ToString values for boxed array elements.
-    -- Adapters that require numeric Item reads must fail closed instead of using those boxes.
-    if numeric_items then
-        local names = {}
-        for i = 1, n do
-            local got, value = pcall(function() return arr:call("get_Item", i - 1) end)
-            local h = got and type(value) == "number" and math.tointeger(value) or nil
-            if h and (h < 0 or h > M) then h = nil end
-            names[i] = h and (known[h] or H.label(h)) or ""
-        end
-        return names
+    local elems
+    if not item_only then
+        local ok2, e = pcall(arr.get_elements, arr)
+        -- REF can expose get_elements() as an indexed userdata container instead of a Lua table.
+        if ok2 and (type(e) == "table" or type(e) == "userdata") then elems = e end
     end
-    local ok2, elems = pcall(arr.get_elements, arr)
-    -- REF can expose get_elements() as an indexed userdata container instead of a Lua table.
-    if not ok2 or (type(elems) ~= "table" and type(elems) ~= "userdata") then elems = nil end
+    local out = {}
+    for i = 0, n - 1 do out[i + 1] = H.hash_at(arr, i, item_only, elems) end
+    return out
+end
+
+-- names[1..n] of a mesh from its name hashes (known: H.table); nil when the mesh has none
+function H.names_of(mesh, n, known, item_only)
+    local hashes = H.hashes(mesh, n, item_only)
+    if not hashes then return nil end
     local names = {}
     for i = 1, n do
-        local h
-        if elems then pcall(function() h = unbox(elems[i]) end) end
-        if h == nil then
-            local got, v = pcall(arr.call, arr, "get_Item", i - 1)
-            if got then h = unbox(v) end
-        end
+        local h = hashes[i]
         names[i] = h and (known[h] or H.label(h)) or ""
     end
     return names

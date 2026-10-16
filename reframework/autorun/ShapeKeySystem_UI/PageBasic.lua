@@ -172,6 +172,10 @@ local function draw_controls(ctx, x, y, w)
     local st, live, call = ctx.st, ctx.live, ctx.call
     local ex = st.expression
     local cy = y
+    if ex.no_signals then
+        D.text("本游戏目前暂不支持表情", x, cy, C.warn, W.body(), w)
+        cy = cy + 30
+    end
     -- profile
     local plist, labels, cur = st.presets.expression or {}, {}, nil
     for i, p in ipairs(plist) do

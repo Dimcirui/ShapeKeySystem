@@ -114,6 +114,7 @@ L.execute(open(os.path.join(HERE, "tests_playback_analysis.lua"), encoding="utf-
 L.execute(open(os.path.join(HERE, "tests_playback.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_playback_adapter.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_games.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_procedural.lua"), encoding="utf-8").read())
 
 # a second runtime with a minimal made-up adapter (no signals, hooks, conditions or input)
 data2 = tempfile.mkdtemp(prefix="sks_fake_")
@@ -127,6 +128,12 @@ shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path
 L3, G3, _ = boot(data3)
 L3.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 L3.execute(open(os.path.join(HERE, "tests_onimusha.lua"), encoding="utf-8").read())
+# the real Rise adapter: no raw channels, names from get_Item hashes, unfixed blendshape controllers
+data5 = tempfile.mkdtemp(prefix="sks_rise_")
+shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path.join(data5, "ShapeKeySystem", "builtin"))
+L5, G5, _ = boot(data5)
+L5.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+L5.execute(open(os.path.join(HERE, "tests_rise.lua"), encoding="utf-8").read())
 data4 = tempfile.mkdtemp(prefix="sks_re4r_")
 shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path.join(data4, "ShapeKeySystem", "builtin"))
 L4, G4, _ = boot(data4)

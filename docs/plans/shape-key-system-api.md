@@ -68,6 +68,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `profile` | `{id, name, source, extends}` | 当前表情配置。`source`：`builtin` / `mod` / `user` |
 | `coverage` | `{arkit_hit, arkit_total, extra, recommended}` | 覆盖率和自动推荐结果 |
 | `binding_source` | string? | 配置是由哪个父预设指定的 |
+| `no_signals` | bool | 适配器没有原始通道（`A.raw`），表情不读游戏信号；捏脸、预设和外部 API 照常 |
 | `master_gain` | number | 整体表情强度，0~2 |
 | `gaze_gain` | number | 视线强度，0~2 |
 | `smoothing` | number | 平滑程度，0~1 |
@@ -186,6 +187,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `region_activity[i]` | number | 各部位的活跃度（该部位通道权重的最大值，面部图标提亮用）。只在面板打开时计算 |
 | `signal[slot]` | number | 各信号归一化后的值（0..1）。只在映射编辑或调试页打开时计算 |
 | `eye_angle` | `{L = {yaw, pitch}, R = {yaw, pitch}}` | |
+| `procedural` | `{blink, mouth, gaze = {yaw, pitch}}` | 自动表情生成器的当前值：左眼眨眼（0..1）、张嘴（`jawOpen` 的生成值）、视线偏移（度）；关闭时为 0。见「自动表情」一节 |
 
 ## 5. 命令（`SKS.call(cmd, args)`）
 
@@ -214,6 +216,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `calibrate_eye_neutral` | `{}` | 把当前眼球朝向设为正前方 | 同上 |
 | `gaze_hold` | `{yaw, pitch, frames?}` | 两眼都看向给定角度（度，已含反转；+yaw = 角色自身的右，+pitch = 上），覆盖游戏视线；`frames` 帧内（默认 15）不续就自动失效。面板在眼睛上按住拖动时每次绘制都发 | `E_BAD_ARGS` |
 | `gaze_release` | `{}` | 立刻交还给游戏视线 | — |
+| `set_procedural` | `{patch}` | 修改自动表情设置（`enabled`、`mode`、`frequency`、`speed`、`blink.*`、`gaze.*`、`breath.*`），见「自动表情」一节；数值超出范围时截到范围内，未知的 `mode` 或非布尔的开关返回 `E_BAD_ARGS`，此时什么都不改 | settings |
 
 增益类修改先只改内存，界面显示"未保存"。用户点保存后才写进父预设，避免拖动滑块时反复写文件。
 
@@ -302,7 +305,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 ```
 reframework/data/ShapeKeySystem/
   settings.json
-  builtin/  profiles/*.json, aliases.json, labels.json      （随插件发布，只读；各游戏通用）
+  builtin/  profiles/*.json, aliases.json, labels.json, names/*.json   （随插件发布，只读；各游戏通用）
             <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
                        recording_catalog.json, recordings/*.json       （内置面部动画测试数据）
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
@@ -310,7 +313,7 @@ reframework/data/ShapeKeySystem/
             recordings/*.json                             （用户面部动画录制）
 ```
 
-`names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有 `getBlendShapeChannelName` 时用到（鬼武者）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
+`names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有可用的 `getBlendShapeChannelName` 时用到（鬼武者、崛起；`tools/mesh_names.py` 能从 mod 的 `.mesh` 生成）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键、显示名表里的名字，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。名字表按 `user/names` → `mods/names` → `builtin/names` 的顺序读，同一个哈希先到先得。`builtin/names/` 随插件发布、每个游戏都一样：`vrc.json`、`mmd.json` 是 VRChat / MMD 模型调查里的全部形态键名（`tests/vrc_faces.json`、`tests/mmd_names.json` 的并集），用常见命名的 mod 不用自带名字表。哈希数组的读法由适配器的 `hash_item_only` 决定：为 true 时只读 `get_Item`（有的游戏装箱的元素读出来是错数），否则先读 `get_elements()`、读不到再用 `get_Item`；RE4R 的原生通道查找用同一个读取函数。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
 
 显示名（`Labels.lua`）：打开面板右上角的「翻译形态键」（设置 `translate_keys`）后，界面上用中文名代替形态键名，鼠标悬停时显示原名，搜索两种都能搜到。译名表只有中文，界面语言不是中文时仍显示原名。显示名只用于显示，匹配、预设、绑定和命令都还用原名。
 - `builtin/labels.json`（`sks.labels/1`）：`{"sets": {"arkit": {"source": "…", "labels": {"eyeBlinkLeft": "左眼闭眼", …}}, …}}`。按命名体系分组，每组的 `source` 写明出处。现有 `arkit`（Apple ARFaceAnchor.BlendShapeLocation）、`mmd`（MikuMikuDance 自带的あにまさ式ミク）、`sks_mmd`（内置 mmd 配置的其余通道名），以及 `avatar_*`（VRChat / MMD 模型调查里确定的译名，按类别分组；来源和不确定的名字记在 `docs/labels/`）。
@@ -626,3 +629,44 @@ RE4R 的播放适配器通过可选的 `decode` 使用 `sks.native-signals/1`，
 RE4R 的解码帧另存 `eye_columns`，指向录制视线的 yaw/pitch 列。可选的 `apply_angles(rig, values, clip, eyes)` 在输入覆盖时应用视线；未提供时沿用最终信号测试的眼球角度归零行为。
 
 录制标定表包含 `eye_reference` 时，解码先消除对应眼球的参考旋转，再计算视线角，以兼容已有录制。当前实时视线沿用 SKS 的眼球中立位设置。
+
+## 自动表情（程序化表情层）
+
+Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）、待机微微张嘴（`jawOpen`）和视线微动。前两个输出与信号字典同名的信号，
+所以内置的 ARKit、MMD、VRC 配置不用改：`Profile` 编译这些名字的 `s` 节点时套一层合成，节点值 = 游戏信号与生成值按 `mode` 合成。
+生成器关闭、总开关关闭或 `mode` 为 `game` 时不产生值，节点就是原来的游戏信号。字典里没有原始通道（`raw` 为 null，或游戏没有字典）的这几个信号
+不标 `no_signal`，来源文字显示「（自动表情）」。视线微动是以度为单位的偏移，`drive` 读完眼球角度后由 `Procedural.apply_gaze` 加到 rig 的视线角上
+（在面板拖动视线 `gaze_hold` 之前），之后照常经过 `eye` 节点和满权重角度。
+
+| `mode` | 合成 |
+|---|---|
+| `game` | 只用游戏信号和游戏视线 |
+| `fallback`（默认） | 只补游戏缺失的部分：信号取 max(游戏, 生成)，视线加上偏移。信号缺失 = 字典没有原始通道；视线缺失 = 这个角色没有眼球关节；两者也可以由适配器的 `procedural` 表声明（崛起 `procedural = { blink = true, breath = true }`：眼睑骨和下颌骨有标定，但待机从不眨眼，嘴部呼吸低于 `jawOpen` 的 `lo`）。荒野、鬼武者、RE4R 都有眨眼、张嘴信号和眼球关节，行为不变 |
+| `add` | 全部叠加：信号 = 游戏 + 生成（游戏值不超过 1 时结果截到 1），视线 = 游戏视线 + 偏移 |
+
+生成器的时钟只在连续帧上前进：门（`gate`）关闭、过场不驱动等跳过的帧不计时，恢复后第一帧步长为 0；单帧步长最多 0.1 秒。所有角色共用一个时钟。
+三个生成器各用一条随机数序列，调一个的参数不影响另外两个的时间。
+
+`settings.json` 的 `procedural`（不随父预设的调整保存）：
+
+```json
+"procedural": { "enabled": true, "mode": "fallback", "frequency": 2.0, "speed": 1.0,
+  "blink": { "enabled": true, "interval_min": 7.0, "interval_max": 12.0, "close": 0.075, "hold": 0.035, "open": 0.12,
+             "double_chance": 0.15, "double_gap": 0.1, "asym": 0.0 },
+  "gaze": { "enabled": true, "amplitude": 3.0, "interval_min": 0.8, "interval_max": 2.5, "move": 0.05, "center_chance": 0.3 },
+  "breath": { "enabled": true, "amplitude": 0.1, "interval_min": 7.0, "interval_max": 12.0, "open": 1.2, "hold": 0.4, "close": 1.6 } }
+```
+
+- 眨眼：间隔在 `interval_min`..`interval_max` 秒间均匀取值，再除以 `frequency`（0.2–4，默认 2，即约 3.5–6 秒一次）；单次分闭眼 `close`、
+  保持 `hold`、睁眼 `open` 三段（秒），闭眼和睁眼用 smoothstep，各段除以 `speed`（0.25–3）；`double_chance` 为连眨两次的概率，两次之间隔
+  `double_gap` 秒，第二次不会再连眨；`asym` 为右眼滞后的秒数（0–0.1）。`frequency` 和 `speed` 只作用于眨眼。
+- 视线微动：每隔 `interval_min`..`interval_max` 秒跳到新的目标，跳动用 `move` 秒（smoothstep），之后停住；目标的水平角在 ±`amplitude` 度内
+  （0–15），垂直角在 ±0.6×`amplitude` 内，`center_chance` 的概率回到正前方。两眼同步。
+- 微微张嘴：每隔 `interval_min`..`interval_max` 秒，`jawOpen` 用 `open` 秒升到 `amplitude`（0–1），保持 `hold` 秒，再用 `close` 秒回到 0（smoothstep）。
+- 各组的 `enabled` 单独开关这个生成器；顶层 `enabled` 是总开关。
+
+修改间隔或频率时，若等待中的间隔比新的最长间隔还长，就重新取一次；切换开关或合成方式时重排全部时间。
+
+`state.procedural`：`enabled`、`mode`、`frequency`、`speed`、`blink`、`gaze`、`breath`（同上），`modes`（顺序）、`mode_names`（界面文字），
+`lacking`（`blink.L`、`blink.R`、`jawOpen` 是否按「缺失」处理；`gaze` 按主角色有没有眼球关节或适配器的声明，每次扫描后更新）。
+「表情详情」页的「自动表情」区提供总开关、合成方式，眨眼的开关、频率和速度，视线微动的开关和幅度，微微张嘴的开关和幅度，每行右侧是当前值。

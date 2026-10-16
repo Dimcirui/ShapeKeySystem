@@ -19,7 +19,7 @@ Core 和 UI 里不再出现 `app.*` 类型名和游戏专属概念（猎人、�
 | D8 | API 里的游戏概念改成通用词：猎人 → 主角色（primary），名片 / 存档选择预览 → 预览角色（preview），过场 → cutscene（保留），菜单 → menu（保留） | #3 的要求；界面上显示的文字由适配器的 `terms` 提供 |
 | D9 | 生命周期事件（2.5）全部可选；适配器不提供时 Core 退回轮询（子节点签名、定期重扫） | RE4R 的两个插件都没有用 `sdk.hook`，过场角色靠定期扫描跟上 |
 | D10 | 信号字典的每个条目可以单独写归一化范围 `lo` / `hi`，不写就用全局的 `full` | RE4R 从骨骼姿态推算的信号，每个都有自己的单位和范围（眨眼 3–28 度、张嘴 0.8–8 毫米） |
-| D11 | 可选接口 `prepare_parts(parts)`：扫描后由适配器准备额外网格的可写权重数量；当前仅 RE4R 提供 | RE4R 的身体、头发实测存在可写数量为 0 的情况；现有列表长度足够时补齐数量，后续由通用就绪检查决定是否写入 |
+| D11 | 可选接口 `prepare_parts(parts)`：扫描后由适配器准备额外网格的可写权重数量；RE4R、崛起提供 | RE4R 的身体、头发和崛起防具部件里的 mod 头部实测存在可写数量为 0 的情况；现有列表长度足够时补齐数量，后续由通用就绪检查决定是否写入 |
 
 ## 1. 分层
 
@@ -36,7 +36,7 @@ ShapeKeySystem_Games/Wilds/*.lua   荒野适配器
 
 ## 2. 适配器接口
 
-RE4R 的角色扫描、通道保护、网格准备与持续写入接口见 [re4r-adapter.md](re4r-adapter.md)。
+RE4R 的角色扫描、通道保护、网格准备与持续写入接口见 [re4r-adapter.md](re4r-adapter.md)。崛起（没有表情信号、只做捏脸）见 [rise-adapter.md](rise-adapter.md)。
 
 可选接口 `native_snapshot()` 返回纯数据快照，包含 `source`、`joints`、`measurements`、`taps`、`outputs` 和 `status`。Core 在权重写入前采样，负责诊断状态与录制保存；游戏对象查找和单位换算由适配器完成。当前由 RE4R 提供此接口。
 
@@ -63,7 +63,8 @@ local A = {
 function A.init(events) end       -- 唯一允许调用 sdk 的入口，见 2.5
 ```
 
-`caps.expression = false` 时 Core 不建表情 rig，只保留捏脸、预设和外部 API；表情页显示「本游戏没有表情信号」。
+`caps.expression = false` 时 Core 不建表情 rig，只保留捏脸、预设和外部 API；表情页显示「本游戏目前暂不支持表情」。
+**现状（2026-10-16）**：Core 还不读 `caps`，降级按接口是否存在判断。适配器没有 `A.raw` 时，rig 照常建立但不读游戏信号，`state.expression.no_signals` 为 true，「表情」和「表情详情」两页顶部显示「本游戏目前暂不支持表情」；崛起是第一个这样的游戏。等第二种降级需求出现再引入 `caps` 表（`rise-adapter.md` 4.3）。
 
 适配器可设 `scene_search = false`，由 Core 向面板提供 `state.settings.scene_search_available = false`，隐藏全场景搜索开关。省略时沿用原有显示。
 
@@ -272,12 +273,13 @@ AVM 共存规则（Delete 热键、共享屏蔽表、不替换 d2d 全局）不�
 - **RE4R（更正 #4 里「推测没有」的说法）**：没有专门的驱动骨骼，但 RE4R-ShapeKey-System 已经在游戏里验证了两种来源：
   游戏写入头部网格的修正形态键权重，以及从面部骨骼姿态推算（`native_leon.json`，10 根骨骼、48 条规则）。
   后者正是「没有驱动骨骼的游戏」要单开的那个 issue 的现成参考；配合 D10 的 `lo` / `hi`，它也能放进同一个字典。
-- 崛起：只有约 55 根面部变形骨骼，没有修正形态键，只能走骨骼姿态推算这条路，先只声明 `caps.expression = false`。
+- 崛起：只有约 55 根面部变形骨骼，没有修正形态键。第一阶段的适配器不给 `A.raw`（只做捏脸）；之后的信号来源是 Core 的程序化表情层和面部骨骼姿态推算，写入端还可以加骨骼编码形态键，见 `rise-adapter.md` 第 5–7 节。
 
 ## 4. 内置数据按游戏分目录（#5）
 
 ```
 builtin/aliases.json            通用
+builtin/names/*.json            通用名字表（只保留名字哈希的游戏用来反查通道名）
 builtin/profiles/*.json         通用 profile（只用 s 节点）
 builtin/<id>/signals.json       信号字典
 builtin/<id>/armor_names.json   模型显示名（由 A.model_names 指定文件名）
@@ -367,7 +369,7 @@ RE4R（游戏没装，现成的参考实现是 [RE4R-ShapeKey-System](https://gi
 - **引擎没有 `getBlendShapeChannelName`**，只有 `get_ChannelNameHash()`。原版通道名带前缀，而且每个 mesh 不同（主角 `blendShape1503.`，NPC `HeadCorrectives_blendShape.`）；用户自己导出的 mod 不带前缀，141 + 29 个通道全部按原名反查成功。做法见 API 文档第 8 节的 `names/`。
 - 还没查：换装重建的钩子、`get_game_name()` 的值。mod 头部的形态键名对不上原版 wrinkledriver jcns，游戏不驱动它们，要靠 SKS 读 bsControl 来驱动（信号字典待做）。
 
-崛起：没有驱动骨骼，按 `caps.expression = false` 接入时，只需要 2.2（找部件）、2.5（gate）和 2.8，用来验证捏脸和预设的降级路径。
+崛起（2026-10-16 实测，详见 `rise-adapter.md` 1.6）：游戏 id `mhrise`；主角色 `snow.player.PlayerManager:findMasterPlayer()` → `player00`，脸是子物体 `face_base`，部件是 `f_/m_` + 槽位 + 编号。第一阶段用到 2.2（找部件）、2.5（gate）、2.8，外加 `prepare_parts`（D11）：mod 头部做在防具部件里，网格到手时权重数是 0，要补成通道数才能写。通道名只能从哈希的 `get_Item` 取（`hash_item_only`），`getBlendShapeChannelName` 从 C# 调用会闪退；mod 自己的键名要靠 `names/` 名字表（`tools/mesh_names.py` 从 `.mesh` 生成）。原版脸 `face_base` 的形态键被 `via.render.BlendShapeController` 烘焙，第一阶段不写它。
 
 ## 9. 未决问题
 

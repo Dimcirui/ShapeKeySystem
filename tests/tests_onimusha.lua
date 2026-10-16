@@ -74,6 +74,7 @@ end
 local function ticks(n) for _ = 1, n do CB.tick() end end
 check(A.id == GAME_NAME and next(HOOKS) ~= nil, "selected, cutscene hooks installed")
 check(A.primary_root() == ROOT and A.primary_ready(), "controlling player resolved")
+check(SKS.state.expression.no_signals == false, "bsControl channels: the expression page reads game signals")
 local eyes = A.eye_joints(ARMOR)
 check(eyes.L == ARMOR._joints.eye_Lt and eyes.R == ARMOR._joints.eye_Rt, "animated eye_Lt / eye_Rt selected")
 local X = require("ShapeKeySystem_Core.Expression")

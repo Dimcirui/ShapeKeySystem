@@ -67,6 +67,7 @@ function X.read(rig, P, inv_full, use_dict, eyes, read_eyes)
                 local a = ang[side]
                 a[1] = (yaw - n.yaw) * iy
                 a[2] = (pitch - n.pitch) * ip
+                a.fresh = true   -- Procedural.apply_gaze offsets from this reading
             end
         end
     end

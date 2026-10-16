@@ -6,6 +6,7 @@ local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Eyes = require("ShapeKeySystem_UI.PageEyes")   -- gaze settings, drawn as a section here
+local Procedural = require("ShapeKeySystem_UI.PageProcedural")
 local Mapping = require("ShapeKeySystem_UI.MappingEditor")
 local I = require("ShapeKeySystem_UI.Input")
 local PlaybackPanel = require("ShapeKeySystem_UI.PlaybackPanel")
@@ -92,6 +93,10 @@ local function top_bars(ctx, x, y, w)
         D.text_mid(string.format("正在浏览：%s（未应用）· 当前装备的网格匹配 %d / %d 个通道", pv.name, pv.present, pv.total),
             x + 12, cy + 3, 28, C.brass, W.small(), w - 24)
         cy = cy + 42
+    end
+    if ex.no_signals then
+        D.text("本游戏目前暂不支持表情", x + 2, cy, C.warn, W.body(), w)
+        cy = cy + 26
     end
     -- one info line: coverage, gains tuned for another profile
     if not pv then
@@ -253,6 +258,12 @@ function Page.draw(ctx, x, y, w)
     if clicked then s.gaze_open = not gopen end
     cy = cy + hh + 6
     if gopen then cy = cy + Eyes.draw(ctx, x, cy, w) end
+    cy = cy + 10
+    local popen = s.procedural_open == true
+    local pclicked, ph = W.header("自动表情", x, cy, w, popen, (st.procedural and st.procedural.enabled) and "已开启" or "已关闭")
+    if pclicked then s.procedural_open = not popen end
+    cy = cy + ph + 6
+    if popen then cy = cy + Procedural.draw(ctx, x, cy, w) + 6 end
     cy = cy + 10
     cy = cy + PlaybackPanel.draw(ctx, x, cy, w)
     return cy - y
