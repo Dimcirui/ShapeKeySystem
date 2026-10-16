@@ -17,11 +17,6 @@ local function call(obj, method, ...)
     local ok, value = pcall(obj.call, obj, method, ...)
     return ok and value or nil
 end
-local function number(v)
-    if finite(v) then return math.tointeger(v) end
-    local s = call(v, "ToString()")
-    return s and math.tointeger(tonumber(s)) or nil
-end
 
 function S.validate(calibration)
     if type(calibration) ~= "table" or type(calibration.joints) ~= "table" or type(calibration.rules) ~= "table" then
@@ -57,17 +52,13 @@ function S.configure(calibration)
     return true
 end
 
+-- hash -> channel index of a mesh
 function S.hashes(mesh)
-    local arr = call(mesh, "get_ChannelNameHash")
     local n = call(mesh, "get_BlendShapeChannelNum")
-    if not arr or not finite(n) or n < 0 then return {} end
-    local elems = nil
-    pcall(function() elems = arr:get_elements() end)
-    local out = {}
-    for i = 0, n - 1 do
-        local h = number(call(arr, "get_Item", i))
-        if not h and elems then pcall(function() h = number(elems[i + 1]) end) end
-        if h then out[h & 0xFFFFFFFF] = i end
+    if not finite(n) or n < 0 then return {} end
+    local hashes, out = Hash.hashes(mesh, n, true) or {}, {}
+    for i = 1, n do
+        if hashes[i] then out[hashes[i]] = i - 1 end
     end
     return out
 end
@@ -77,9 +68,8 @@ function S.writable(name, mesh, idx)
         or name:find("^Face__geo__") or name:find("^crct_") or protected[Hash.hash(name)] then return false end
     if mesh and idx ~= nil then
         local arr = call(mesh, "get_ChannelNameHash")
-        local h = number(call(arr, "get_Item", idx))
-        if not h and arr then pcall(function() h = number(arr:get_elements()[idx + 1]) end) end
-        return h ~= nil and not protected[h & 0xFFFFFFFF]
+        local h = arr and Hash.hash_at(arr, idx, true)
+        return h ~= nil and not protected[h]
     end
     return true
 end
