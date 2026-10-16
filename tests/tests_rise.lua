@@ -143,4 +143,40 @@ weights.count = 0
 flags.ready = true; ticks(60); SKS.call("sculpt_scan"); ticks(5)
 check(weights.count == #CHANNELS, "a rebuilt part gets its weight buffer again")
 
+-- no idle blink from the bones: the procedural layer blinks in its default fallback mode, and its
+-- clock stops while the gate is closed
+local Pr = require("ShapeKeySystem_Core.Procedural")
+-- a mod head with ARKit blink keys (a target needs three expression keys)
+CHANNELS[#CHANNELS + 1] = "eyeBlinkLeft"
+CHANNELS[#CHANNELS + 1] = "eyeBlinkRight"
+weights.list = #CHANNELS
+SKS.call("rescan"); ticks(60)
+local function blink_weight() return WEIGHTS[#CHANNELS - 2] or 0 end
+local function run_for(sec)
+    local m, stop = 0, os.clock() + sec
+    while os.clock() < stop do
+        local w = os.clock() + 0.01
+        while os.clock() < w do end
+        ticks(1)
+        local v = blink_weight()
+        if v > m then m = v end
+    end
+    return m
+end
+check(st.procedural.mode == "fallback" and st.procedural.lacking["blink.L"] and st.procedural.lacking["blink.R"],
+    "Rise: blink.L / blink.R lacking (adapter procedural.blink), fallback by default")
+SKS.call("set_procedural", { patch = { frequency = 4, blink = { interval_min = 0.5, interval_max = 0.5, double_chance = 0 } } })
+local m = run_for(0.6)
+check(#st.scene.rigs == 1 and m > 0.5,
+    string.format("Rise, fallback: the mod head blinks with neutral face_base bones (max %.2f)", m))
+flags.ready = false; ticks(2)
+local t_closed = Pr.time
+run_for(0.2)
+check(Pr.time == t_closed, "gate closed: the generator's clock stands still")
+flags.ready = true; ticks(2)
+check(Pr.time > t_closed and Pr.time - t_closed <= 0.1 + 1e-9, "gate open again: the clock resumes without a jump")
+SKS.call("set_procedural", { patch = { mode = "game" } })
+ticks(60)
+check(run_for(0.6) == 0, "Rise, game only: no blink")
+
 print("RISE FAILS:", failures)
