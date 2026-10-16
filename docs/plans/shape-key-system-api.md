@@ -187,7 +187,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `region_activity[i]` | number | 各部位的活跃度（该部位通道权重的最大值，面部图标提亮用）。只在面板打开时计算 |
 | `signal[slot]` | number | 各信号归一化后的值（0..1）。只在映射编辑或调试页打开时计算 |
 | `eye_angle` | `{L = {yaw, pitch}, R = {yaw, pitch}}` | |
-| `procedural.blink` | number | 自动眨眼生成器当前的左眼值（0..1，关闭时为 0），见「自动表情」一节 |
+| `procedural` | `{blink, mouth, gaze = {yaw, pitch}}` | 自动表情生成器的当前值：左眼眨眼（0..1）、张嘴（`jawOpen` 的生成值）、视线偏移（度）；关闭时为 0。见「自动表情」一节 |
 
 ## 5. 命令（`SKS.call(cmd, args)`）
 
@@ -216,7 +216,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `calibrate_eye_neutral` | `{}` | 把当前眼球朝向设为正前方 | 同上 |
 | `gaze_hold` | `{yaw, pitch, frames?}` | 两眼都看向给定角度（度，已含反转；+yaw = 角色自身的右，+pitch = 上），覆盖游戏视线；`frames` 帧内（默认 15）不续就自动失效。面板在眼睛上按住拖动时每次绘制都发 | `E_BAD_ARGS` |
 | `gaze_release` | `{}` | 立刻交还给游戏视线 | — |
-| `set_procedural` | `{patch}` | 修改自动表情设置（`enabled`、`mode`、`frequency`、`speed`、`blink.*`），见「自动表情」一节；数值超出范围时截到范围内，未知的 `mode` 返回 `E_BAD_ARGS` | settings |
+| `set_procedural` | `{patch}` | 修改自动表情设置（`enabled`、`mode`、`frequency`、`speed`、`blink.*`、`gaze.*`、`breath.*`），见「自动表情」一节；数值超出范围时截到范围内，未知的 `mode` 或非布尔的开关返回 `E_BAD_ARGS`，此时什么都不改 | settings |
 
 增益类修改先只改内存，界面显示"未保存"。用户点保存后才写进父预设，避免拖动滑块时反复写文件。
 
@@ -632,33 +632,41 @@ RE4R 的解码帧另存 `eye_columns`，指向录制视线的 yaw/pitch 列。�
 
 ## 自动表情（程序化表情层）
 
-Core 的 `Procedural.lua` 生成通用信号 `blink.L` / `blink.R`（与信号字典同名），所以内置的 ARKit、MMD、VRC 配置不用改。
-`Profile` 编译这两个名字的 `s` 节点时套一层合成：节点值 = 游戏信号与生成值按 `mode` 合成。生成器关闭或 `mode` 为 `game` 时不产生值，节点就是原来的游戏信号。
-字典里没有原始通道（`raw` 为 null，或游戏没有字典）的这两个信号不标 `no_signal`，来源文字显示「（自动表情）」。
+Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）、待机微微张嘴（`jawOpen`）和视线微动。前两个输出与信号字典同名的信号，
+所以内置的 ARKit、MMD、VRC 配置不用改：`Profile` 编译这些名字的 `s` 节点时套一层合成，节点值 = 游戏信号与生成值按 `mode` 合成。
+生成器关闭、总开关关闭或 `mode` 为 `game` 时不产生值，节点就是原来的游戏信号。字典里没有原始通道（`raw` 为 null，或游戏没有字典）的这几个信号
+不标 `no_signal`，来源文字显示「（自动表情）」。视线微动是以度为单位的偏移，`drive` 读完眼球角度后由 `Procedural.apply_gaze` 加到 rig 的视线角上
+（在面板拖动视线 `gaze_hold` 之前），之后照常经过 `eye` 节点和满权重角度。
 
 | `mode` | 合成 |
 |---|---|
-| `game` | 只用游戏信号 |
-| `fallback`（默认） | 只作用于游戏缺失的信号：max(游戏, 生成)。缺失 = 字典没有原始通道，或适配器的 `procedural` 表列出了这一组（崛起 `procedural = { blink = true }`：眼睑骨有标定，但待机从不眨眼）。荒野、鬼武者、RE4R 都有眨眼信号，行为不变 |
-| `add` | 所有生成的信号：游戏 + 生成，游戏值不超过 1 时结果截到 1 |
+| `game` | 只用游戏信号和游戏视线 |
+| `fallback`（默认） | 只补游戏缺失的部分：信号取 max(游戏, 生成)，视线加上偏移。信号缺失 = 字典没有原始通道；视线缺失 = 这个角色没有眼球关节；两者也可以由适配器的 `procedural` 表声明（崛起 `procedural = { blink = true, breath = true }`：眼睑骨和下颌骨有标定，但待机从不眨眼，嘴部呼吸低于 `jawOpen` 的 `lo`）。荒野、鬼武者、RE4R 都有眨眼、张嘴信号和眼球关节，行为不变 |
+| `add` | 全部叠加：信号 = 游戏 + 生成（游戏值不超过 1 时结果截到 1），视线 = 游戏视线 + 偏移 |
 
 生成器的时钟只在连续帧上前进：门（`gate`）关闭、过场不驱动等跳过的帧不计时，恢复后第一帧步长为 0；单帧步长最多 0.1 秒。所有角色共用一个时钟。
+三个生成器各用一条随机数序列，调一个的参数不影响另外两个的时间。
 
 `settings.json` 的 `procedural`（不随父预设的调整保存）：
 
 ```json
 "procedural": { "enabled": true, "mode": "fallback", "frequency": 2.0, "speed": 1.0,
-  "blink": { "interval_min": 7.0, "interval_max": 12.0, "close": 0.075, "hold": 0.035, "open": 0.12,
-             "double_chance": 0.15, "double_gap": 0.1, "asym": 0.0 } }
+  "blink": { "enabled": true, "interval_min": 7.0, "interval_max": 12.0, "close": 0.075, "hold": 0.035, "open": 0.12,
+             "double_chance": 0.15, "double_gap": 0.1, "asym": 0.0 },
+  "gaze": { "enabled": true, "amplitude": 3.0, "interval_min": 0.8, "interval_max": 2.5, "move": 0.05, "center_chance": 0.3 },
+  "breath": { "enabled": true, "amplitude": 0.1, "interval_min": 7.0, "interval_max": 12.0, "open": 1.2, "hold": 0.4, "close": 1.6 } }
 ```
 
-- 两次眨眼之间的间隔在 `interval_min`..`interval_max` 秒间均匀取值，再除以 `frequency`（0.2–4，默认 2，即约 3.5–6 秒一次）；
-- 单次眨眼分闭眼 `close`、保持 `hold`、睁眼 `open` 三段（秒），闭眼和睁眼用 smoothstep，各段除以 `speed`（0.25–3）；
-- `double_chance` 为连眨两次的概率，两次之间隔 `double_gap` 秒，第二次不会再连眨；
-- `asym` 为右眼滞后的秒数（0–0.1）。
+- 眨眼：间隔在 `interval_min`..`interval_max` 秒间均匀取值，再除以 `frequency`（0.2–4，默认 2，即约 3.5–6 秒一次）；单次分闭眼 `close`、
+  保持 `hold`、睁眼 `open` 三段（秒），闭眼和睁眼用 smoothstep，各段除以 `speed`（0.25–3）；`double_chance` 为连眨两次的概率，两次之间隔
+  `double_gap` 秒，第二次不会再连眨；`asym` 为右眼滞后的秒数（0–0.1）。`frequency` 和 `speed` 只作用于眨眼。
+- 视线微动：每隔 `interval_min`..`interval_max` 秒跳到新的目标，跳动用 `move` 秒（smoothstep），之后停住；目标的水平角在 ±`amplitude` 度内
+  （0–15），垂直角在 ±0.6×`amplitude` 内，`center_chance` 的概率回到正前方。两眼同步。
+- 微微张嘴：每隔 `interval_min`..`interval_max` 秒，`jawOpen` 用 `open` 秒升到 `amplitude`（0–1），保持 `hold` 秒，再用 `close` 秒回到 0（smoothstep）。
+- 各组的 `enabled` 单独开关这个生成器；顶层 `enabled` 是总开关。
 
-修改间隔或频率时，若等待中的间隔比新的最长间隔还长，就重新取一次；切换开关或合成方式时重排眨眼时间。
+修改间隔或频率时，若等待中的间隔比新的最长间隔还长，就重新取一次；切换开关或合成方式时重排全部时间。
 
-`state.procedural`：`enabled`、`mode`、`frequency`、`speed`、`blink`（同上），`modes`（顺序）、`mode_names`（界面文字），
-`lacking[name]`（这个信号是否按「缺失」处理）。「表情详情」页的「自动表情」区提供开关、合成方式、眨眼频率和速度。
-视线微动和呼吸还没有实现。
+`state.procedural`：`enabled`、`mode`、`frequency`、`speed`、`blink`、`gaze`、`breath`（同上），`modes`（顺序）、`mode_names`（界面文字），
+`lacking`（`blink.L`、`blink.R`、`jawOpen` 是否按「缺失」处理；`gaze` 按主角色有没有眼球关节或适配器的声明，每次扫描后更新）。
+「表情详情」页的「自动表情」区提供总开关、合成方式，眨眼的开关、频率和速度，视线微动的开关和幅度，微微张嘴的开关和幅度，每行右侧是当前值。
