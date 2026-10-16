@@ -22,6 +22,7 @@ local Playback = require("ShapeKeySystem_Core.Playback")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
 local Labels  = require("ShapeKeySystem_Core.Labels")
 local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
+local Proc    = require("ShapeKeySystem_Core.Procedural")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -56,6 +57,8 @@ local DEFAULTS = {
     expression = { master_gain = 1.0, gaze_gain = 1.0, smoothing = 0.0,
                    region_gains = { brow = 1.0, eye = 1.0, nose_cheek = 1.0, mouth = 1.0 },
                    channel_gains = {} },
+    -- automatic blinking, merged into the dictionary signals (Procedural.lua); not part of a binding's tuning
+    procedural = U.copy(Proc.DEFAULTS),
     eyes = { full_deg = { yaw = 25.0, pitch = 20.0 }, invert = { yaw = false, pitch = false },
              neutral = { L = { yaw = 0, pitch = 0 }, R = { yaw = 0, pitch = 0 } },
              sets = { eye_look = true, look = true } },
@@ -123,6 +126,7 @@ local state = {
                can_undo = false, can_redo = false, preset = nil, groups = {}, keys = {} },
     presets = { rev = 0, binding = nil, expression = {}, sculpt = {}, pending_delete = nil },
     settings = { rev = 0 },
+    procedural = { rev = 0 },
     -- keys other plugins hold through ShapeKeySystemAPI: held = {{name, owner, value}},
     -- by_norm[External.norm(name)] = owner
     external = { rev = 0, held = {}, by_norm = {} },
@@ -136,6 +140,7 @@ local state = {
 local live = {
     weight = {}, region_activity = { 0, 0, 0, 0 }, signal = {},
     eye_angle = { L = { yaw = 0, pitch = 0 }, R = { yaw = 0, pitch = 0 } },
+    procedural = { blink = 0 },
 }
 SKS.state, SKS.live = state, live
 state.playback = Playback.state
@@ -303,6 +308,34 @@ local function build_settings_state()
     state.runtime.enabled = cfg.enabled
     state.runtime.advanced = cfg.advanced
     bump("settings"); bump("runtime")
+end
+
+-- settings.json values out of range or of the wrong type fall back to the defaults
+local function sanitize_procedural()
+    local c, d = cfg.procedural, Proc.DEFAULTS
+    if type(c.enabled) ~= "boolean" then c.enabled = d.enabled end
+    if not Proc.MODE_NAMES[c.mode] then c.mode = d.mode end
+    if type(c.blink) ~= "table" then c.blink = U.copy(d.blink) end
+    for k, lim in pairs(Proc.LIMITS) do
+        local t = (d.blink[k] ~= nil) and c.blink or c
+        local v = tonumber(t[k])
+        t[k] = v and v == v and U.clamp(v, lim[1], lim[2]) or (d.blink[k] or d[k])
+    end
+end
+
+local function build_procedural_state()
+    local st, c = state.procedural, cfg.procedural
+    st.enabled, st.mode, st.frequency, st.speed = c.enabled, c.mode, c.frequency, c.speed
+    st.blink = U.copy(c.blink)
+    st.modes, st.mode_names = Proc.MODES, Proc.MODE_NAMES
+    -- groups the game has no usable signal for: fallback mode fills them
+    local lacking = {}
+    for name in pairs(Proc.SIGNALS) do
+        local sig = Profile.signals.by_name[name]
+        lacking[name] = Proc.lacking(name, sig == nil or sig.no_signal)
+    end
+    st.lacking = lacking
+    bump("procedural")
 end
 
 local function build_eyes_state()
@@ -1318,6 +1351,8 @@ local function tick()
     if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dirty() end
     if Touch.update() then Sculpt.mark_dirty() end
     if state.runtime.ui_open then C.update_cond_live() end
+    -- only reached while the gate lets the rigs be driven: a skipped frame stops the generator's clock
+    live.procedural.blink = Proc.tick(clock(), f)
     if cfg.enabled and C.prog then
         for i, rig in ipairs(C.rigs) do
             local ok, err = pcall(drive, rig, i == 1)
@@ -1524,6 +1559,30 @@ function cmds.set_eye_cfg(a)
         if type(p.sets.look) == "boolean" then e.sets.look = p.sets.look end
     end
     recompute_gains(); build_eyes_state(); tuning_changed()
+    return true
+end
+
+-- patch = { enabled, mode, frequency, speed, blink = { interval_min, ... } }; unknown keys are ignored
+function cmds.set_procedural(a)
+    local p = a.patch
+    if type(p) ~= "table" then return false, "E_BAD_ARGS", "patch must be a table" end
+    if p.mode ~= nil and not Proc.MODE_NAMES[p.mode] then return false, "E_BAD_ARGS", "mode: game / fallback / add" end
+    if p.enabled ~= nil and type(p.enabled) ~= "boolean" then return false, "E_BAD_ARGS", "enabled must be boolean" end
+    local c = cfg.procedural
+    if p.enabled ~= nil then c.enabled = p.enabled end
+    if p.mode ~= nil then c.mode = p.mode end
+    for k, lim in pairs(Proc.LIMITS) do
+        local src, dst = p, c
+        if Proc.DEFAULTS.blink[k] ~= nil then src, dst = type(p.blink) == "table" and p.blink or {}, c.blink end
+        if src[k] ~= nil then
+            local v = num(src[k], lim[1], lim[2])
+            if not v then return false, "E_BAD_ARGS", k .. ": number expected" end
+            dst[k] = v
+        end
+    end
+    -- the schedule restarts on a switch; slider drags keep the blink in progress
+    if p.enabled ~= nil or p.mode ~= nil then Proc.reset() else Proc.retime() end
+    build_procedural_state(); save_soon()
     return true
 end
 
@@ -2033,6 +2092,7 @@ function SKS.init(adapter)
     SKS.adapter = adapter
     Writer.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
+    Proc.adapter = adapter
     -- no raw channels: rigs read nothing from the game; sculpt, presets and the external API still write
     state.expression.no_signals = adapter.raw == nil
     Cnd.install(adapter.conditions)
@@ -2047,6 +2107,9 @@ function SKS.init(adapter)
         save_soon()
     end
     cfg.sculpt_max = Sculpt.set_max(cfg.sculpt_max)
+    sanitize_procedural()
+    Proc.seed(os.time())
+    Proc.configure(cfg.procedural)
     Names.load_aliases()
     Labels.load()
     local sig = Profile.load_signals()
@@ -2058,7 +2121,7 @@ function SKS.init(adapter)
     Presets.load_sculpt()
     CondExpr.load_all()
     if cfg.conditions ~= "" then CondExpr.select(cfg.conditions) end
-    build_settings_state(); build_eyes_state(); build_presets_state()
+    build_settings_state(); build_eyes_state(); build_presets_state(); build_procedural_state()
     C.build_cond_state()
     local ok, code, msg = apply_profile(cfg.profile, false)
     if not ok and cfg.profile ~= "arkit" then

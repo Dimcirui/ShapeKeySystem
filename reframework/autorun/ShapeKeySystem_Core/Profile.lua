@@ -19,9 +19,12 @@
 -- dictionary does not list is a compile error, so typos are not mistaken for missing signals.
 -- A game with no dictionary at all (no builtin/<id>/signals.json) has no signals: every name
 -- compiles as no_signal.
+-- Signals the procedural layer generates (`Procedural.SIGNALS`) compile through `Procedural.merge`,
+-- also when the game lacks them; such a node is not flagged no_signal.
 -- A profile that uses `p` carries `game` (the adapter id); profiles of other games are skipped.
 
 local U = require("ShapeKeySystem_Core.Util")
+local Pr = require("ShapeKeySystem_Core.Procedural")
 
 local P = {}
 
@@ -162,16 +165,25 @@ local function compile_node(node, env, depth)
         if not sig and env.signals.none then sig = { name = tostring(node.s), no_signal = true } end
         if not sig then error("unknown signal: " .. tostring(node.s)) end
         if sig.guessed then env.guessed = true end
+        local proc = Pr.SIGNALS[sig.name] ~= nil
         if sig.no_signal then
-            env.no_signal = true
+            env.no_signal = not proc
             fn = function() return 0 end
-            text = sig.name .. "（本游戏没有这个信号）"
+            text = sig.name .. (proc and "（自动表情）" or "（本游戏没有这个信号）")
         else
             local p, a, b = sig.key, sig.a, sig.b
             env.params[p] = true
             if a == 1 and b == 0 then fn = function(ctx) return ctx.P[p] or 0 end
             else fn = function(ctx) return (ctx.P[p] or 0) * a + b end end
             text = sig.name
+        end
+        if proc then
+            local game, name, lacking, out, merge = fn, sig.name, Pr.lacking(sig.name, sig.no_signal), Pr.out, Pr.merge
+            fn = function(ctx)
+                local g, q = game(ctx), out[name]
+                if q == nil then return g end
+                return merge(g, q, lacking)
+            end
         end
     elseif node.p ~= nil then
         local raw = P.adapter.raw

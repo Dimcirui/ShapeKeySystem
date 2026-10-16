@@ -114,6 +114,7 @@ L.execute(open(os.path.join(HERE, "tests_playback_analysis.lua"), encoding="utf-
 L.execute(open(os.path.join(HERE, "tests_playback.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_playback_adapter.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_games.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_procedural.lua"), encoding="utf-8").read())
 
 # a second runtime with a minimal made-up adapter (no signals, hooks, conditions or input)
 data2 = tempfile.mkdtemp(prefix="sks_fake_")
