@@ -1,0 +1,331 @@
+{
+  "schema": "sks.signals/2",
+  "full": 1,
+  "signals": [
+    {
+      "name": "blink.L",
+      "raw": "eyeBlinkLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "blink.R",
+      "raw": "eyeBlinkRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "eyeWide.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "eyeWide.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "eyeSquint.L",
+      "raw": "eyeSquintLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "eyeSquint.R",
+      "raw": "eyeSquintRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "browBring.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browBring.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browDown.L",
+      "raw": "browDownLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "browDown.R",
+      "raw": "browDownRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "browInnerUp.L",
+      "raw": "browInnerUp",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "browInnerUp.R",
+      "raw": "browInnerUp",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "browOuterUp.L",
+      "raw": "browOuterUpLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "browOuterUp.R",
+      "raw": "browOuterUpRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "sneer.L",
+      "raw": "noseSneerLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "sneer.R",
+      "raw": "noseSneerRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "upperLipUp.L",
+      "raw": "mouthUpperUpLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "upperLipUp.R",
+      "raw": "mouthUpperUpRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "smileMinor.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "smileMinor.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "smile.L",
+      "raw": "mouthSmileLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "smile.R",
+      "raw": "mouthSmileRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "dimple.L",
+      "raw": "mouthDimpleLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "dimple.R",
+      "raw": "mouthDimpleRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "stretch.L",
+      "raw": "mouthStretchLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "stretch.R",
+      "raw": "mouthStretchRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "frown.L",
+      "raw": "mouthFrownLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "frown.R",
+      "raw": "mouthFrownRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "lowerLipDown.L",
+      "raw": "mouthLowerDownLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "lowerLipDown.R",
+      "raw": "mouthLowerDownRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "funnel.L",
+      "raw": "mouthFunnel",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "funnel.R",
+      "raw": "mouthFunnel",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "press.L",
+      "raw": "mouthPressLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "press.R",
+      "raw": "mouthPressRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "mouthMove.left",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthMove.right",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthMove.up",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthMove.down",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "chinRaise",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "jawOpen",
+      "raw": "jawOpen",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "cheekShrink",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "upperLipRoll",
+      "raw": "mouthRollUpper",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "lowerLipRoll",
+      "raw": "mouthRollLower",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "puff.L",
+      "raw": "cheekPuff",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "puff.R",
+      "raw": "cheekPuff",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "pose.01",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.02",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.03",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.04",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.05",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.06",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.07",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.08",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.09",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.10",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.11",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "pose.12",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "cheekSquint.L",
+      "raw": "cheekSquintLeft",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "cheekSquint.R",
+      "raw": "cheekSquintRight",
+      "note": "Leon 标定"
+    },
+    {
+      "name": "funnelTogether.L",
+      "raw": "mouthPucker",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "funnelTogether.R",
+      "raw": "mouthPucker",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "lipsTogether.L",
+      "raw": "mouthClose",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    },
+    {
+      "name": "lipsTogether.R",
+      "raw": "mouthClose",
+      "note": "Leon 标定；共享左右来源",
+      "guessed": true
+    }
+  ]
+}

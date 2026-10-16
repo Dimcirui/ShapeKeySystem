@@ -243,12 +243,14 @@ function Page.draw(ctx, x, y, w)
     if not D.images() then return draw_controls(ctx, x, y, w) end
     if w >= 600 then
         local fw = min(300, max(220, w * 0.36))
-        local h1 = draw_face(ctx, x, y, fw)
         local h2 = draw_controls(ctx, x + fw + 18, y, w - fw - 18)
+        local h1 = draw_face(ctx, x, y, fw)
         return max(h1, h2)
     end
-    local h1 = draw_face(ctx, x, y, min(w, 300))
+    local style = Faces.get(ctx.st.settings.face_style)
+    local h1 = style and ((min(w, 300) - 20) / style.w * style.h + 20) or 80
     local h2 = draw_controls(ctx, x, y + h1 + 14, w)
+    draw_face(ctx, x, y, min(w, 300))
     return h1 + 14 + h2
 end
 

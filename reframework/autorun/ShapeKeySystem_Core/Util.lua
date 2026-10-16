@@ -44,6 +44,7 @@ end
 -- Returns { {path=, file=, base=} }, sorted by file name.
 function U.list_json(sub)
     local pattern = "ShapeKeySystem\\\\" .. sub:gsub("\\", "\\\\") .. "\\\\[^\\\\]+\\.json"
+    if sub == "" then pattern = "ShapeKeySystem\\\\[^\\\\]+\\.json" end
     local ok, files = pcall(fs.glob, pattern)
     local out = {}
     if ok and type(files) == "table" then

@@ -19,7 +19,6 @@ local S = {}
 S.RANGE = { 0.0, 1.0 }   -- upper end = settings.sculpt_max (S.set_max)
 S.MAX_LIMIT = 5.0         -- highest cap the setting accepts (engine stores 2.0 verbatim, measured)
 local UNDO_MAX = 50
-local M_SET = W.M_SET
 local abs = math.abs
 
 function S.key_of(channel_name)
@@ -401,7 +400,7 @@ function S.tick(edit_mode, preview, eps)
             if G.mesh_ready(t.mesh) then t.stable = t.stable + 1 else t.stable = 0 end
         elseif not G.mesh_still_ready(t.mesh) then
             return writes, "sculpt mesh no longer ready: " .. t.id
-        elseif t.dirty or edit_mode then
+        elseif t.dirty or edit_mode or W.adapter.rewrite_active_weights then
             local last = t.last
             for _, item in ipairs(t.items) do
                 local w = value_for(item.key, t.id, preview)
@@ -414,10 +413,12 @@ function S.tick(edit_mode, preview, eps)
                         l = W.read_weight(t.mesh, i) or 0
                         last[i] = l
                     end
-                    if abs(w - l) > eps then
-                        M_SET:call(t.mesh, i, w + 0.0)   -- float, see Writer.write_target
-                        last[i] = w
-                        writes = writes + 1
+                    local active = W.adapter.rewrite_active_weights and (w ~= 0 or l ~= 0)
+                    if active or abs(w - l) > eps then
+                        if W.set_weight(t.mesh, i, w, item.key.name) then
+                            last[i] = w
+                            writes = writes + 1
+                        end
                     end
                 end
             end
@@ -434,7 +435,7 @@ function S.zero_all()
             for _, item in ipairs(t.items) do
                 for _, i in ipairs(item.idx) do
                     local l = t.last[i]
-                    if l ~= nil and l ~= 0 then pcall(M_SET.call, M_SET, t.mesh, i, 0.0) end
+                    if l ~= nil and l ~= 0 then pcall(W.set_weight, t.mesh, i, 0.0, item.key.name) end
                     t.last[i] = 0.0
                 end
             end

@@ -8,6 +8,7 @@ local SKS = require("ShapeKeySystem_Core.API")
 local DebugUI = require("ShapeKeySystem_Core.DebugUI")
 local Games = require("ShapeKeySystem_Games.Registry")
 local D = require("ShapeKeySystem_UI.Draw")
+local Faces = require("ShapeKeySystem_UI.Faces")
 local Panel = require("ShapeKeySystem_UI.Panel")
 
 -- an unsupported game (or an adapter whose types are gone after a game update) only gets a line
@@ -29,6 +30,15 @@ if not ok then
 end
 DebugUI.attach(SKS)
 
+if Game.prepare_mesh and re.on_pre_application_entry then
+    for _, stage in ipairs({ "UpdateMotion", "PrepareRendering" }) do
+        re.on_pre_application_entry(stage, function()
+            local ok, err = pcall(SKS.prepare_targets)
+            if not ok then SKS.state.debug.status = "prepare error: " .. tostring(err) end
+        end)
+    end
+end
+
 re.on_application_entry("LateUpdateBehavior", function()
     local ok, err = pcall(SKS.tick)
     if not ok then SKS.state.debug.status = "tick error: " .. tostring(err) end
@@ -47,7 +57,9 @@ local function draw_panel(backend)
         SKS.log("panel draw error: %s", last_err)
     end
 end
-if D.has_d2d() then d2d.register(function() end, function() draw_panel("d2d") end) end
+if D.has_d2d() then
+    d2d.register(function() D.init_images(Faces.image_paths()) end, function() draw_panel("d2d") end)
+end
 
 re.on_draw_ui(DebugUI.draw)
 re.on_frame(function()

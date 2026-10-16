@@ -48,7 +48,9 @@ function D.pick(pref)
 end
 
 function D.available() return D.backend ~= nil end
-function D.images() return D.backend == "d2d" end
+function D.images()
+    return D.backend == "d2d" and type(d2d.Image) == "table" and type(d2d.Image.new) == "function"
+end
 
 local A, A_src = {}, nil
 local function noop() end
@@ -340,16 +342,20 @@ function D.icon_tri(cx, cy, s, down, color)
 end
 
 -- ---------------------------------------------------------------- images
+-- Resource creation belongs to d2d's init callback; drawing only looks up the cache.
+function D.init_images(paths)
+    images = {}
+    if type(d2d) ~= "table" or type(d2d.Image) ~= "table" or type(d2d.Image.new) ~= "function" then return end
+    for _, path in ipairs(paths) do
+        local ok, made = pcall(d2d.Image.new, path)
+        images[path] = (ok and made) or false
+    end
+end
+
 -- path relative to reframework/images; nil when missing or on a backend without images
 function D.image_res(path)
     if not D.images() then return nil end
-    local img = images[path]
-    if img == nil then
-        local ok, made = pcall(d2d.Image.new, path)
-        img = (ok and made) or false
-        images[path] = img
-    end
-    return img or nil
+    return images[path] or nil
 end
 
 function D.image(img, x, y, w, h, alpha)

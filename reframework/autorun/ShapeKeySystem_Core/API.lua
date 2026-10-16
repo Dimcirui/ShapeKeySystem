@@ -21,6 +21,7 @@ local Touch   = require("ShapeKeySystem_Core.Touch")
 local Playback = require("ShapeKeySystem_Core.Playback")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
 local Labels  = require("ShapeKeySystem_Core.Labels")
+local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -138,6 +139,7 @@ local live = {
 }
 SKS.state, SKS.live = state, live
 state.playback = Playback.state
+state.native_signals = NativeSignals.state
 
 -- ---------------------------------------------------------------- internal
 local C = {
@@ -259,7 +261,11 @@ local function queue_zero_all()
 end
 
 -- sculpt + expression targets of ready meshes back to 0 (disable / script reset)
-local function zero_sculpt() pcall(Sculpt.zero_all) end
+local function zero_sculpt()
+    if SKS.adapter.strict_bounds and
+        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then return end
+    pcall(Sculpt.zero_all)
+end
 
 -- effective gain per slot
 local function recompute_gains()
@@ -292,6 +298,7 @@ local function build_settings_state()
     for _, k in ipairs({ "hotkey", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
                          "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend",
                          "translate_keys" }) do st[k] = cfg[k] end
+    st.scene_search_available = SKS.adapter.scene_search ~= false
     st.window = U.copy(cfg.window)
     state.runtime.enabled = cfg.enabled
     state.runtime.advanced = cfg.advanced
@@ -457,6 +464,11 @@ local function part_name(part)
     if not name then return nil end
     local sn = SKS.adapter.slot_names
     return name, sn and sn[slot] or slot
+end
+
+local function part_display(part)
+    local name, slot = part_name(part)
+    return name and (name .. (slot and (" · " .. slot) or "")) or part
 end
 
 -- labels for a key's parts: only the slots when they all belong to one named model
@@ -875,7 +887,8 @@ local function do_scan()
     local scan_start = clock()
     if not C.prog then return end
     local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
-                             known = not Writer.M_CNAME and known_names() or nil })
+                             known = (not Writer.M_CNAME or SKS.adapter.hash_names) and known_names() or nil })
+    if cfg.enabled and SKS.adapter.prepare_parts then SKS.adapter.prepare_parts(res.instances or res.parts) end
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
     -- rescans neither pause writing nor rewrite every channel
     local old = {}
@@ -903,7 +916,9 @@ local function do_scan()
     local rigs = {}
     for i, r in ipairs(res.rigs) do
         local ts = {}
-        for j, t in ipairs(r.targets) do ts[j] = { name = t.name, channels = t.distinct, writes = t.count } end
+        for j, t in ipairs(r.targets) do
+            ts[j] = { name = t.name, display = part_display(t.name), channels = t.distinct, writes = t.count }
+        end
         rigs[i] = { label = r.label, primary = r.primary, targets = ts, reads = r.n_reads }
     end
     sc.rigs = rigs
@@ -911,7 +926,8 @@ local function do_scan()
     local parts = {}
     for i, p in ipairs(res.parts) do
         local r = C.part_bindings[p.id]
-        parts[i] = { id = p.id, slot = nil, channels = p.n, fingerprint = p.fingerprint, binding = r and r.hit or nil }
+        parts[i] = { id = p.id, display = part_display(p.id), slot = nil, channels = p.n, fingerprint = p.fingerprint, binding = r and r.hit or nil,
+                     weights = p.weights }
     end
     sc.parts = parts
     update_coverage(res.parts)
@@ -1047,7 +1063,7 @@ local function drive(rig, primary)
         end
     end
     local t1 = clock()
-    Playback.apply(rig, P, C.inv_full)
+    Playback.apply(rig, P, C.inv_full, cfg.eyes)
     local s = cfg.expression.smoothing
     local alpha = (s > 0) and (1 - min(s, 1) * 0.9) or 1
     X.compute(prog, rig, P, C.gains, C.forced, cfg.clamp, alpha, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch)
@@ -1197,7 +1213,12 @@ local function tick()
     local f = C.frame
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
     Sculpt.frame = f
-    local stable, why, kind = Guard.game_stable(f)
+    local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
+    NativeSignals.tick(SKS.adapter, stable)
+    if SKS.adapter.strict_bounds and #(C.instances or {}) > 0 and
+        (not stable or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
+        drop_rigs(why or "part signature changed", Guard.SETTLE_FRAMES)
+    end
     if not stable and C.cond_live ~= false then
         C.cond_live = false
         CondExpr.reset(); Cnd.reset(); Touch.reset()
@@ -1333,6 +1354,10 @@ end
 
 -- ---------------------------------------------------------------- commands
 local cmds = {}
+
+function cmds.native_signals(a)
+    return NativeSignals.command(SKS.adapter, a)
+end
 
 local function num(v, lo, hi)
     v = tonumber(v)
@@ -1990,6 +2015,7 @@ end
 -- want_signals: compute live.signal (mapping editor / debug page open)
 function SKS.set_ui_open(open, want_signals)
     open = open and true or false
+    NativeSignals.viewing = open and want_signals == true
     if state.runtime.ui_open ~= open then state.runtime.ui_open = open; bump("runtime") end
     C.want_signals = want_signals and true or false
 end
@@ -2005,6 +2031,7 @@ function SKS.init(adapter)
         if ok == false then return false, why end
     end
     SKS.adapter = adapter
+    Writer.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
     Cnd.install(adapter.conditions)
     Trail.open()
@@ -2098,9 +2125,14 @@ function SKS.on_preview(open)
 end
 
 function SKS.shutdown()
+    NativeSignals.finish("脚本重置")
     Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
     C.unpublish_api()
+    if SKS.adapter.strict_bounds and
+        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
+        drop_rigs("shutdown after rebuild", nil)
+    end
     if not C.paused then
         for _, r in ipairs(C.rigs) do
             for _, t in ipairs(r.targets) do
@@ -2110,6 +2142,20 @@ function SKS.shutdown()
         zero_sculpt()
     end
     if C.save_at then save_now() end
+end
+
+-- Optional pre-animation/render preparation uses the current scan only; it keeps no second
+-- target cache and never touches a mesh after a failed gate or a changed signature.
+function SKS.prepare_targets()
+    local A = SKS.adapter
+    if not A.prepare_mesh or not cfg.enabled or #(C.instances or {}) == 0 then return end
+    if not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig then
+        drop_rigs("preparation after rebuild", Guard.SETTLE_FRAMES)
+        return
+    end
+    for _, part in ipairs(C.instances) do
+        if Guard.mesh_ready(part.mesh) then A.prepare_mesh(part.mesh) end
+    end
 end
 
 -- ---------------------------------------------------------------- conditional expressions
@@ -2327,6 +2373,9 @@ end
 function PUB.set(owner, name, value, opts)
     if not check_owner(owner) then return bad("owner: non-empty string up to 64 chars") end
     if type(name) ~= "string" or name == "" then return bad("name: string") end
+    if SKS.adapter.channel_writable and not SKS.adapter.channel_writable(name) then
+        return bad("channel is read-only or unresolved")
+    end
     value = tonumber(value)
     if not value or value ~= value then return bad("value: number") end
     local ttl = Ext.DEFAULT_TTL

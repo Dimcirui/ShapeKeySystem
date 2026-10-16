@@ -127,15 +127,32 @@ local function unbox(v)
 end
 
 -- names[1..n] of a mesh from its name hashes (known: H.table); nil when the mesh has none
-function H.names_of(mesh, n, known)
+function H.names_of(mesh, n, known, numeric_items)
     local ok, arr = pcall(mesh.call, mesh, "get_ChannelNameHash")
     if not ok or not arr then return nil end
+    -- Some engines return incorrect but numeric ToString values for boxed array elements.
+    -- Adapters that require numeric Item reads must fail closed instead of using those boxes.
+    if numeric_items then
+        local names = {}
+        for i = 1, n do
+            local got, value = pcall(function() return arr:call("get_Item", i - 1) end)
+            local h = got and type(value) == "number" and math.tointeger(value) or nil
+            if h and (h < 0 or h > M) then h = nil end
+            names[i] = h and (known[h] or H.label(h)) or ""
+        end
+        return names
+    end
     local ok2, elems = pcall(arr.get_elements, arr)
     -- REF can expose get_elements() as an indexed userdata container instead of a Lua table.
-    if not ok2 or (type(elems) ~= "table" and type(elems) ~= "userdata") then return nil end
+    if not ok2 or (type(elems) ~= "table" and type(elems) ~= "userdata") then elems = nil end
     local names = {}
     for i = 1, n do
-        local h = unbox(elems[i])
+        local h
+        if elems then pcall(function() h = unbox(elems[i]) end) end
+        if h == nil then
+            local got, v = pcall(arr.call, arr, "get_Item", i - 1)
+            if got then h = unbox(v) end
+        end
         names[i] = h and (known[h] or H.label(h)) or ""
     end
     return names

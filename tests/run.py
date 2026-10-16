@@ -78,6 +78,12 @@ def boot(data):
     G.lua_files = lua_files
     return L, G, to_lua
 
+if "--re4r-only" in sys.argv:
+    L, G, _ = boot(data)
+    L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+    L.execute(open(os.path.join(HERE, "tests_re4r.lua"), encoding="utf-8").read())
+    sys.exit(0)
+
 L, G, to_lua = boot(data)
 L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 from render_ui import font as _pil_font
@@ -121,6 +127,11 @@ shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path
 L3, G3, _ = boot(data3)
 L3.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 L3.execute(open(os.path.join(HERE, "tests_onimusha.lua"), encoding="utf-8").read())
+data4 = tempfile.mkdtemp(prefix="sks_re4r_")
+shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path.join(data4, "ShapeKeySystem", "builtin"))
+L4, G4, _ = boot(data4)
+L4.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+L4.execute(open(os.path.join(HERE, "tests_re4r.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))

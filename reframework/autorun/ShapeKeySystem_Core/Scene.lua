@@ -28,6 +28,7 @@ end
 -- child names, plus the adapter's child_tag where a rebuild keeps the names (adapter interface 2.2)
 function S.children_signature(root)
     if not root then return "" end
+    if S.adapter.signature then return S.adapter.signature(root) end
     local tag = S.adapter.child_tag
     local parts, c = {}, root:call("get_Child")
     while c do
@@ -46,14 +47,16 @@ local function find_faces(root, scene_search)
             seen[tr] = true; faces[#faces + 1] = tr
         end
     end
-    if root then
+    if root and A.faces then
+        for _, face in ipairs(A.faces(root)) do add(face) end
+    elseif root then
         local c = root:call("get_Child")
         while c do
             if A.face_rank(c) > 0 then add(c) end
             c = c:call("get_Next")
         end
     end
-    if scene_search then
+    if scene_search and not A.faces then
         pcall(function()
             local scene = sdk.call_native_func(sdk.get_native_singleton("via.SceneManager"),
                 sdk.find_type_definition("via.SceneManager"), "get_CurrentScene")
@@ -71,29 +74,42 @@ end
 -- tests can drop it) the names come from the mesh's name hashes through known (NameHash.table).
 local function channel_names(mesh, n, known)
     local M_CNAME = W.M_CNAME
-    if M_CNAME then
+    if M_CNAME and not S.adapter.hash_names then
         local names = {}
         for i = 0, n - 1 do names[i + 1] = M_CNAME:call(mesh, i) or "" end
         return names
     end
-    return NameHash.names_of(mesh, n, known or {})
+    return NameHash.names_of(mesh, n, known or {}, S.adapter.hash_item_only)
 end
 
 -- Part meshes under one parent: every child the adapter calls a part, with blendshape channels.
 -- Returns parts = { {id, mesh, names, n} } (names = every channel name, read once per scan).
 local function read_parts(parent, known)
     local parts = {}
-    local child = parent and parent:call("get_Child")
+    local candidates = S.adapter.parts and S.adapter.parts(parent)
+    local child
+    if candidates then child = candidates[1] else child = parent and parent:call("get_Child") end
+    local ci = 1
     while child do
         local cname = S.go_name(child)
-        if S.adapter.is_part(cname) then
+        if candidates or S.adapter.is_part(cname) then
             local mesh
             pcall(function() mesh = child:call("get_GameObject"):call("getComponent(System.Type)", W.MESH_TYPE) end)
             local n = mesh and (M_CN:call(mesh) or 0) or 0
             local names = n > 0 and channel_names(mesh, n, known)
-            if names then parts[#parts + 1] = { id = cname, mesh = mesh, names = names, n = n } end
+            if names then
+                local writable = S.adapter.channel_writable
+                if writable then
+                    for i, name in ipairs(names) do
+                        if not writable(name, mesh, i - 1) then names[i] = "" end
+                    end
+                end
+                local id = S.adapter.part_id and S.adapter.part_id(child) or cname
+                parts[#parts + 1] = { id = id, mesh = mesh, names = names, n = n }
+            end
         end
-        child = child:call("get_Next")
+        if candidates then ci = ci + 1; child = candidates[ci]
+        else child = child:call("get_Next") end
     end
     return parts
 end
@@ -120,7 +136,8 @@ local function build_target(part, index, min_hits, mesh_name_of)
     for k = 1, count do last[k] = -1 end   -- force the first write
     local ok, addr = pcall(part.mesh.get_address, part.mesh)
     return { mesh = part.mesh, addr = ok and addr or nil, name = part.id, slots = slots, idxs = idxs,
-             last = last, count = count, distinct = hits, ready = false, stable = 0 }
+             last = last, count = count, channels = part.n, names = part.names,
+             distinct = hits, ready = false, stable = 0 }
 end
 
 -- opts = { index, scene_search (bool), min_hits, known (hash -> name, engines without channel names) }
@@ -133,7 +150,7 @@ function S.scan(opts)
     -- (all of them would drive the same part meshes); the higher face_rank wins
     local by_parent, order = {}, {}
     for _, face in ipairs(faces) do
-        local parent = face:call("get_Parent")
+        local parent = S.adapter.face_root and S.adapter.face_root(face, root) or face:call("get_Parent")
         if parent then
             local cur = by_parent[parent]
             if not cur then

@@ -32,25 +32,28 @@ end
 -- checked: it is true on the drawn, working hunter face too.)
 function G.mesh_ready(mesh)
     if not call(M_READY, mesh) then return false, "MeshReady=false" end
-    if not call(M_BS_ON, mesh) then return false, "BlendShapeEnable=false" end
+    -- Engines without this flag still require MeshReady and allocated channel buffers below.
+    if M_BS_ON and not call(M_BS_ON, mesh) then return false, "BlendShapeEnable=false" end
     if call(M_BS_REL, mesh) then return false, "BlendShapeReleasedBuffers" end
     local cn, wc = call(M_CN, mesh), call(M_WC, mesh)
     if not cn or not wc then return false, "channel count unreadable" end
     if wc < cn then return false, "weight buffer not allocated" end
+    if W.adapter.strict_bounds and W.limit(mesh) < cn then return false, "weight list not allocated" end
     return true
 end
 
 -- Cheap per-frame check once a target is stable (2 calls).
 function G.mesh_still_ready(mesh)
+    if W.adapter.strict_bounds then return G.mesh_ready(mesh) end
     return call(M_READY, mesh) == true and call(M_BS_REL, mesh) ~= true
 end
 
 -- Game-level gate (the adapter's `gate`): ok, reason, kind. Without one, the game counts as stable
 -- whenever the primary character exists.
 G.adapter = {}   -- set by SKS.init
-function G.game_stable(frame)
+function G.game_stable(frame, cutscene_drive)
     local A = G.adapter
-    if A.gate then return A.gate(frame) end
+    if A.gate then return A.gate(frame, cutscene_drive) end
     if A.primary_root and A.primary_root() then return true end
     return false, "no primary character", "setup"
 end

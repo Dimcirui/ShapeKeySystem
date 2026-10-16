@@ -16,6 +16,7 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 |---|---|---|
 | 怪物猎人：荒野 | `ShapeKeySystem_Games/Wilds/` | fcParam 关节 |
 | 鬼武者：剑之道 | `ShapeKeySystem_Games/Onimusha/` | `bsControl` 关节；通道名通过名字哈希反查 |
+| 生化危机4 重制版 | `ShapeKeySystem_Games/RE4R/` | 已适配里昂、艾达：读取面部骨骼姿态、眼球旋转与原生修正通道权重 |
 
 后续要适配的游戏见 #17。
 
@@ -26,7 +27,7 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 - **预设与绑定**：按装备或模型绑定表情配置和捏脸预设。
 - **条件表情**：满足条件（受伤、战斗、血量等）时叠加一组表情。
 - **面部互动**：在面部导航图上点击额头、脸颊或眼睛，播放对应的反应；拖动嘴部可以改变口型。
-- **面部动画测试**：回放录制的面部动画，检查映射效果（目前只支持荒野）。
+- **面部动画测试**：回放录制的面部动画，检查映射效果；荒野支持原版输入与最终信号，RE4R 支持诊断录制中的表情信号和视线。
 - **公开 API**：其他插件可以通过 `ShapeKeySystemAPI` 临时接管形态键的值，优先级高于表情和捏脸。
 
 面板默认用 Delete 键打开。操作说明见 [docs/guide.md](docs/guide.md)。
@@ -54,6 +55,7 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 | `tools/sks-files.ps1` | 发布文件清单，部署和打包共用 |
 | `tools/install-ref-ime.ps1` | 从上游 Release 安装 REF-IME |
 | `tools/onimusha_signals.py` | 从鬼武者原版 jcns 生成信号字典 |
+| `tools/convert_re4r_profile.py` | 将旧 RE4R 模型配置转换为 SKS 配置 |
 | `tools/vrc_profiles/` | 生成 VRChat 模型的表情配置 |
 | `tools/face_gen/` | 面部导航图生成器 |
 | `tools/profile_offline.py` | 离线性能复测 |
@@ -93,6 +95,7 @@ python test_package.py   # 验证发布包的结构，不联网
 - [shape-key-system-api.md](docs/plans/shape-key-system-api.md)：UI 与后端的约定、命令、文件格式
 - [multi-game-adapter.md](docs/plans/multi-game-adapter.md)：游戏适配器接口
 - [onimusha-adapter.md](docs/plans/onimusha-adapter.md)：鬼武者适配的探查结果和待查问题
+- [re4r-adapter.md](docs/plans/re4r-adapter.md)：RE4R Leon 的信号来源、写入方式和后续适配
 
 ## 第三方代码
 

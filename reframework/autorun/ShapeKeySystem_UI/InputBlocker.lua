@@ -147,6 +147,10 @@ B.surface = function() return 1920, 1080 end
 -- the mouse)
 local BTN_L
 function B.device_left_down()
+    if B.game and B.game.left_down then
+        local ok, down = pcall(B.game.left_down)
+        if ok then return down == true end
+    end
     local down = false
     pcall(function()
         BTN_L = BTN_L or enum_value("via.hid.MouseButton", "L")
@@ -217,6 +221,10 @@ end
 function B.diag()
     if not B.enabled then return "" end
     local hook = (#B.failed == 0) and string.format("放开光标 %d 次", B.forced) or ("hook 失败：" .. B.failed[#B.failed])
+    if B.game and B.game.status then
+        local ok, status = pcall(B.game.status)
+        if ok and type(status) == "string" then hook = hook .. " · " .. status end
+    end
     return string.format("鼠标 %s · %s · 最近移动 %.0f,%.0f", B.pinned and "锁定(虚拟光标)" or "自由",
         hook, B.delta[1], B.delta[2])
 end
@@ -225,6 +233,10 @@ end
 -- Input.capture: the game-side AppMouseKeyboardManager wheel read before UpdateMotionFrame stayed 0.
 local T_DEV = sdk.find_type_definition("via.hid.MouseDevice")
 function B.poll_wheel()
+    if B.game and B.game.take_wheel then
+        local ok, value = pcall(B.game.take_wheel)
+        if ok and type(value) == "number" then B.wheel = B.wheel + value; return end
+    end
     pcall(function()
         local mouse = sdk.get_native_singleton("via.hid.Mouse")
         if not mouse then return end
