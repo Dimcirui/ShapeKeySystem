@@ -6,6 +6,10 @@ import re
 from pathlib import Path
 
 
+def sculpt_key(name):
+    return re.sub(r"_[Ll][Oo][Dd]\d+$", "", name.rsplit(".", 1)[-1])
+
+
 def convert(source, arkit, profile_id):
     if not re.fullmatch(r"[A-Za-z0-9_-]+", profile_id):
         raise ValueError("profile id must be an ASCII basename")
@@ -15,7 +19,9 @@ def convert(source, arkit, profile_id):
     if native_map not in {"RE4R_ShapeKeySystem_native_leon.json", "RE4R_ShapeKeySystem_native_leon_mouth9.json"}:
         raise ValueError("custom native maps need an explicit adapter port")
     canonical = {c["name"]: c for c in arkit["channels"]}
-    channels, names, skipped, manual, seen = [], [], [], [], set()
+    channels, names, skipped, manual, sculpt, seen = [], [], [], [], [], set()
+    labels = {}
+    sculpt_regions = {"shape", "body", "outfit", "hair", "eye_detail", "mouth_detail", "outfit_variant", "hairstyle"}
     groups = {"brow", "eye", "gaze", "nose_cheek", "mouth", "jaw", "tongue", "extra"}
     native = {t["name"] for t in source.get("native_taps", [])}
     node_keys = {"s", "p", "ref", "const", "eye", "axis", "sign", "sum", "max", "min", "mul", "sub", "k", "curve", "full_deg"}
@@ -33,6 +39,13 @@ def convert(source, arkit, profile_id):
             raise ValueError("unresolved hash labels cannot be converted into writable keys")
         if type(key.get("hash")) is not int or not 0 <= key["hash"] <= 0xFFFFFFFF:
             raise ValueError("hash must be an unsigned 32-bit integer")
+        names.append(name)
+        labels[name] = key["label"]
+        labels[sculpt_key(name)] = key["label"]
+        # Profile membership transfers channel ownership to the expression writer, even without a node.
+        if key["region"] in sculpt_regions:
+            sculpt.append(name)
+            continue
         mappings = [[key["name"], 1]] if key["library"] == "ARKit" else key.get("arkit", [])
         nodes = []
         for mapping in mappings:
@@ -54,14 +67,17 @@ def convert(source, arkit, profile_id):
         else:
             manual.append(name)
         channels.append(entry)
-        names.append(name)
-    if not channels:
+    if not names:
         raise ValueError("profile has no writable channels")
     return {
         "profiles/" + profile_id + ".json": {"schema": "sks.profile/1", "name": source.get("title", profile_id), "channels": channels},
-        "names/" + profile_id + ".json": {"schema": "sks.names/1", "names": names},
-        "leon/leon.json": {"schema": "sks.binding/1", "part": "leon", "profile": profile_id, "global": True},
+        "names/" + profile_id + ".json": {"schema": "sks.names/1", "names": names, "labels": labels},
+        "leon/sculpt/" + profile_id + ".json": {"schema": "sks.sculpt/1", "name": profile_id,
+            "values": {sculpt_key(name): 0 for name in names}},
+        "leon/leon.json": {"schema": "sks.binding/1", "part": "leon", "profile": profile_id,
+            "sculpt": profile_id, "global": True},
         "conversion-report.json": {"source_native_map": native_map, "skipped_read_only": skipped, "manual_only": manual,
+            "sculpt_only": sculpt,
             "notes": ["Original settings and presets are not migrated.",
                       "SKS remaps expressions above sculpt rest values; it does not reproduce legacy additive mixing.",
                       "Identical names on several parts follow SKS merging; inspect coverage before driving.",
