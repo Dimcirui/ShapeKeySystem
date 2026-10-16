@@ -22,7 +22,8 @@ local function setting(ctx, k, v) ctx.call("set_setting", { key = k, value = v }
 local function settings_card(ctx, x, y, w)
     local se = ctx.st.settings
     local no_img = not D.images()
-    local h = 364 - (no_img and 32 or 0)
+    local scene_search = se.scene_search_available ~= false
+    local h = 364 - (no_img and 32 or 0) - (scene_search and 0 or 34)
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
@@ -86,9 +87,11 @@ local function settings_card(ctx, x, y, w)
     bx = bx + w1 + 24
     local c2, v2, w2 = W.toggle("过场动画中驱动", bx, cy, se.cutscene_drive == true)
     if c2 then setting(ctx, "cutscene_drive", v2) end
-    cy = cy + 34
-    local c3, v3 = W.toggle("始终搜索整个场景（其他猎人；名片和菜单自动）", rx, cy, se.scene_search_always == true)
-    if c3 then setting(ctx, "scene_search_always", v3) end
+    if scene_search then
+        cy = cy + 34
+        local c3, v3 = W.toggle("始终搜索整个场景（其他猎人；名片和菜单自动）", rx, cy, se.scene_search_always == true)
+        if c3 then setting(ctx, "scene_search_always", v3) end
+    end
     return h
 end
 
@@ -144,11 +147,11 @@ local function scene_card(ctx, x, y, w)
     end
     for _, r in ipairs(sc.rigs or {}) do
         local t = {}
-        for _, x2 in ipairs(r.targets or {}) do t[#t + 1] = string.format("%s（%d 通道）", x2.name, x2.channels) end
+        for _, x2 in ipairs(r.targets or {}) do t[#t + 1] = string.format("%s（%d 通道）", x2.display or x2.name, x2.channels) end
         lines[#lines + 1] = (r.primary and "★ " or "   ") .. r.label .. "：" .. table.concat(t, "，")
     end
     for _, p in ipairs(sc.parts or {}) do
-        lines[#lines + 1] = string.format("部件 %s · %d 通道 · 指纹 %s%s", p.id, p.channels, tostring(p.fingerprint),
+        lines[#lines + 1] = string.format("部件 %s · %d 通道 · 指纹 %s%s", p.display ~= p.id and p.display and (p.display .. "（" .. p.id .. "）") or p.id, p.channels, tostring(p.fingerprint),
             p.binding and (" · 绑定 " .. p.binding) or "")
         if p.weights then
             lines[#lines + 1] = string.format("  权重数量 %s / 通道 %d · 列表长度 %s",

@@ -298,6 +298,7 @@ local function build_settings_state()
     for _, k in ipairs({ "hotkey", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
                          "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend",
                          "translate_keys" }) do st[k] = cfg[k] end
+    st.scene_search_available = SKS.adapter.scene_search ~= false
     st.window = U.copy(cfg.window)
     state.runtime.enabled = cfg.enabled
     state.runtime.advanced = cfg.advanced
@@ -463,6 +464,11 @@ local function part_name(part)
     if not name then return nil end
     local sn = SKS.adapter.slot_names
     return name, sn and sn[slot] or slot
+end
+
+local function part_display(part)
+    local name, slot = part_name(part)
+    return name and (name .. (slot and (" · " .. slot) or "")) or part
 end
 
 -- labels for a key's parts: only the slots when they all belong to one named model
@@ -910,7 +916,9 @@ local function do_scan()
     local rigs = {}
     for i, r in ipairs(res.rigs) do
         local ts = {}
-        for j, t in ipairs(r.targets) do ts[j] = { name = t.name, channels = t.distinct, writes = t.count } end
+        for j, t in ipairs(r.targets) do
+            ts[j] = { name = t.name, display = part_display(t.name), channels = t.distinct, writes = t.count }
+        end
         rigs[i] = { label = r.label, primary = r.primary, targets = ts, reads = r.n_reads }
     end
     sc.rigs = rigs
@@ -918,7 +926,7 @@ local function do_scan()
     local parts = {}
     for i, p in ipairs(res.parts) do
         local r = C.part_bindings[p.id]
-        parts[i] = { id = p.id, slot = nil, channels = p.n, fingerprint = p.fingerprint, binding = r and r.hit or nil,
+        parts[i] = { id = p.id, display = part_display(p.id), slot = nil, channels = p.n, fingerprint = p.fingerprint, binding = r and r.hit or nil,
                      weights = p.weights }
     end
     sc.parts = parts
@@ -1205,7 +1213,7 @@ local function tick()
     local f = C.frame
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
     Sculpt.frame = f
-    local stable, why, kind = Guard.game_stable(f)
+    local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
     NativeSignals.tick(SKS.adapter, stable)
     if SKS.adapter.strict_bounds and #(C.instances or {}) > 0 and
         (not stable or Scene.children_signature(Scene.primary_root()) ~= C.sig) then

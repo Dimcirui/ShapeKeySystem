@@ -51,9 +51,9 @@ end
 -- Game-level gate (the adapter's `gate`): ok, reason, kind. Without one, the game counts as stable
 -- whenever the primary character exists.
 G.adapter = {}   -- set by SKS.init
-function G.game_stable(frame)
+function G.game_stable(frame, cutscene_drive)
     local A = G.adapter
-    if A.gate then return A.gate(frame) end
+    if A.gate then return A.gate(frame, cutscene_drive) end
     if A.primary_root and A.primary_root() then return true end
     return false, "no primary character", "setup"
 end

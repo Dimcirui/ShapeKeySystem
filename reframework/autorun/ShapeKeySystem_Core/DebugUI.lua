@@ -305,11 +305,11 @@ function D.draw()
     if imgui.tree_node("场景") then
         for _, r in ipairs(st.scene.rigs) do
             local t = {}
-            for _, x in ipairs(r.targets) do t[#t + 1] = string.format("%s (%d ch, %d idx)", x.name, x.channels, x.writes) end
+            for _, x in ipairs(r.targets) do t[#t + 1] = string.format("%s (%d ch, %d idx)", x.display or x.name, x.channels, x.writes) end
             imgui.text((r.primary and "★ " or "  ") .. r.label .. string.format(" (每帧读 %d 个关节): ", r.reads or 0) .. table.concat(t, ", "))
         end
         for _, p in ipairs(st.scene.parts) do
-            imgui.text(string.format("部件 %s  %d 通道  %s", p.id, p.channels, p.fingerprint))
+            imgui.text(string.format("部件 %s  %d 通道  %s", p.display or p.id, p.channels, p.fingerprint))
         end
         imgui.tree_pop()
     end
@@ -322,8 +322,10 @@ function D.draw()
         if changed then call("set_setting", { key = "write_epsilon", value = v }) end
         changed, v = imgui.checkbox("截断到 0..1", se.clamp)
         if changed then call("set_setting", { key = "clamp", value = v }) end
-        changed, v = imgui.checkbox("始终搜索整个场景（其他猎人；名片自动）", se.scene_search_always)
-        if changed then call("set_setting", { key = "scene_search_always", value = v }) end
+        if se.scene_search_available ~= false then
+            changed, v = imgui.checkbox("始终搜索整个场景（其他猎人；名片自动）", se.scene_search_always)
+            if changed then call("set_setting", { key = "scene_search_always", value = v }) end
+        end
         changed, v = imgui.slider_float("捏脸滑块上限", se.sculpt_max or 1, 1, 5, "%.1f")
         if changed then call("set_setting", { key = "sculpt_max", value = v }) end
         changed, v = imgui.checkbox("过场动画中驱动", se.cutscene_drive)

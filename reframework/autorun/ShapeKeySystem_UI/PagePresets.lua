@@ -34,12 +34,16 @@ local function binding_card(ctx, x, y, w)
     local st, call = ctx.st, ctx.call
     local b = st.presets.binding
     local part = primary_part(st)
+    local display = part
+    for _, p in ipairs(st.scene.parts or {}) do
+        if p.id == part then display = p.display or part; break end
+    end
     local rows = b and #b.chain or 0
     local h = 60 + rows * 30 + (b and 50 or 30) + 44
     W.panel_box(x, y, w, h, true)
     local cy = y + 10
     local tw = W.h2("绑定（查找过程）", x + 12, cy)
-    D.text(part and ("部件 " .. part) or "没有带形态键的部件", x + 24 + tw, cy + 2, C.muted, W.small(), w - tw - 40)
+    D.text(part and ("部件 " .. display) or "没有带形态键的部件", x + 24 + tw, cy + 2, C.muted, W.small(), w - tw - 40)
     cy = cy + 30
     if b then
         for i, c in ipairs(b.chain) do

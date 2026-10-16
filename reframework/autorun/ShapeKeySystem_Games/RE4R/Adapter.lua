@@ -5,8 +5,9 @@
 local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
 local Conditions = require("ShapeKeySystem_Games.RE4R.Conditions")
 local Playback = require("ShapeKeySystem_Games.RE4R.Playback")
+local Cutscene = require("ShapeKeySystem_Games.RE4R.Cutscene")
 local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
-    rewrite_active_weights = true,
+    rewrite_active_weights = true, scene_search = false,
     conditions = Conditions,
     playback = Playback,
     input = require("ShapeKeySystem_Games.RE4R.Input"),
@@ -82,11 +83,15 @@ function A.part_id(tr)
     local name = call(call(tr, "get_GameObject"), "get_Name") or "part"
     return (p or name):gsub("[^%w_%-]", "_")
 end
+A.model_names = "character_names.json"
+A.slot_names = { ["00"] = "身体", ["10"] = "头部", ["20"] = "头发" }
+
 function A.model_of(part)
-    if part == "leon" or part == "ada" then return part, part end
+    if part == "leon" or part == "ada" then return part end
     local id = part:match("^(cha%d%d%d)_")
     local actor = id and actor_of_path("/" .. id .. "/") or actor_of_path(path(head()))
-    return actor or "leon", part
+    local slot = part:match("^cha%d%d%d_(%d%d)$")
+    return actor or "leon", A.slot_names[slot] and slot or part
 end
 function A.representative_of(part) return (A.model_of(part)) end
 function A.eye_joints(face)
@@ -103,8 +108,13 @@ function A.signature(root)
     table.sort(out)
     return table.concat(out, "|")
 end
-function A.gate()
+function A.gate(_, cutscene_drive)
     if not A.primary_ready() then return false, "Player or supported head unavailable" end
+    if cutscene_drive == false then
+        local playing = Cutscene.playing()
+        if playing == nil then return false, "Cutscene state unavailable" end
+        if playing then return false, "Cutscene drive disabled" end
+    end
     return true
 end
 
@@ -148,6 +158,7 @@ function A.probe(output)
     local input = A.input.diagnostics()
     pcall(json.dump_file, "ShapeKeySystem\\re4r_input_status.json", input, 2)
     lines[#lines + 1] = A.input.status()
+    lines[#lines + 1] = "cutscene playing: " .. tostring(Cutscene.playing())
     if not A.primary_ready() then return { "Player or supported head unavailable" } end
     local h = A.bind(head(), { Signals.raw.parse("jawOpen") })
     Signals.read(h, {}, 1)
@@ -161,6 +172,8 @@ end
 function A.init()
     if not sdk.find_type_definition("chainsaw.CharacterManager") then return false, "找不到 chainsaw.CharacterManager" end
     T_MESH = sdk.typeof("via.render.Mesh")
+    local ready, why = Cutscene.init()
+    if not ready then return false, why end
     Conditions.init()
     Playback.configure(function()
         if not A.primary_ready() then return end
