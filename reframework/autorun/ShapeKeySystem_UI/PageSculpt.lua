@@ -173,12 +173,14 @@ local function key_row(ctx, k, x, y, w)
     local rh = (#sub > 0) and 42 or 34
     if modified then D.rect(x, y + 2, 2, rh - 4, C.brass) end
     local nw = max(150, w * 0.34)
+    local title = k.label or k.name
     if #sub > 0 then
-        D.text(k.name, x + 10, y + 4, C.text, W.body(), nw - 16)
+        D.text(title, x + 10, y + 4, C.text, W.body(), nw - 16)
         D.text(table.concat(sub, " · "), x + 10, y + 23, has_ovr and C.brass or C.faint, W.small(), nw - 16)
     else
-        D.text_mid(k.name, x + 10, y + 3, 28, C.text, W.body(), nw - 16)
+        D.text_mid(title, x + 10, y + 3, 28, C.text, W.body(), nw - 16)
     end
+    if k.label then W.tooltip("形态键名：" .. k.name, x, y, nw, rh) end
     local oy0 = (rh - 42) / 2   -- controls stay centred on the shorter row
     local ax = x + w - 106
     local ext = W.external_owner(ctx.st, k.name)
@@ -237,7 +239,8 @@ function Page.draw(ctx, x, y, w)
             -- expression keys: listed when asked for, or when they carry a sculpt value
             local ok = (s.show_locked or not k.mixed or mod or k.value > 0)
                 and (not hide_np or k.in_preset or mod)
-                and (filter == "" or k.name:lower():find(filter, 1, true))
+                and (filter == "" or k.name:lower():find(filter, 1, true)
+                    or (k.label and k.label:lower():find(filter, 1, true)))
                 and (not s.only_modified or mod)
             if ok then rows[#rows + 1] = k end
         end
