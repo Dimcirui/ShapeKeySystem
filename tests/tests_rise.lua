@@ -1,4 +1,4 @@
--- A separate runtime for the real Rise adapter: no raw channels, channel names from get_Item
+-- A separate runtime for the real Rise adapter: signals projected from face_base joints, channel names from get_Item
 -- hashes only, the face anchors the rig without being a part, and a mod part's missing weight
 -- buffer is allocated.
 local NameHash = require("ShapeKeySystem_Core.NameHash")
@@ -65,7 +65,58 @@ check(A.is_part("f_body279") and A.is_part("m_helm001") and not A.is_part("f_hai
 local model, slot = A.model_of("f_arm279")
 check(model == "f_279" and slot == "arm" and A.representative_of("f_wst279") == "f_body279"
     and A.model_of("m_arm279") ~= model, "one binding per sex and equipment number, the body represents it")
-check(st.expression.no_signals == true, "no raw channels: the expression page has no game signals")
+check(st.expression.no_signals == false and A.raw.parse("jawOpen") and not A.raw.parse("typo"),
+    "face_base bone projection supplies expression signals")
+
+-- face_base joints at the calibrated neutral pose; poses[bone] = {px, py, pz, qx, qy, qz, qw}
+local cal = json.load_file("ShapeKeySystem/builtin/mhrise/face.json")
+local poses = {}
+local function strip(self, name, ...) return self[name:match("^([%w_]+)")](self, ...) end
+for _, spec in pairs(cal.joints) do
+    local n, bone = spec.neutral, spec.bone
+    poses[bone] = { table.unpack(n) }
+    face._joints[bone] = { call = strip,
+        get_LocalPosition = function() local p = poses[bone]; return { x = p[1], y = p[2], z = p[3] } end,
+        get_LocalRotation = function() local p = poses[bone]; return { x = p[4], y = p[5], z = p[6], w = p[7] } end }
+end
+local face_call = face.call
+face.call = function(self, m, ...)
+    if m:find("^getJointByName") then return self._joints[...] end
+    return face_call(self, m, ...)
+end
+local function rotate(bone, axis, deg)   -- neutral * (deg about axis)
+    local n, h = cal.joints[bone .. ".open"].neutral, math.rad(deg) / 2
+    local bx, by, bz, bw = axis[1] * math.sin(h), axis[2] * math.sin(h), axis[3] * math.sin(h), math.cos(h)
+    local ax, ay, az, aw = n[4], n[5], n[6], n[7]
+    poses[bone] = { n[1], n[2], n[3],
+        aw * bx + ax * bw + ay * bz - az * by, aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw, aw * bw - ax * bx - ay * by - az * bz }
+end
+local jaw, blink_l, blink_r = A.raw.parse("jawOpen"), A.raw.parse("eyeBlinkLeft"), A.raw.parse("eyeBlinkRight")
+local h = A.bind(face, { jaw, blink_l, blink_r })
+local P = {}
+A.read(h, P, 1)
+check(P[jaw] == 0 and P[blink_l] == 0 and P[blink_r] == 0, "neutral face: no expression")
+local jaw_rule
+for _, r in ipairs(cal.rules) do if r.key == "jawOpen" then jaw_rule = r end end
+rotate("Jaw_00", cal.joints["Jaw_00.open"].axis, (jaw_rule.lo + jaw_rule.hi) / 2)
+A.read(h, P, 1)
+check(math.abs(P[jaw] - 0.5) < 1e-6, "jaw rotated half way: jawOpen 0.5 (" .. tostring(P[jaw]) .. ")")
+local lid = cal.joints["L_Up_Eyelib.down"]
+for _, r in ipairs(cal.rules) do
+    if r.joint == "L_Up_Eyelib.down" then
+        local n = lid.neutral
+        poses.L_Up_Eyelib = { n[1] + lid.axis[1] * r.hi / 1000, n[2] + lid.axis[2] * r.hi / 1000,
+            n[3] + lid.axis[3] * r.hi / 1000, n[4], n[5], n[6], n[7] }
+    end
+end
+A.read(h, P, 1)
+check(math.abs(P[blink_l] - 1) < 1e-6 and P[blink_r] == 0, "left upper lid fully down: left blink only")
+local snap = A.native_snapshot()
+check(snap and snap.joints.Jaw_00 and snap.joints.L_Brow_00 and snap.outputs.jawOpen
+    and snap.measurements["Jaw_00.open"] and snap.status["joint:Throat"] and snap.source,
+    "native snapshot records face joints, measurements and outputs; missing joints are listed")
+for bone, spec in pairs(cal.joints) do poses[spec.bone] = { table.unpack(spec.neutral) } end
 
 ticks(60)
 check(weights.count == 0, "a weight list shorter than the channels: the weight count stays 0")
