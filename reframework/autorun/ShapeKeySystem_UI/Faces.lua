@@ -64,6 +64,19 @@ end
 
 function F.list() return styles end
 
+function F.image_paths()
+    local paths = {}
+    for _, style in ipairs(styles) do
+        paths[#paths + 1] = style.prefix .. "face_lines.png"
+        for _, zone in ipairs(style.zones) do
+            for _, state in ipairs({ "idle", "hover", "sel", "glow" }) do
+                paths[#paths + 1] = style.prefix .. "face_" .. zone.img .. "_" .. state .. ".png"
+            end
+        end
+    end
+    return paths
+end
+
 -- the style for a setting value; unknown / missing ids fall back to the default, then the first
 function F.get(id)
     return by_id[id or F.DEFAULT] or by_id[F.DEFAULT] or styles[1]

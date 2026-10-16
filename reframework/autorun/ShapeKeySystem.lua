@@ -8,6 +8,7 @@ local SKS = require("ShapeKeySystem_Core.API")
 local DebugUI = require("ShapeKeySystem_Core.DebugUI")
 local Games = require("ShapeKeySystem_Games.Registry")
 local D = require("ShapeKeySystem_UI.Draw")
+local Faces = require("ShapeKeySystem_UI.Faces")
 local Panel = require("ShapeKeySystem_UI.Panel")
 
 -- an unsupported game (or an adapter whose types are gone after a game update) only gets a line
@@ -56,7 +57,9 @@ local function draw_panel(backend)
         SKS.log("panel draw error: %s", last_err)
     end
 end
-if D.has_d2d() then d2d.register(function() end, function() draw_panel("d2d") end) end
+if D.has_d2d() then
+    d2d.register(function() D.init_images(Faces.image_paths()) end, function() draw_panel("d2d") end)
+end
 
 re.on_draw_ui(DebugUI.draw)
 re.on_frame(function()
