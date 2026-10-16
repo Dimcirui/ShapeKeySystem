@@ -3,8 +3,12 @@
 -- Only the current player's cha000 head is supported. No scene-wide cutscene/NPC search is
 -- performed. Objects are resolved per call; rig handles are released when the topology changes.
 local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
+local Conditions = require("ShapeKeySystem_Games.RE4R.Conditions")
+local Playback = require("ShapeKeySystem_Games.RE4R.Playback")
 local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
     rewrite_active_weights = true,
+    conditions = Conditions,
+    playback = Playback,
     input = require("ShapeKeySystem_Games.RE4R.Input"),
     terms = { primary = "Leon", part = "部件" }, raw = Signals.raw,
     bind = Signals.bind, read = Signals.read, channel_writable = Signals.writable }
@@ -91,8 +95,40 @@ end
 -- Core passes only current targets after checking the player's signature and readiness.
 function A.prepare_mesh(m) call(m, "set_LodLevel", 0) end
 
+-- Called during a stable LateUpdate scan; the native head keeps its engine-owned count.
+function A.prepare_parts(parts)
+    local hm = mesh(head())
+    for _, part in ipairs(parts) do
+        local m, n = part.mesh, part.n
+        local wc = call(m, "get_BlendShapeChannelWeightCount")
+        local length = call(call(m, "get_ChannelWeightList"), "get_Length")
+        local custom = false
+        for i, name in ipairs(part.names) do
+            if Signals.writable(name, m, i - 1) then custom = true; break end
+        end
+        local same_head = hm and call(hm, "get_GameObject") == call(m, "get_GameObject")
+        if not same_head and custom and type(wc) == "number" and wc >= 0 and wc < n
+            and type(length) == "number" and length >= n and call(m, "get_BlendShapeChannelNum") == n
+            and call(m, "get_MeshReady") == true and call(m, "get_BlendShapeReleasedBuffers") ~= true then
+            call(m, "set_BlendShapeChannelWeightCount", n)
+            wc = call(m, "get_BlendShapeChannelWeightCount")
+        end
+        part.weights = { count = wc, length = length, channels = n }
+    end
+end
+
+function A.native_snapshot()
+    if not A.primary_ready() then return nil, "Leon 头部尚未就绪" end
+    local result = Signals.snapshot(head())
+    result.source = A.signature(A.primary_root())
+    return result
+end
+
 function A.probe(output)
     local lines = { "RE4R Leon (cha000); native inputs are read-only" }
+    local input = A.input.diagnostics()
+    pcall(json.dump_file, "ShapeKeySystem\\re4r_input_status.json", input, 2)
+    lines[#lines + 1] = A.input.status()
     if not A.primary_ready() then return { "Leon player or head unavailable" } end
     local h = Signals.bind(head(), { Signals.raw.parse("jawOpen") })
     Signals.read(h, {}, 1)
@@ -106,6 +142,12 @@ end
 function A.init()
     if not sdk.find_type_definition("chainsaw.CharacterManager") then return false, "找不到 chainsaw.CharacterManager" end
     T_MESH = sdk.typeof("via.render.Mesh")
+    Conditions.init()
+    Playback.configure(function()
+        if not A.primary_ready() then return end
+        local root = A.primary_root()
+        return root:get_address(), A.signature(root)
+    end)
     local ok, d = pcall(json.load_file, "ShapeKeySystem/builtin/re4/leon.json")
     if not ok then return false, "Leon 标定文件无法读取" end
     local configured, valid, why = pcall(Signals.configure, d)

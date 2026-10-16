@@ -30,6 +30,9 @@ function S.configure(calibration)
     for _, rule in ipairs(calibration.rules) do
         if not by_name[rule.key] or not finite(rule.lo) or not finite(rule.hi) or rule.lo == rule.hi
             or not finite(rule.gain or 1) then return false, "Leon 标定规则无效" end
+        if rule.fallback ~= nil and (type(rule.fallback) ~= "boolean" or not rule.joint) then
+            return false, "Leon 补充规则需要骨骼来源"
+        end
         if rule.joint then
             local j = calibration.joints[rule.joint]
             if not j or (j.kind ~= "pos" and j.kind ~= "rot") or type(j.axis) ~= "table"
@@ -118,7 +121,7 @@ function S.measure(spec, position, rotation)
 end
 
 function S.read(h, P, inv_full)
-    local values, measured, taps = {}, {}, {}
+    local values, fallback, measured, taps = {}, {}, {}, {}
     local mesh = h.mesh
     local cn, wc = call(mesh, "get_BlendShapeChannelNum"), call(mesh, "get_BlendShapeChannelWeightCount")
     local length = call(call(mesh, "get_ChannelWeightList"), "get_Length")
@@ -152,10 +155,57 @@ function S.read(h, P, inv_full)
         end
         if finite(value) then
             local v = math.max(0, math.min(1, (value - rule.lo) / (rule.hi - rule.lo))) * (rule.gain or 1)
-            values[rule.key] = math.max(0, math.min(1, (values[rule.key] or 0) + v))
+            local target = rule.fallback and fallback or values
+            target[rule.key] = math.max(0, math.min(1, (target[rule.key] or 0) + v))
         end
     end
+    -- A readable zero is an available source; only absent outputs use bone fallbacks.
+    for key, value in pairs(fallback) do if values[key] == nil then values[key] = value end end
     for _, key in ipairs(h.keys) do P[key] = (values[by_key[key]] or 0) * inv_full end
+    return values, measured, taps
+end
+
+local DIAGNOSTIC_JOINTS = {
+    "C_Jaw", "C_Mouth", "C_Chin", "C_UpperLip", "C_LowerLip", "L_MouthCorner", "R_MouthCorner",
+    "L_UpperLip02", "R_UpperLip02", "L_LowerLip02", "R_LowerLip02",
+    "L_U_Eyelid1", "L_U_Eyelid2", "L_U_Eyelid3", "L_U_Eyelid4",
+    "R_U_Eyelid1", "R_U_Eyelid2", "R_U_Eyelid3", "R_U_Eyelid4",
+    "L_D_Eyelid3", "R_D_Eyelid3", "L_Eye", "R_Eye", "L_I_Eyebrow", "R_I_Eyebrow",
+    "L_O_Eyebrow", "R_O_Eyebrow", "L_UI_Eyebrow_01", "R_UI_Eyebrow_01",
+    "L_Cheek", "R_Cheek", "L_NoseCorner", "R_NoseCorner", "Tongue01", "Tongue03",
+}
+
+-- Snapshots contain numbers and names only; every sample resolves fresh engine references.
+function S.snapshot(face)
+    local h = S.bind(face, {})
+    local outputs, measured = S.read(h, {}, 1)
+    local result = { joints = {}, measurements = {}, taps = {}, outputs = outputs,
+        status = {}, calibration = data }
+    local names = {}
+    for _, name in ipairs(DIAGNOSTIC_JOINTS) do names[name] = name end
+    for name, spec in pairs(data.joints) do names[name] = spec.bone or name end
+    for name, bone in pairs(names) do
+        local joint = call(face, "getJointByName(System.String)", bone)
+        local p, q = call(joint, "get_LocalPosition()"), call(joint, "get_LocalRotation()")
+        if p and q and finite(p.x) and finite(p.y) and finite(p.z)
+            and finite(q.x) and finite(q.y) and finite(q.z) and finite(q.w) then
+            result.joints[name] = {p.x, p.y, p.z, q.x, q.y, q.z, q.w}
+        else result.status["joint:" .. name] = "unavailable" end
+    end
+    for name, value in pairs(measured) do
+        if finite(value) then result.measurements[name] = value end
+    end
+    local hashes = S.hashes(h.mesh)
+    local cn, wc = call(h.mesh, "get_BlendShapeChannelNum"), call(h.mesh, "get_BlendShapeChannelWeightCount")
+    local length = call(call(h.mesh, "get_ChannelWeightList"), "get_Length")
+    local limit = finite(cn) and finite(wc) and finite(length) and cn == h.count and math.min(cn, wc, length) or 0
+    for _, name in ipairs(data.native_names or {}) do
+        local idx = hashes[Hash.hash(name)]
+        local value = idx ~= nil and idx < limit and call(h.mesh, "getBlendShapeChannelWeightParam", idx) or nil
+        if finite(value) then result.taps[name] = value
+        else result.status["tap:" .. name] = idx == nil and "unbound" or "unreadable" end
+    end
+    return result
 end
 
 return S

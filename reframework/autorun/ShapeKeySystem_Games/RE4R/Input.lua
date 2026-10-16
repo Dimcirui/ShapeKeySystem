@@ -1,10 +1,14 @@
--- ShapeKeySystem: clear RE4R managed mouse input while the panel reads the native device.
--- Only typed mouse fields are cleared; cursor settings are restored after button release.
+-- ShapeKeySystem: block RE4R mouse data and gameplay commands while the panel reads native input.
+-- Command dictionaries are cleared after mapping; native keyboard input remains available to
+-- REFramework and text fields. Closing waits for keyboard release before restoring commands.
 local I = {}
 local mouse_type, point_type, left_button
 local live, enabled, forced, last_error
 local saved, wheel = nil, 0
 local waiting_release, installed = false, false
+local waiting_keys, key_release_frame, frame_number = false, nil, 0
+local key_poll_frame, keys_up = -1, false
+local command_fields, command_type
 local counters = { calls = 0, blocked = 0, bypass = 0, errors = 0, hooks = 0 }
 
 local function other_panel()
@@ -73,6 +77,7 @@ local function release_cursor()
     if not ok then counters.errors = counters.errors + 1 end
 end
 local function frame()
+    frame_number = frame_number + 1
     if not live then return end
     if enabled() then waiting_release = true; release_cursor(); return end
     wheel = 0
@@ -82,6 +87,28 @@ local function frame()
         waiting_release = false
     end
     restore_cursor()
+end
+
+local function keyboard_released()
+    if key_poll_frame == frame_number then return keys_up end
+    key_poll_frame, keys_up = frame_number, true
+    -- Virtual keys 1..6 are mouse buttons; all keyboard keys include the panel hotkey.
+    for key = 8, 255 do
+        local ok, down = pcall(function() return reframework:is_key_down(key) end)
+        if not ok or down == true then keys_up = false; break end
+    end
+    return keys_up
+end
+
+local function block_commands()
+    if not live or other_panel() then return false end
+    if enabled() then waiting_keys, key_release_frame = true, nil; return true end
+    if waiting_keys then
+        if not keyboard_released() then key_release_frame = nil
+        elseif not key_release_frame then key_release_frame = frame_number
+        elseif frame_number > key_release_frame + 1 then waiting_keys = false end
+    end
+    return waiting_keys
 end
 
 local layouts, device_type
@@ -184,9 +211,63 @@ function I.install(is_enabled, failed, on_forced)
         return retval
     end)
     if counters.hooks == 0 then live = false; failed("RE4R managed mouse hooks unavailable"); return end
+    local command_ok, command_error = pcall(function()
+        command_type = sdk.find_type_definition("share.hid.Command")
+        if not command_type then error("share.hid.Command unavailable") end
+        command_fields = {}
+        for _, name in ipairs({ "_Triggers", "_Downs", "_Releases", "_Floats", "_Points", "_Vec2s", "_Vec3s", "_Quaternions" }) do
+            local field = command_type:get_field(name)
+            local td = field and field:get_type()
+            if not field or field:is_static() or not td
+                or not td:get_full_name():find("System.Collections.Concurrent.ConcurrentDictionary`2<System.UInt32,", 1, true) then
+                error("command dictionary layout mismatch: " .. name)
+            end
+            local clear
+            for _, method in ipairs(td:get_methods()) do
+                if method:get_name() == "Clear" and #(method:get_param_types() or {}) == 0 then clear = method; break end
+            end
+            if not clear then error("command dictionary Clear unavailable: " .. name) end
+            command_fields[#command_fields + 1] = { field = field, clear = clear }
+        end
+        for index, method in ipairs(command_type:get_methods()) do
+            local name = method:get_name()
+            if name == "update" or name == "updateKeyAssign" or name == "updateExtraCommand" then
+                local storage_key = "sks_re4r_command_" .. index
+                sdk.hook(method, function(args)
+                    local storage = thread.get_hook_storage()
+                    local stack = storage[storage_key] or {}
+                    storage[storage_key] = stack
+                    local ok, object = pcall(function()
+                        return block_commands() and sdk.to_managed_object(args[2]) or false
+                    end)
+                    stack[#stack + 1] = ok and object or false
+                    if not ok then report(object) end
+                end, function(retval)
+                    local stack = thread.get_hook_storage()[storage_key]
+                    local object = stack and table.remove(stack)
+                    if object then
+                        local ok, err = pcall(function()
+                            if not block_commands() or not object:get_type_definition():is_a(command_type) then return end
+                            for _, entry in ipairs(command_fields) do
+                                local dictionary = entry.field:get_data(object)
+                                if dictionary then entry.clear:call(dictionary) end
+                            end
+                            counters.command_updates = (counters.command_updates or 0) + 1
+                        end)
+                        if not ok then report(err) end
+                    end
+                    return retval
+                end)
+                counters.command_hooks = (counters.command_hooks or 0) + 1
+            end
+        end
+        if not counters.command_hooks then error("RE4R command update hooks unavailable") end
+    end)
+    if not command_ok then report(command_error) end
     re.on_frame(frame)
     re.on_script_reset(function()
         live, waiting_release, wheel = false, false, 0
+        waiting_keys, key_release_frame = false, nil
         restore_cursor()
     end)
 end
@@ -206,7 +287,9 @@ function I.left_down()
 end
 function I.take_wheel() local value = wheel; wheel = 0; return value end
 function I.diagnostics()
-    return { candidate = "RE4R managed mouse clearing r7", live = live == true, hooks = counters.hooks,
+    return { candidate = "RE4R mouse and command clearing", live = live == true, hooks = counters.hooks,
+        command_hooks = counters.command_hooks or 0, command_updates = counters.command_updates or 0,
+        waiting_keys = waiting_keys,
         calls = counters.calls, blocked = counters.blocked, ui_bypass = counters.bypass,
         errors = counters.errors, device_updates = counters.device_updates or 0,
         keyassign_updates = counters.keyassign_updates or 0, layouts = layouts,
@@ -214,6 +297,6 @@ function I.diagnostics()
         waiting_release = waiting_release, other_panel = other_panel() }
 end
 function I.status()
-    return string.format("鼠标拦截 %d 次 / 读取 %d 次 · 错误 %d", counters.blocked, counters.calls, counters.errors)
+    return string.format("鼠标拦截 %d 次 · 命令拦截 %d 次 · 错误 %d", counters.blocked, counters.command_updates or 0, counters.errors)
 end
 return I

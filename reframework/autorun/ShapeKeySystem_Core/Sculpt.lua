@@ -400,7 +400,7 @@ function S.tick(edit_mode, preview, eps)
             if G.mesh_ready(t.mesh) then t.stable = t.stable + 1 else t.stable = 0 end
         elseif not G.mesh_still_ready(t.mesh) then
             return writes, "sculpt mesh no longer ready: " .. t.id
-        elseif t.dirty or edit_mode then
+        elseif t.dirty or edit_mode or W.adapter.rewrite_active_weights then
             local last = t.last
             for _, item in ipairs(t.items) do
                 local w = value_for(item.key, t.id, preview)
@@ -413,7 +413,8 @@ function S.tick(edit_mode, preview, eps)
                         l = W.read_weight(t.mesh, i) or 0
                         last[i] = l
                     end
-                    if abs(w - l) > eps then
+                    local active = W.adapter.rewrite_active_weights and (w ~= 0 or l ~= 0)
+                    if active or abs(w - l) > eps then
                         if W.set_weight(t.mesh, i, w, item.key.name) then
                             last[i] = w
                             writes = writes + 1

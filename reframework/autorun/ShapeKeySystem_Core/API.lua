@@ -21,6 +21,7 @@ local Touch   = require("ShapeKeySystem_Core.Touch")
 local Playback = require("ShapeKeySystem_Core.Playback")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
 local Labels  = require("ShapeKeySystem_Core.Labels")
+local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -138,6 +139,7 @@ local live = {
 }
 SKS.state, SKS.live = state, live
 state.playback = Playback.state
+state.native_signals = NativeSignals.state
 
 -- ---------------------------------------------------------------- internal
 local C = {
@@ -880,6 +882,7 @@ local function do_scan()
     if not C.prog then return end
     local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
                              known = (not Writer.M_CNAME or SKS.adapter.hash_names) and known_names() or nil })
+    if cfg.enabled and SKS.adapter.prepare_parts then SKS.adapter.prepare_parts(res.instances or res.parts) end
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
     -- rescans neither pause writing nor rewrite every channel
     local old = {}
@@ -915,7 +918,8 @@ local function do_scan()
     local parts = {}
     for i, p in ipairs(res.parts) do
         local r = C.part_bindings[p.id]
-        parts[i] = { id = p.id, slot = nil, channels = p.n, fingerprint = p.fingerprint, binding = r and r.hit or nil }
+        parts[i] = { id = p.id, slot = nil, channels = p.n, fingerprint = p.fingerprint, binding = r and r.hit or nil,
+                     weights = p.weights }
     end
     sc.parts = parts
     update_coverage(res.parts)
@@ -1051,7 +1055,7 @@ local function drive(rig, primary)
         end
     end
     local t1 = clock()
-    Playback.apply(rig, P, C.inv_full)
+    Playback.apply(rig, P, C.inv_full, cfg.eyes)
     local s = cfg.expression.smoothing
     local alpha = (s > 0) and (1 - min(s, 1) * 0.9) or 1
     X.compute(prog, rig, P, C.gains, C.forced, cfg.clamp, alpha, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch)
@@ -1202,6 +1206,7 @@ local function tick()
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
     Sculpt.frame = f
     local stable, why, kind = Guard.game_stable(f)
+    NativeSignals.tick(SKS.adapter, stable)
     if SKS.adapter.strict_bounds and #(C.instances or {}) > 0 and
         (not stable or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
         drop_rigs(why or "part signature changed", Guard.SETTLE_FRAMES)
@@ -1341,6 +1346,10 @@ end
 
 -- ---------------------------------------------------------------- commands
 local cmds = {}
+
+function cmds.native_signals(a)
+    return NativeSignals.command(SKS.adapter, a)
+end
 
 local function num(v, lo, hi)
     v = tonumber(v)
@@ -1998,6 +2007,7 @@ end
 -- want_signals: compute live.signal (mapping editor / debug page open)
 function SKS.set_ui_open(open, want_signals)
     open = open and true or false
+    NativeSignals.viewing = open and want_signals == true
     if state.runtime.ui_open ~= open then state.runtime.ui_open = open; bump("runtime") end
     C.want_signals = want_signals and true or false
 end
@@ -2107,6 +2117,7 @@ function SKS.on_preview(open)
 end
 
 function SKS.shutdown()
+    NativeSignals.finish("脚本重置")
     Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
     C.unpublish_api()

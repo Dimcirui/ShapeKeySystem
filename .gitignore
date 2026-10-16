@@ -4,6 +4,9 @@ reframework/data/ShapeKeySystem/user/
 reframework/data/ShapeKeySystem/mods/
 reframework/data/ShapeKeySystem/trail.log
 reframework/data/ShapeKeySystem/hash_probe.txt
+reframework/data/ShapeKeySystem/re4r_input_status.json
+reframework/data/ShapeKeySystem/native_signals_*.json
+reframework/data/ShapeKeySystem/native_snapshot_*.json
 reframework/data/ShapeKeySystem/Runtime/
 
 # third-party runtime (install separately)

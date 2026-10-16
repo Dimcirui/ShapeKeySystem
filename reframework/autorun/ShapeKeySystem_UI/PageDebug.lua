@@ -7,7 +7,7 @@ local Files = require("ShapeKeySystem_UI.PagePresets")   -- binding lookup + con
 local Faces = require("ShapeKeySystem_UI.Faces")
 local Version = require("ShapeKeySystem_Core.Version")
 
-local Page = {}
+local Page = { want_signals = true }
 local C = T.c
 local max, min = math.max, math.min
 
@@ -150,6 +150,10 @@ local function scene_card(ctx, x, y, w)
     for _, p in ipairs(sc.parts or {}) do
         lines[#lines + 1] = string.format("部件 %s · %d 通道 · 指纹 %s%s", p.id, p.channels, tostring(p.fingerprint),
             p.binding and (" · 绑定 " .. p.binding) or "")
+        if p.weights then
+            lines[#lines + 1] = string.format("  权重数量 %s / 通道 %d · 列表长度 %s",
+                tostring(p.weights.count or "不可读"), p.weights.channels, tostring(p.weights.length or "不可读"))
+        end
     end
     local h = 50 + max(1, #lines) * 20
     W.panel_box(x, y, w, h, true)
@@ -159,6 +163,45 @@ local function scene_card(ctx, x, y, w)
     local cy = y + 42
     if #lines == 0 then D.text("还没有扫描结果", x + 12, cy, C.muted, W.small()) end
     for _, l in ipairs(lines) do D.text(l, x + 12, cy, C.text, W.small(), w - 24); cy = cy + 20 end
+    return h
+end
+
+local function native_card(ctx, x, y, w)
+    local ns = ctx.st.native_signals
+    if not ns or not ns.available then return 0 end
+    local rows = ns.rows or {}
+    local shown = min(#rows, 8)
+    local actions = ns.recording and { {"停止并保存", "stop"} }
+        or { {"开始录制", "start"}, {"记录中立位", "baseline"}, {"保存快照", "snapshot"}, {"重试保存", "retry"} }
+    local columns = max(1, math.floor((w - 16) / 108))
+    local h = 188 + shown * 20 + (math.ceil(#actions / columns) - 1) * 32
+    W.panel_box(x, y, w, h, true)
+    local rx, rw, cy = x + 12, w - 24, y + 10
+    W.h2("原生信号诊断与录制", rx, cy); cy = cy + 30
+    W.text_box("native_label", rx, cy, min(260, rw), 26, ctx.state.native_label or "",
+        "录制名称：待机、眨眼、说话等", function(v) ctx.state.native_label = v end)
+    cy = cy + 34
+    local bx = rx
+    for _, action in ipairs(actions) do
+        if bx + 100 > rx + rw then cy = cy + 32; bx = rx end
+        if W.button(action[1], bx, cy, 100, 26, {font = W.small()}) then
+            local ok, _, msg = ctx.call("native_signals", {action = action[2], label = ctx.state.native_label or ""})
+            ctx.state.native_error = not ok and msg or nil
+        end
+        bx = bx + 108
+    end
+    cy = cy + 34
+    D.text(string.format("骨骼 %d · 原生通道 %d · 缺失 %d · %.1f 秒 / %d 帧",
+        ns.joints or 0, ns.taps or 0, ns.missing or 0, ns.elapsed or 0, ns.samples or 0), rx, cy, C.text, W.small(), rw)
+    cy = cy + 22
+    D.text(ctx.state.native_error or ns.status or "", rx, cy, C.muted, W.small(), rw); cy = cy + 22
+    D.text("相对当前中立位：位移 mm / 旋转 °（峰值）", rx, cy, C.muted, W.small(), rw); cy = cy + 22
+    for i = 1, shown do
+        local row = rows[i]
+        D.text(string.format("%s  %.3f / %.2f（%.3f / %.2f）", row.name, row.mm, row.deg, row.peak_mm, row.peak_deg),
+            rx, cy, C.text, W.small(), rw)
+        cy = cy + 20
+    end
     return h
 end
 
@@ -239,6 +282,8 @@ function Page.draw(ctx, x, y, w)
     end
     cy = cy + external_card(ctx, x, cy, w) + 12
     cy = cy + scene_card(ctx, x, cy, w) + 12
+    local nh = native_card(ctx, x, cy, w)
+    if nh > 0 then cy = cy + nh + 12 end
     -- binding lookup chain and the config files (was the 预设 page): for troubleshooting
     local fopen = ctx.state.files_open == true
     local clicked, hh = W.header("绑定与配置文件", x, cy, w, fopen)

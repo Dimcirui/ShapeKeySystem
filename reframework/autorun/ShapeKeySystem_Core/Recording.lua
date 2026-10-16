@@ -106,7 +106,7 @@ end
 
 -- 更新回调逐次推进准备任务；全量校验和附加统计完成前不返回可播放结果。
 -- 每片预算为 1.5 ms 或 4096 工作单位，在检查点让出；文件读取和 JSON 解析由调用方完成。
-function R.prepare(data, track, catalog, game, complete)
+function R.prepare(data, track, catalog, game, complete, decode)
     local job = { stage = "decode", progress = 0 }
     local deadline, remaining
     local function checkpoint(work, frame, count)
@@ -115,7 +115,7 @@ function R.prepare(data, track, catalog, game, complete)
         if remaining <= 0 or os.clock() >= deadline then coroutine.yield() end
     end
     job.thread = coroutine.create(function()
-        local decoded = R.decode(data, track, catalog, game, checkpoint)
+        local decoded = (decode or R.decode)(data, track, catalog, game, checkpoint)
         if complete then
             job.stage, job.progress = "analysis", 0
             return decoded, complete(decoded, checkpoint)

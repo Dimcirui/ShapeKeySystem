@@ -39,18 +39,22 @@ function R.refresh()
         { source = "user", path = "user\\recordings" },
         { source = "user", path = "user\\games\\" .. s.game .. "\\recordings" },
     }
+    for _, dir in ipairs(adapter.recording_dirs or {}) do dirs[#dirs + 1] = dir end
     for _, dir in ipairs(dirs) do
         for _, file in ipairs(U.list_json(dir.path)) do
             local id = dir.source .. ":" .. file.file
             -- 旧用户目录只作读取回退；同名录制以新目录为准，播放 ID 保持不变。
-            if not seen[id] then
+            if not seen[id] and (not dir.pattern or file.file:match(dir.pattern)) then
                 seen[id] = true
                 local data = load_recording(file.path)
-                s.files[#s.files + 1] = { id = id, name = file.base,
-                    path = file.path, source = dir.source,
-                    duration = data and Recording.finite(data.duration, 300) and data.duration or 0,
-                    final = data and (data.final_scale ~= nil or (data.schema == "fcparam.recording/1"
-                        and type(data.frames) == "table" and type(data.frames[1]) == "table" and data.frames[1].final ~= nil)) or false }
+                local description = adapter.describe and adapter.describe(data) or nil
+                if not adapter.describe or description then
+                    s.files[#s.files + 1] = { id = id, name = description and description.name or file.base,
+                        path = file.path, source = dir.source,
+                        duration = data and Recording.finite(data.duration, 300) and data.duration or 0,
+                        final = description and description.final or data and (data.final_scale ~= nil or (data.schema == "fcparam.recording/1"
+                            and type(data.frames) == "table" and type(data.frames[1]) == "table" and data.frames[1].final ~= nil)) or false }
+                end
             end
         end
     end
@@ -125,12 +129,13 @@ local function start(a)
     local data = load_recording(file.path)
     R.stop(true)
     analysis, R.state.analysis = nil, nil
-    preparation = { file = file, job = Recording.prepare(data, a.mode or "raw", catalog, R.state.game,
+    local mode = a.mode or adapter.default_mode or "raw"
+    preparation = { file = file, job = Recording.prepare(data, mode, catalog, R.state.game,
         function(decoded, checkpoint)
             return Analysis.new(decoded, decoded.track == "raw" and adapter.raw_unit or 1, file.name, R.raw_label, checkpoint)
-        end) }
+        end, adapter.decode) }
     local s = R.state
-    s.status, s.elapsed, s.duration, s.file, s.file_id, s.mode = "preparing", 0, 0, file.name, file.id, a.mode or "raw"
+    s.status, s.elapsed, s.duration, s.file, s.file_id, s.mode = "preparing", 0, 0, file.name, file.id, mode
     s.message, s.preparation_progress = "正在准备面部动画…", 0
 end
 
@@ -147,7 +152,7 @@ local function prepare_tick()
     if not done then return end
     local missing = {}
     for _, param in ipairs(R.params and R.params() or {}) do
-        if not decoded.map[param] then missing[#missing + 1] = string.format("%03d", param) end
+        if not decoded.map[param] then missing[#missing + 1] = R.raw_label(param) end
     end
     adapter.connect(decoded)
     local now = adapter.now()
@@ -155,10 +160,10 @@ local function prepare_tick()
     local s = R.state
     s.status, s.elapsed, s.duration, s.mode = task.paused and "paused" or "playing", 0, decoded.duration, decoded.track
     s.preparation_progress, s.analysis = nil, analysis.state
-    s.channels, s.frames, s.missing = decoded.n, #decoded.frames, table.concat(missing, ", ")
+    s.channels, s.frames, s.missing = decoded.signal_count or decoded.n, #decoded.frames, table.concat(missing, ", ")
     update_analysis_bindings()
-    s.message = decoded.track == "raw" and "重播原版输入，SKS 读取游戏求值后的信号"
-        or "直接测试最终信号；眼球角度固定为零，缺失参数置零"
+    s.message = adapter.message and adapter.message(decoded) or (decoded.track == "raw" and "重播原版输入，SKS 读取游戏求值后的信号"
+        or "直接测试最终信号；眼球角度固定为零，缺失参数置零")
     if #missing > 0 then s.message = s.message .. " · 配置未覆盖参数：" .. s.missing end
     s.rev, R.epoch = s.rev + 1, R.epoch + 1
     if R.log then R.log("recording started: %s / %s / %s (%d frames, %d params, %.3fs)",
@@ -180,6 +185,9 @@ function R.request(action, a)
         command = { action = action, speed = a.speed, loop = a.loop }
     elseif action == "play" then
         if a.mode ~= nil and a.mode ~= "raw" and a.mode ~= "final" then return false, "E_BAD_ARGS", "未知播放模式" end
+        if adapter.final_only and (a.mode or adapter.default_mode) ~= "final" then
+            return false, "E_BAD_ARGS", "当前游戏支持录制信号回放，请选择 final 模式"
+        end
         local found
         for _, f in ipairs(R.state.files) do if f.id == a.id then found = f end end
         if not found then return false, "E_NOT_FOUND", "录制不存在" end
@@ -236,12 +244,13 @@ function R.tick(inject)
     Perf.record("playback_tick", clock() - tick_start)
 end
 
--- 仅覆盖匹配会话的角色输入；缺失参数置零，眼球角度不参与最终信号测试。
-function R.apply(rig, P, inv_full)
+-- 仅覆盖匹配会话的角色输入；缺失参数置零，视线由适配器处理，默认归零。
+function R.apply(rig, P, inv_full, eyes)
     if not clip or clip.track ~= "final" or not adapter.matches(rig) then return false end
     for param in pairs(P) do P[param] = nil end
     for param, column in pairs(clip.map) do P[param] = values[column] * adapter.final_unit * inv_full end
-    rig.angles.L[1], rig.angles.L[2], rig.angles.R[1], rig.angles.R[2] = 0, 0, 0, 0
+    if adapter.apply_angles then adapter.apply_angles(rig, values, clip, eyes)
+    else rig.angles.L[1], rig.angles.L[2], rig.angles.R[1], rig.angles.R[2] = 0, 0, 0, 0 end
     return true
 end
 
@@ -256,6 +265,9 @@ function R.init(game, log, params, context)
     local ok, result = pcall(adapter.catalog)
     if not ok then R.state.message = tostring(result); adapter = nil; return end
     catalog = result
+    R.state.mode = adapter.default_mode or "raw"
+    R.state.modes = adapter.modes or { { value = "raw", label = "原版输入重播（raw）" }, { value = "final", label = "最终信号测试（final）" } }
+    R.state.signal_replay = adapter.signal_replay == true
     adapter.attach({ tick = R.tick, inject = R.inject, fail = R.fail })
     R.state.supported = true
     R.refresh()

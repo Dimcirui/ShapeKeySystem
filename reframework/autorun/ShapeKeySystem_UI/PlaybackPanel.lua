@@ -22,7 +22,7 @@ local function draw_analysis(ctx, x, y, w)
         s.playback_analysis, s.playback_analysis_page = a, 1
     end
     local summary = string.format("%s · %s · %s · 已统计 %d 帧", a.file,
-        a.mode == "raw" and "原版输入" or "最终信号", a.finished and "已结束" or "统计中", a.sampled_frames)
+        ctx.st.playback.signal_replay and "录制信号" or a.mode == "raw" and "原版输入" or "最终信号", a.finished and "已结束" or "统计中", a.sampled_frames)
     D.text_mid(summary, x + 8, cy, 24, C.text, W.small(), w - 16)
     W.tooltip(summary, x + 8, cy, w - 16, 24)
     cy = cy + 24
@@ -95,7 +95,7 @@ function P.draw(ctx, x, y, w)
     local open = active or s.playback_open == true
     local clicked, height = W.header("面部动画测试", x, y, w, open,
         active and ((preparing and "准备中" or r.status == "paused" and "暂停" or "播放中") .. " · " .. (r.file or "")
-            .. (r.mode == "final" and " · 最终信号" or " · 原版输入")) or nil)
+            .. (r.signal_replay and " · 录制信号" or r.mode == "final" and " · 最终信号" or " · 原版输入")) or nil)
     if clicked and not active then s.playback_open = not open end
     local cy = y + height + 6
     if not open then return cy - y end
@@ -105,6 +105,13 @@ function P.draw(ctx, x, y, w)
     end
     s.playback_id = s.playback_id or r.file_id
     s.playback_mode = s.playback_mode or r.mode
+    local modes = r.modes or { {value = "raw", label = "原版输入重播（raw）"}, {value = "final", label = "最终信号测试（final）"} }
+    local mode_labels, mode_index = {}, nil
+    for i, mode in ipairs(modes) do
+        mode_labels[i] = mode.label
+        if mode.value == s.playback_mode then mode_index = i end
+    end
+    if not mode_index then mode_index, s.playback_mode = 1, modes[1].value end
     local labels, pick = {}, nil
     for i, file in ipairs(r.files) do
         labels[i] = file.name .. (file.source == "user" and " · 用户" or " · 内置")
@@ -118,10 +125,10 @@ function P.draw(ctx, x, y, w)
     cy = cy + 34
     local file = pick and r.files[pick]
     changed, index = W.select("recording_mode", x + 8, cy, math.min(220, w - 16), 28,
-        { "原版输入重播（raw）", "最终信号测试（final）" }, s.playback_mode == "final" and 2 or 1)
-    if changed then s.playback_mode = index == 2 and "final" or "raw" end
+        mode_labels, mode_index)
+    if changed then s.playback_mode = modes[index].value end
     local mode = s.playback_mode or "raw"
-    local hint = file and string.format("%.2f 秒 · %s", file.duration or 0, file.final and "含最终信号" or "仅原版输入") or "请添加录制后刷新"
+    local hint = file and string.format("%.2f 秒 · %s", file.duration or 0, r.signal_replay and "录制表情信号" or file.final and "含最终信号" or "仅原版输入") or "请添加录制后刷新"
     if w >= 480 then D.text_mid(hint, x + 240, cy, 28, C.muted, W.small(), w - 248)
     else cy = cy + 32; D.text_mid(hint, x + 8, cy, 24, C.muted, W.small(), w - 16) end
     cy = cy + 34
