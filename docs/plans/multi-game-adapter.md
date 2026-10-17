@@ -397,3 +397,9 @@ RE4R（游戏没装，现成的参考实现是 [RE4R-ShapeKey-System](https://gi
 旧内置 `games/<id>/` 不再读取，部署只清理荒野的参数表、`Speak.json`、`CampMeals.json`，保留其他文件。
 目前的录制格式为 `fcparam.recording/1`、`fcparam.recording/2`；新游戏使用其他格式时需增加对应解码支持。
 分析绑定使用字典的 `key`，显示名称使用 `A.raw.label`，Core 和 UI 不构造游戏专属骨骼名称。
+
+## 可选的多角色接口
+
+RE4R 提供 `additional_faces()` 和 `instances_ready(cutscene_drive)`，由 Core 的 ActorInstances 独立扫描和驱动额外角色。`parts(root, face)` 可显式指定所属头部；Scene 的 `faces`、`include_empty` 扫描参数与 `build_target` 支持按角色编译目标。
+
+`scoped_bindings = true` 启用用户来源优先与模型指纹匹配选择。绑定可设置 `eyes.neutral.L/R.yaw/pitch`，每个实例独立使用。未提供这些能力的适配器沿用原有流程。

@@ -670,3 +670,9 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 `state.procedural`：`enabled`、`mode`、`frequency`、`speed`、`blink`、`gaze`、`breath`（同上），`modes`（顺序）、`mode_names`（界面文字），
 `lacking`（`blink.L`、`blink.R`、`jawOpen` 是否按「缺失」处理；`gaze` 按主角色有没有眼球关节或适配器的声明，每次扫描后更新）。
 「表情详情」页的「自动表情」区提供总开关、合成方式，眨眼的开关、频率和速度，视线微动的开关和幅度，微微张嘴的开关和幅度，每行右侧是当前值。
+
+## 额外角色诊断
+
+`state.scene.additional` 提供 `rev`、`instances`、`errors` 与释放时的 `reason`。实例行包含角色标识、显示名、Profile、绑定、通道数、就绪状态、眼睛参数、增益及提示，不暴露引擎对象。
+
+当前面板与外部 API 编辑主角色；额外角色按自己的模型绑定驱动。RE4R 绑定可用 `eyes.neutral.L/R.yaw/pitch` 保存对应角色的眼睛中立位。
