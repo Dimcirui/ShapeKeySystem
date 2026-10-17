@@ -111,6 +111,16 @@ function P.validate_binding(d)
                 end
             end
         end
+        if e.neutral ~= nil then
+            if type(e.neutral) ~= "table" then return false, "eyes.neutral must be an object" end
+            for side, pose in pairs(e.neutral) do
+                if (side ~= "L" and side ~= "R") or type(pose) ~= "table" then return false, "invalid eye neutral side" end
+                for axis, value in pairs(pose) do
+                    if (axis ~= "yaw" and axis ~= "pitch") or type(value) ~= "number"
+                        or value ~= value or math.abs(value) == math.huge then return false, "invalid eye neutral angle" end
+                end
+            end
+        end
     end
     return true
 end
@@ -136,7 +146,7 @@ end
 -- level: "global" / "own" / "model" / "default".
 -- only_source = "mods": the chain a mod alone defines (the defaults for reset / A-B preview).
 -- fingerprint: the worn mesh's channel fingerprint for this part (stale check), may be nil.
-function P.resolve_binding(part, only_source, fingerprint)
+function P.resolve_binding(part, only_source, fingerprint, siblings)
     local rep = P.representative_of(part)
     local steps = {}
     if rep then steps[#steps + 1] = { base = rep, level = "global", need_global = true } end
@@ -146,8 +156,32 @@ function P.resolve_binding(part, only_source, fingerprint)
     local res = { part = part, chain = {} }
     local listed, reads = {}, {}
     local sources = only_source and { only_source } or { "user", "mods" }
-    for _, step in ipairs(steps) do
+    local checks = {}
+    if P.adapter.scoped_bindings then
         for _, source in ipairs(sources) do
+            for _, step in ipairs(steps) do checks[#checks+1] = {step, source} end
+        end
+    else
+        for _, step in ipairs(steps) do
+            for _, source in ipairs(sources) do checks[#checks+1] = {step, source} end
+        end
+    end
+    local own = P.adapter.scoped_bindings and fingerprint and live_json((binding_file("mods", part)))
+    local own_matches = own and P.validate_binding(own) and own.fingerprints and own.fingerprints[part] == fingerprint
+    if P.adapter.scoped_bindings and not own_matches then
+        local model = P.model_of(part)
+        for _, sibling in ipairs(siblings or {}) do
+            if P.model_of(sibling.id) == model then
+                local d = live_json((binding_file("mods", sibling.id)))
+                if d and P.validate_binding(d) and d.fingerprints and d.fingerprints[sibling.id] == sibling.fingerprint then
+                    own_matches = true
+                    break
+                end
+            end
+        end
+    end
+    for _, check in ipairs(checks) do
+            local step, source = check[1], check[2]
             local path, shown = binding_file(source, step.base)
             -- 代表部件可能同时出现在 global、own 和 model 步骤；只在本次解析复用读取。
             local data = reads[path]
@@ -164,6 +198,14 @@ function P.resolve_binding(part, only_source, fingerprint)
                 if ok and source == "mods" and fingerprint and fps and fps[part] and fps[part] ~= fingerprint then
                     ok, msg = false, "通道指纹不符（可能是被覆盖的旧 mod 留下的），已跳过"
                 end
+                if ok and source == "mods" and step.need_global and P.adapter.scoped_bindings
+                    and fingerprint and (not fps or fps[part] == nil) then
+                    if own_matches then
+                        ok, msg = false, "MOD 全局绑定未匹配当前部件指纹，使用部件绑定"
+                    else
+                        entry.warning = "MOD 全局绑定缺少当前部件指纹"
+                    end
+                end
                 if ok then
                     entry.hit = true
                     res.hit, res.source, res.data, res.base, res.level = shown, source, data, step.base, step.level
@@ -173,7 +215,6 @@ function P.resolve_binding(part, only_source, fingerprint)
                 end
             end
             if entry then res.chain[#res.chain + 1] = entry; listed[shown] = true end
-        end
     end
     return res
 end
