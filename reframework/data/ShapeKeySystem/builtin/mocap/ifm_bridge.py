@@ -8,6 +8,9 @@ with scanning on, each read in the game costs ~5 ms.
     python ifm_bridge.py <iPhone IP>        # sends the start trigger to the phone
     python ifm_bridge.py                    # listen only (phone already streaming to this PC)
 
+Once packets arrive, the trigger follows the address they come from, so the stream restarts on
+its own after the phone stops sending (app in the background, screen locked, Wi-Fi drop).
+
 Standard library only.
 """
 
@@ -134,8 +137,12 @@ def main():
         if pkt:
             head, le, re_, hits = parse(pkt.decode("utf-8", "replace"), w)
             if hits:
-                if last_rx == 0.0:
+                if last_rx == 0.0 or now - last_rx > 2.0:
                     print(f"receiving from {addr[0]} ({hits} shapes per packet)")
+                if phone != addr[0]:
+                    if phone:
+                        print(f"the phone is {addr[0]}, not {phone}: triggering {addr[0]} from now on")
+                    phone = addr[0]
                 last_rx = now
                 seq += 1
                 rx_count += 1
@@ -150,7 +157,8 @@ def main():
             pending = None
         if now - rx_window >= 5.0:
             hz = rx_count / (now - rx_window)
-            state = f"{hz:5.1f} packets/s, {writes / (now - rx_window):5.1f} writes/s, {fails} busy" if rx_count else "no data"
+            idle = f"no data, re-triggering {phone} every 2 s (keep iFacialMocap open)" if phone else "no data"
+            state = f"{hz:5.1f} packets/s, {writes / (now - rx_window):5.1f} writes/s, {fails} busy" if rx_count else idle
             print(f"[{time.strftime('%H:%M:%S')}] {state}")
             rx_count, rx_window, writes, fails = 0, now, 0, 0
 
