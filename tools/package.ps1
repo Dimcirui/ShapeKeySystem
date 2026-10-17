@@ -101,7 +101,7 @@ try {
     $info = [ordered]@{
         name = "ShapeKeySystem"
         version = $version
-        author = "谛听 Dimcirui, MonkeySama"
+        author = "谛听 Dimcirui, MonkeySama, funnyguyz"
         description = "用游戏表情驱动猎人脸上的形态键（ARKit / Shinano / MMD 等），支持实时捏脸、条件规则和脸部互动。需要 REFramework。"
     }
     if ($hasShot) { $info.screenshot = "screenshot.jpg" }
