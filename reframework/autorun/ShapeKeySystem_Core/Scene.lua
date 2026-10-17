@@ -84,9 +84,9 @@ end
 
 -- Part meshes under one parent: every child the adapter calls a part, with blendshape channels.
 -- Returns parts = { {id, mesh, names, n} } (names = every channel name, read once per scan).
-local function read_parts(parent, known)
+local function read_parts(parent, known, face)
     local parts = {}
-    local candidates = S.adapter.parts and S.adapter.parts(parent)
+    local candidates = S.adapter.parts and S.adapter.parts(parent, face)
     local child
     if candidates then child = candidates[1] else child = parent and parent:call("get_Child") end
     local ci = 1
@@ -145,7 +145,7 @@ function S.scan(opts)
     local t0 = clock()
     local root = S.primary_root()
     local sig = S.children_signature(root)
-    local faces = find_faces(root, opts.scene_search)
+    local faces = opts.faces or find_faces(root, opts.scene_search)
     -- one face per parent: a cutscene actor can carry several transforms with driver joints
     -- (all of them would drive the same part meshes); the higher face_rank wins
     local by_parent, order = {}, {}
@@ -173,7 +173,7 @@ function S.scan(opts)
         if psig and S.no_targets[parent] == psig then
             skipped = skipped + 1
         else
-            parts = read_parts(parent, opts.known)
+            parts = read_parts(parent, opts.known, face)
             if #parts == 0 and psig then S.no_targets[parent] = psig end
         end
         if #parts > 0 then seen_parents[#seen_parents + 1] = string.format("%s(%d)", S.go_name(parent), #parts) end
@@ -187,7 +187,7 @@ function S.scan(opts)
             local t = build_target(part, opts.index, opts.min_hits or 3, mesh_name_of)
             if t then targets[#targets + 1] = t end
         end
-        if #targets > 0 then
+        if #targets > 0 or opts.include_empty and #parts > 0 then
             -- params / dict_params / use_eyes are filled in by the caller (the adapter's bind), which knows
             -- which channels the targets actually use
             rigs[#rigs + 1] = {
@@ -195,7 +195,7 @@ function S.scan(opts)
                 parent = parent, psig = psig or sig,
                 params = {}, dict_params = {}, use_eyes = false,
                 eyes = S.adapter.eye_joints(face),
-                targets = targets, angles = { L = { 0, 0 }, R = { 0, 0 } },
+                parts = parts, targets = targets, angles = { L = { 0, 0 }, R = { 0, 0 } },
                 W = {}, V = {},
             }
         end
@@ -212,5 +212,7 @@ function S.scan(opts)
     return { rigs = rigs, parts = part_list, instances = instances, parents = seen_parents, faces = #faces, skipped = skipped,
              sig = sig, mesh_name_of = mesh_name_of, ms = (clock() - t0) * 1000 }
 end
+
+S.build_target = build_target
 
 return S

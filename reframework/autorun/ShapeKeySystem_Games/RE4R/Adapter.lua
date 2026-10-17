@@ -7,7 +7,7 @@ local Conditions = require("ShapeKeySystem_Games.RE4R.Conditions")
 local Playback = require("ShapeKeySystem_Games.RE4R.Playback")
 local Cutscene = require("ShapeKeySystem_Games.RE4R.Cutscene")
 local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
-    rewrite_active_weights = true, scene_search = false,
+    rewrite_active_weights = true, scene_search = false, scoped_bindings = true,
     conditions = Conditions,
     playback = Playback,
     input = require("ShapeKeySystem_Games.RE4R.Input"),
@@ -51,7 +51,8 @@ function A.primary_root()
     return transform(call(ctx, "get_BodyGameObject") or call(ctx, "get_GameObject"))
 end
 function A.is_face(tr)
-    return actor_of_path(path(tr)) ~= nil
+    local p = path(tr)
+    return actor_of_path(p) ~= nil and p:match("/cha%d%d%d_1[01]%.mesh") ~= nil
         and call(tr, "getJointByName(System.String)", "C_Chin") ~= nil
 end
 function A.primary_ready()
@@ -59,10 +60,62 @@ function A.primary_ready()
     return A.primary_root() ~= nil and h ~= nil and A.is_face(h)
 end
 function A.faces() local h = head(); return h and {h} or {} end
-function A.face_root(_, root) return root end
-function A.face_rank() return 1 end
+function A.instance_root(face)
+    local actor, node = actor_of_path(path(face)), face
+    for _ = 1, 6 do
+        local parent = call(node, "get_Parent")
+        if not parent then break end
+        local body, foreign, child = false, false, call(parent, "get_Child")
+        local seen = {}
+        while child and not seen[child] do
+            seen[child] = true
+            local p, who = path(child), actor_of_path(path(child))
+            if who and who ~= actor then foreign = true end
+            if who == actor and p:match("/cha%d%d%d_00%.mesh") then body = true end
+            child = call(child, "get_Next")
+        end
+        if foreign then break end
+        if body then return parent end
+        node = parent
+    end
+    return face
+end
+
+function A.face_root(face, root)
+    return face == head() and root or A.instance_root(face)
+end
+
+function A.additional_faces()
+    local result, seen = {}, {}
+    local player = head()
+    local owned = {}
+    local root = A.primary_root()
+    if root then
+        for _, part in ipairs(A.parts(root)) do owned[part:get_address()] = true end
+    end
+    local scene = sdk.call_native_func(sdk.get_native_singleton("via.SceneManager"),
+        sdk.find_type_definition("via.SceneManager"), "get_CurrentScene")
+    local components = scene and scene:call("findComponents(System.Type)", sdk.typeof("via.motion.Motion"))
+    if not components then return result end
+    for i = 0, components:call("get_Length") - 1 do
+        local component = components:call("GetValue(System.Int32)", i)
+        local tr = transform(call(component, "get_GameObject"))
+        if tr and tr ~= player and not owned[tr:get_address()] and not seen[tr] and A.is_face(tr) then
+            seen[tr] = true
+            result[#result + 1] = tr
+        end
+    end
+    return result
+end
+
+function A.instances_ready(cutscene_drive)
+    local playing = Cutscene.playing()
+    if playing and cutscene_drive == false then return false end
+    return A.primary_ready() or playing == true
+end
+function A.face_rank(face) return path(face):match("_10%.mesh") and 2 or 1 end
 function A.is_part() return false end
-function A.parts(root)
+function A.parts(root, face)
     local out, seen = {}, {}
     local function visit(tr, depth)
         if not tr or depth > 6 or #out >= 64 or seen[tr] then return end
@@ -75,7 +128,7 @@ function A.parts(root)
             visit(c, depth + 1); c = call(c, "get_Next")
         end
     end
-    visit(head(), 0); visit(root, 0)
+    visit(face or (root == A.primary_root() and head() or nil), 0); visit(root, 0)
     return out
 end
 function A.part_id(tr)
@@ -121,10 +174,8 @@ end
 -- Core passes only current targets after checking the player's signature and readiness.
 function A.prepare_mesh(m) call(m, "set_LodLevel", 0) end
 
--- Called during a stable LateUpdate scan. Ada's custom head uses the same buffer preparation
--- as extra meshes; Leon keeps its engine-owned head count.
+-- Prepare custom channels only after the engine has allocated their complete weight list.
 function A.prepare_parts(parts)
-    local hm = mesh(head())
     for _, part in ipairs(parts) do
         local m, n = part.mesh, part.n
         local wc = call(m, "get_BlendShapeChannelWeightCount")
@@ -133,9 +184,7 @@ function A.prepare_parts(parts)
         for i, name in ipairs(part.names) do
             if Signals.writable(name, m, i - 1) then custom = true; break end
         end
-        local same_head = hm and call(hm, "get_GameObject") == call(m, "get_GameObject")
-        local ada_head = same_head and actor_of_path(path(head())) == "ada"
-        if (not same_head or ada_head) and custom and type(wc) == "number" and wc >= 0 and wc < n
+        if custom and type(wc) == "number" and wc >= 0 and wc < n
             and type(length) == "number" and length >= n and call(m, "get_BlendShapeChannelNum") == n
             and call(m, "get_MeshReady") == true and call(m, "get_BlendShapeReleasedBuffers") ~= true then
             call(m, "set_BlendShapeChannelWeightCount", n)
@@ -169,11 +218,18 @@ function A.probe(output)
     return lines
 end
 
-function A.init()
+function A.init(events)
     if not sdk.find_type_definition("chainsaw.CharacterManager") then return false, "找不到 chainsaw.CharacterManager" end
     T_MESH = sdk.typeof("via.render.Mesh")
     local ready, why = Cutscene.init()
     if not ready then return false, why end
+    if events and events.rebuilt then
+        local work = sdk.find_type_definition("chainsaw.TimelineEventWork")
+        for _, name in ipairs({"play", "skip", "unload", "changeEventPhase"}) do
+            local method = work and work:get_method(name)
+            if method then sdk.hook(method, function() events.rebuilt() end, nil) end
+        end
+    end
     Conditions.init()
     Playback.configure(function()
         if not A.primary_ready() then return end
