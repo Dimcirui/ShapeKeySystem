@@ -141,7 +141,7 @@ SETUP = true
 DEMO = { busy = false, load = false }
 DEMO.get_IsBusy = function(self) return self.busy end
 DEMO.get_IsBusyLoad = function(self) return self.load end
-re = { on_application_entry = function(name, f) if name == "LateUpdateBehavior" then CB.tick = f end end, on_draw_ui = function(f) CB.ui = f end,
+re = { on_application_entry = function(name, f) if name == "LateUpdateBehavior" then CB.tick = f elseif name == "UpdateMotion" then CB.motion = f end end, on_draw_ui = function(f) CB.ui = f end,
        on_frame = function(f) CB.frame = f end, on_script_reset = function(f) CB.reset = f end }
 TEXTS = {}
 imgui = {

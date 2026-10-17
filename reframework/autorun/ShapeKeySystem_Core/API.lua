@@ -23,6 +23,7 @@ local NameHash = require("ShapeKeySystem_Core.NameHash")
 local Labels  = require("ShapeKeySystem_Core.Labels")
 local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
 local Proc    = require("ShapeKeySystem_Core.Procedural")
+local Mocap   = require("ShapeKeySystem_Core.Mocap")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -145,6 +146,7 @@ local live = {
 SKS.state, SKS.live = state, live
 state.playback = Playback.state
 state.native_signals = NativeSignals.state
+state.mocap = Mocap.view
 
 -- ---------------------------------------------------------------- internal
 local C = {
@@ -224,6 +226,8 @@ local function drop_rigs(reason, rescan_after)
     Sculpt.clear_targets()
     Cnd.reset()
     Scene.no_targets = {}
+    Mocap.drop_refs()
+    C.driven_frame = nil
     Guard.release_refs()
     if rescan_after then
         C.scan_at = { C.frame + rescan_after }
@@ -1251,11 +1255,39 @@ local function cutscene_gate(f)
     return true
 end
 
+-- a mocap channel reaches the hunter: its expression slot drives a mesh key on the primary rig,
+-- or a sculpt key carries its name (External.for_key matches those by normalised name)
+local function mocap_reaches(name, slot)
+    local r = C.rigs[1]
+    if slot and r then
+        for _, t in ipairs(r.targets) do
+            for k = 1, t.count do if t.slots[k] == slot then return true end end
+        end
+    end
+    local n = Ext.norm(name)
+    for _, k in ipairs(Sculpt.K.keys) do
+        if k.owner ~= "expression" and Ext.norm(k.name) == n then return true end
+    end
+    return false
+end
+C.mocap_ctx = { resolve = function(name) return C.resolve_slot(name) end, reaches = mocap_reaches,
+                expr = live.weight }
+
 local function tick()
     Playback.tick(false)
     C.frame = C.frame + 1
     local f = C.frame
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
+    local now = clock()
+    local dt = min(now - (C.last_tick or now), 0.1)
+    C.last_tick = now
+    local ext_rev = Ext.rev
+    local mc = C.mocap_ctx
+    mc.prog, mc.gen = C.prog, state.scene.rev
+    if Mocap.tick(dt, mc) then
+        Sculpt.mark_dirty()
+        if Ext.rev ~= ext_rev then C.build_external_state() end
+    end
     Sculpt.frame = f
     local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
     NativeSignals.tick(SKS.adapter, stable)
@@ -1368,6 +1400,10 @@ local function tick()
     lp.mouth = Proc.out.jawOpen or 0
     lp.gaze[1], lp.gaze[2] = Proc.gaze[1], Proc.gaze[2]
     if cfg.enabled and C.prog then
+        -- the head turn after the next UpdateMotion may touch the master player only if this
+        -- tick drove it (drop_rigs clears the mark)
+        local r1 = C.rigs[1]
+        C.driven_frame = (r1 and r1.primary) and f or nil
         for i, rig in ipairs(C.rigs) do
             local ok, err = pcall(drive, rig, i == 1)
             if not ok or err then
@@ -1389,6 +1425,12 @@ local function tick()
         prof.write = prof.write + (clock() - t0)
     end
     if C.save_at and f >= C.save_at then save_now() end
+end
+
+-- re.on_application_entry("UpdateMotion"): mocap head turn on the master player
+function SKS.update_motion()
+    if not (C.driven_frame and C.driven_frame == C.frame and Mocap.wants_head()) then return end
+    Mocap.update_motion(Scene.primary_root(), Writer.M_JBN)
 end
 
 -- 计时覆盖提前返回和延迟保存；游戏动画回调与面板绘制另行计量。
@@ -1577,6 +1619,26 @@ function cmds.set_eye_cfg(a)
 end
 
 -- patch = { enabled, mode, frequency, speed, blink = { interval_min, ... } }; unknown keys are ignored
+-- face mocap (Mocap.lua): settings patch; user/mocap.json is written shortly after, unless only
+-- the test pose moved
+function cmds.mocap(a)
+    local ok, err, msg = Mocap.patch(a.patch)
+    if not ok then return ok, err, msg end
+    local p = a.patch
+    if next(p) ~= "test" or next(p, "test") ~= nil then Mocap.save_soon() end
+    return true
+end
+
+-- what = "face" (neutral face from the current frame) / "head" (straight-ahead head) / "clear"
+function cmds.mocap_calibrate(a)
+    if a.what == "face" then Mocap.calibrate_face()
+    elseif a.what == "head" then Mocap.calibrate_head()
+    elseif a.what == "clear" then Mocap.cfg.neutral = {}
+    else return false, "E_BAD_ARGS", "what: face / head / clear" end
+    if not Mocap.save() then return false, "E_IO", "mocap.json save failed" end
+    return true
+end
+
 function cmds.set_procedural(a)
     local p = a.patch
     if type(p) ~= "table" then return false, "E_BAD_ARGS", "patch must be a table" end
@@ -2138,6 +2200,7 @@ function SKS.init(adapter)
     Proc.configure(cfg.procedural)
     Names.load_aliases()
     Labels.load()
+    Mocap.load()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
     for _, s in ipairs(sig.list) do
@@ -2233,6 +2296,7 @@ function SKS.shutdown()
         zero_sculpt()
     end
     if C.save_at then save_now() end
+    Mocap.flush()
 end
 
 -- Optional pre-animation/render preparation uses the current scan only; it keeps no second

@@ -39,6 +39,12 @@ if Game.prepare_mesh and re.on_pre_application_entry then
     end
 end
 
+-- after the animation has posed the joints (same slot as Lua Bone System): mocap head turn
+re.on_application_entry("UpdateMotion", function()
+    local ok, err = pcall(SKS.update_motion)
+    if not ok then SKS.state.mocap.head_status = "头部错误：" .. tostring(err) end
+end)
+
 re.on_application_entry("LateUpdateBehavior", function()
     local ok, err = pcall(SKS.tick)
     if not ok then SKS.state.debug.status = "tick error: " .. tostring(err) end

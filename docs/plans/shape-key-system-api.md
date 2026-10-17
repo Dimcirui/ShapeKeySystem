@@ -311,6 +311,8 @@ reframework/data/ShapeKeySystem/
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
   user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
             recordings/*.json                             （用户面部动画录制）
+            mocap.json                                    （面捕设置，见「面捕」一节）
+  mocap/    live.json                                     （ifm_bridge.py 写入的最新一帧；builtin/mocap/ 放这个脚本）
 ```
 
 `names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有可用的 `getBlendShapeChannelName` 时用到（鬼武者、崛起；`tools/mesh_names.py` 能从 mod 的 `.mesh` 生成）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键、显示名表里的名字，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。名字表按 `user/names` → `mods/names` → `builtin/names` 的顺序读，同一个哈希先到先得。`builtin/names/` 随插件发布、每个游戏都一样：`vrc.json`、`mmd.json` 是 VRChat / MMD 模型调查里的全部形态键名（`tests/vrc_faces.json`、`tests/mmd_names.json` 的并集），用常见命名的 mod 不用自带名字表。哈希数组的读法由适配器的 `hash_item_only` 决定：为 true 时只读 `get_Item`（有的游戏装箱的元素读出来是错数），否则先读 `get_elements()`、读不到再用 `get_Item`；RE4R 的原生通道查找用同一个读取函数。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
@@ -670,3 +672,25 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 `state.procedural`：`enabled`、`mode`、`frequency`、`speed`、`blink`、`gaze`、`breath`（同上），`modes`（顺序）、`mode_names`（界面文字），
 `lacking`（`blink.L`、`blink.R`、`jawOpen` 是否按「缺失」处理；`gaze` 按主角色有没有眼球关节或适配器的声明，每次扫描后更新）。
 「表情详情」页的「自动表情」区提供总开关、合成方式，眨眼的开关、频率和速度，视线微动的开关和幅度，微微张嘴的开关和幅度，每行右侧是当前值。
+
+## 面捕（iFacialMocap）
+
+进阶「面捕」页。手机上的 iFacialMocap 把 ARKit 52 个通道和头部角度用 UDP 发到电脑；REFramework 的 Lua 不能开 socket，所以由 `builtin/mocap/ifm_bridge.py`（只用标准库）接收，每收到一包就把最新一帧整体替换写入 `mocap/live.json`，SKS 每帧读一次（`Mocap.lua`）。
+
+```
+python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py <手机 IP>   # 向手机发开始信号
+python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py             # 只监听（手机已在发）
+```
+
+`live.json`：`{"seq": n, "w": [52 个 0..1，顺序同 Names.ARKIT52], "head": [6 个数] | null, "le": [...], "re": [...]}`。`seq` 不变就当没有新数据；SKS 启动后看到的第一份文件不算数（可能是上次留下的）。Windows Defender 实时扫描开着时每次读取约 5 毫秒，需要把 `mocap/` 加入排除项。
+
+写入：52 个通道作为外部值（`External.lua`，所有者 `mocap`）每帧续租，和其他插件一样覆盖表情和捏脸、走同一套写入保护（预热、过场、换装重建）。每个通道 = 手机值 × 淡入系数 + 纯表情值 ×（1 − 淡入系数），所以数据开始或中断时脸在 `fade_sec` 秒内平滑交接；系数回到 0 时放掉全部外部值。通道名先按当前表情配置的槽位解析，解析不到的再按名字匹配捏脸键；部件上没有 ARKit 键（或别名）的脸收不到。
+
+头部转动：`UpdateMotion` 之后，把转角按 Neck_0 25%、Neck_1 25%、Head 50% 分到荒野猎人的骨骼上（角色空间：yaw 绕上、pitch 绕侧、roll 绕前，叠加在动画之上）。只在上一帧驱动了主角色时才碰骨骼；SKS 放掉角色（换装、过场跳过或结束、菜单）时同时放掉骨骼引用，下次再重新取。
+
+| 命令 | 参数 | 作用 | 持久化 |
+|---|---|---|---|
+| `mocap` | `{patch}` | 修改面捕设置：`enabled`、`mirror`、`gain`（0–3）、`smoothing`（0–1）、`fade_sec`（0–2）、`timeout`（0.1–5 秒，多久没新数据算中断）、`channel_gains = {ARKit 名 = 0–3 或 false}`（1 和 false 都表示不单独调）、`head = {enabled, gain 0–2, max_deg 5–90, smoothing 0–1, invert = {pitch/yaw/roll = bool}, order = {pitch/yaw/roll = 1–3}}`、`test = {on, pitch, yaw, roll}`（−60–60°，不用手机的测试姿势，不保存）。数值截到范围内；类型不对、未知通道、`order` 不在 1–3 时返回 `E_BAD_ARGS`，什么都不改 | `user/mocap.json`（约 0.5 秒后写） |
+| `mocap_calibrate` | `{what}` | `face`：把手机当前各通道值记为放松时的基准（之后按 `(v − 基准) / (1 − 基准)` 换算）；`head`：把当前头部角度记为正前方；`clear`：清除面部基准 | `user/mocap.json` |
+
+`state.mocap`：`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
