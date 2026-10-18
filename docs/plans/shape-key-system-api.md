@@ -320,7 +320,7 @@ reframework/data/ShapeKeySystem/
   user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
             recordings/*.json                             （用户面部动画录制）
             mocap.json                                    （面捕设置，见「面捕」一节）
-  mocap/    live.json                                     （ifm_bridge.py 写入的最新一帧；builtin/mocap/ 放这个脚本）
+  mocap/    live.json                                     （没有 ShapeKeySystem_Mocap.dll 时由桥接脚本写入的最新一帧；脚本在 builtin/mocap/）
 ```
 
 `names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有可用的 `getBlendShapeChannelName` 时用到（鬼武者、崛起；`tools/mesh_names.py` 能从 mod 的 `.mesh` 生成）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键、显示名表里的名字，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。名字表按 `user/names` → `mods/names` → `builtin/names` 的顺序读，同一个哈希先到先得。`builtin/names/` 随插件发布、每个游戏都一样：`vrc.json`、`mmd.json` 是 VRChat / MMD 模型调查里的全部形态键名（`tests/vrc_faces.json`、`tests/mmd_names.json` 的并集），用常见命名的 mod 不用自带名字表。哈希数组的读法由适配器的 `hash_item_only` 决定：为 true 时只读 `get_Item`（有的游戏装箱的元素读出来是错数），否则先读 `get_elements()`、读不到再用 `get_Item`；RE4R 的原生通道查找用同一个读取函数。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
@@ -698,16 +698,35 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 `lacking`（`blink.L`、`blink.R`、`jawOpen` 是否按「缺失」处理；`gaze` 按主角色有没有眼球关节或适配器的声明，每次扫描后更新）。
 「表情详情」页的「自动表情」区提供总开关、合成方式，眨眼的开关、频率和速度，视线微动的开关和幅度，微微张嘴的开关和幅度，每行右侧是当前值。
 
-## 面捕（iFacialMocap）
+## 面捕
 
-进阶「面捕」页。手机上的 iFacialMocap 把 ARKit 52 个通道和头部角度用 UDP 发到电脑；REFramework 的 Lua 不能开 socket，所以由 `builtin/mocap/ifm_bridge.py`（只用标准库）接收，每收到一包就把最新一帧整体替换写入 `mocap/live.json`，SKS 每帧读一次（`Mocap.lua`）。
+进阶「面捕」页。顶部「面捕总配置」放各方案共用的设置（开关、镜像、强度、平滑、淡入淡出、面部校准），其中「面捕方案」下拉选输入来源，所选方案独有的内容放在它下面的「基础配置」框里。方案列在 `Mocap.SCHEMES`：iFacialMocap、RhyLive 和 VMC（通用）。
+
+**游戏内接收（默认）**：原生插件 `reframework/plugins/ShapeKeySystem_Mocap.dll`（源码 `native/sks_mocap/`，`native/build.ps1` 用 MinGW gcc 编译，`-Test` 跑离线测试）在游戏里直接收 UDP，Lua 通过全局表 `sks_mocap_native` 调用：`start(scheme, port?, phone_ip?)`（scheme：`ifacialmocap` 49983 / `rhylive` 9000 / `vmc` 39539）、`stop()`、`poll(t?)`（每帧一次，非阻塞取完积压的包，返回 `running, scheme, port, seq, age_ms, packets, rejected, error, sender, w[52], head[6]|nil`）、`local_ips()`（本机局域网 IPv4，去掉回环和 169.254）。「基础配置」框列出本机 IP 和端口，玩家在手机 App 里把发送目标设成它（iFacialMocap 的 Destination IP address），手机就会主动发送。iFacialMocap 另有开始信号：断流时每 2 秒向最后的发送方（或设置里的 `phone_ip`，面板上不显示）补发，让手机恢复发送。插件自带 Lua 5.4.3，在 REFramework 自己的 Lua 环境上工作，只在 REFramework 也是 5.4.3 时安全：加载时在 REFramework 模块里找 `$LuaVersion: Lua 5.4.3`，找不到就不注册全局表，面捕退回桥接脚本。开启面捕后 `Mocap.lua` 按方案、端口（`cfg.port`，0 = 默认）和手机 IP 启动接收，任何一项改了就重新启动；关闭面捕时停止。
+
+**桥接脚本（没有插件时）**：REFramework 的 Lua 不能开 socket，所以每个方案由 `builtin/mocap/` 下一个只用标准库的 Python 桥接脚本接收手机的 UDP 数据，每收到一包就把最新一帧整体替换写入 `mocap/live.json`（先写 `.tmp` 再 `os.replace`，游戏正占用文件时跳过这一包）。两个桥接写同一种格式，SKS 每帧读一次（`Mocap.lua`），读取路径与方案无关；同一时间只运行一个桥接。
+
+**iFacialMocap**：手机把 ARKit 52 个通道和头部角度以文本协议发到 UDP 49983，需要电脑先发开始信号。
 
 ```
 python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py <手机 IP>   # 向手机发开始信号
 python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py             # 只监听（手机已在发）
 ```
 
-`live.json`：`{"seq": n, "w": [52 个 0..1，顺序同 Names.ARKIT52], "head": [6 个数] | null, "le": [...], "re": [...]}`。`seq` 不变就当没有新数据；SKS 启动后看到的第一份文件不算数（可能是上次留下的）。Windows Defender 实时扫描开着时每次读取约 5 毫秒，需要把 `mocap/` 加入排除项。
+**RhyLive**：手机主动把 OSC 推到电脑，不需要开始信号。在 RhyLive 里把发送目标设成电脑的局域网 IPv4 和端口（默认 9000）；桥接启动时打印本机 IP 和端口，之后每 5 秒打印一次收包速率。
+
+```
+python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py          # 监听 UDP 9000
+python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     # 换端口
+```
+
+协议：一个 UDP 包是一条 OSC 消息或一个 `#bundle`（可嵌套；8 字节时间标签被忽略，元素 = 大端 int32 长度 + 内容，长度须为 4 的倍数）。字符串以 NUL 结尾并补齐到 4 字节。面部数据是地址 `/Face`、类型标签 `,` 加 52 个 `f`、52 个大端 float32，顺序同 `Names.ARKIT52`；数值截到 0..1。其他地址忽略；类型标签不符、长度不符或含 NaN / 无穷的 `/Face` 整条丢弃；结构损坏的包整包丢弃。一个包里有多帧时写最后一帧。RhyLive 不发头部数据，`head` 写 `null`：选这个方案时没有头部转动：「头部转动」卡片隐藏，测试姿势和另一方案下校准的头部基准也不生效。
+
+**VMC（通用）**：任何按 VMC 协议（OSC）发送、表情名用 ARKit 52 个名字（Perfect Sync）的软件，发到 127.0.0.1:39539。只能走游戏内接收（没有桥接脚本，`bridge = nil`；没装插件时状态显示「需要 ShapeKeySystem_Mocap.dll」，也不读 `live.json`）。插件读这几种消息（单条或 `#bundle`）：`/VMC/Ext/Blend/Val`（`,sf`：名字、数值）按名字不区分大小写对上 ARKit 52 个通道，其他名字忽略；收到 `/VMC/Ext/Blend/Apply` 才算一帧，从没收到过 Apply 的发送方每个带表情值的包算一帧。`/VMC/Ext/Bone/Pos`（`,sfffffff`：名字、位置 xyz、四元数 xyzw）里 `Head` 骨骼的旋转按 Unity 的 ZXY 顺序换成绕 X（俯仰）、Y（左右转）、Z（歪头）的角度，作为 `head[1..3]`（位置作为 `head[4..6]`），随下一帧一起生效；方向不对时在「头部转动」里调「反向」和来源。其他 VMC 消息忽略。
+
+按 [VMC 规范](https://protocol.vmc.info/marionette-spec)，`Blend/Val` 是发送方模型的表情（VRM BlendShapeProxy）值，不是网格形态键：虚拟形象软件（Warudo 的「VMC 发送器」、VSeeFace 等）发的是所加载角色的表情列表，角色要有 52 个按 ARKit 命名的表情（Perfect Sync）才会发 ARKit 名字。实测 Warudo 一个只有自定义表情的角色，发出的就只有那些表情名，ARKit 值没有经过 VMC。
+
+`live.json`：`{"seq": n, "w": [52 个 0..1，顺序同 Names.ARKIT52], "head": [6 个数] | null, "le": [...], "re": [...]}`（`le` / `re` 只有 iFacialMocap 写）。`seq` 不变就当没有新数据；SKS 启动后看到的第一份文件不算数（可能是上次留下的）。Windows Defender 实时扫描开着时每次读取约 5 毫秒，需要把 `mocap/` 加入排除项。
 
 写入：52 个通道作为外部值（`External.lua`，所有者 `mocap`）每帧续租，和其他插件一样覆盖表情和捏脸、走同一套写入保护（预热、过场、换装重建）。每个通道 = 手机值 × 淡入系数 + 纯表情值 ×（1 − 淡入系数），所以数据开始或中断时脸在 `fade_sec` 秒内平滑交接；系数回到 0 时放掉全部外部值。通道名先按当前表情配置的槽位解析，解析不到的再按名字匹配捏脸键；部件上没有 ARKit 键（或别名）的脸收不到。
 
@@ -715,7 +734,8 @@ python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py             #
 
 | 命令 | 参数 | 作用 | 持久化 |
 |---|---|---|---|
-| `mocap` | `{patch}` | 修改面捕设置：`enabled`、`mirror`、`gain`（0–3）、`smoothing`（0–1）、`fade_sec`（0–2）、`timeout`（0.1–5 秒，多久没新数据算中断）、`channel_gains = {ARKit 名 = 0–3 或 false}`（1 和 false 都表示不单独调）、`head = {enabled, gain 0–2, max_deg 5–90, smoothing 0–1, invert = {pitch/yaw/roll = bool}, order = {pitch/yaw/roll = 1–3}}`、`test = {on, pitch, yaw, roll}`（−60–60°，不用手机的测试姿势，不保存）。数值截到范围内；类型不对、未知通道、`order` 不在 1–3 时返回 `E_BAD_ARGS`，什么都不改 | `user/mocap.json`（约 0.5 秒后写） |
+| `mocap` | `{patch}` | 修改面捕设置：`enabled`、`scheme`（`Mocap.SCHEMES` 里的 id：`ifacialmocap`、`rhylive` 或 `vmc`）、`phone_ip`（IPv4 或空，iFacialMocap 的开始信号发到这里）、`port`（0 = 方案默认端口，或 1–65535）、`mirror`、`gain`（0–3）、`smoothing`（0–1）、`fade_sec`（0–2）、`timeout`（0.1–5 秒，多久没新数据算中断）、`channel_gains = {ARKit 名 = 0–3 或 false}`（1 和 false 都表示不单独调）、`head = {enabled, gain 0–2, max_deg 5–90, smoothing 0–1, invert = {pitch/yaw/roll = bool}, order = {pitch/yaw/roll = 1–3}}`、`test = {on, pitch, yaw, roll}`（−60–60°，不用手机的测试姿势，不保存）。数值截到范围内；类型不对、未知方案、IP 不完整、未知通道、`order` 不在 1–3 时返回 `E_BAD_ARGS`，什么都不改 | `user/mocap.json`（约 0.5 秒后写） |
+| `mocap_refresh_ips` | `{}` | 重新查一次本机局域网 IP（`state.mocap.native.ips`）；插件加载后自动查一次，之后只在「基础配置」框点「刷新」时查 | — |
 | `mocap_calibrate` | `{what}` | `face`：把手机当前各通道值记为放松时的基准（之后按 `(v − 基准) / (1 − 基准)` 换算）；`head`：把当前头部角度记为正前方；`clear`：清除面部基准 | `user/mocap.json` |
 
-`state.mocap`：`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
+`state.mocap`：`native = {available, running, error, sender, packets, rejected, port, ips}`（游戏内接收的状态）、`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。

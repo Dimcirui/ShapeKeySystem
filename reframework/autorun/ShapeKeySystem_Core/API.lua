@@ -1670,6 +1670,12 @@ function cmds.mocap(a)
     return true
 end
 
+-- look up this PC's LAN IPs again (state.mocap.native.ips, shown in the 基础配置 box)
+function cmds.mocap_refresh_ips()
+    Mocap.refresh_ips()
+    return true
+end
+
 -- what = "face" (neutral face from the current frame) / "head" (straight-ahead head) / "clear"
 function cmds.mocap_calibrate(a)
     if a.what == "face" then Mocap.calibrate_face()

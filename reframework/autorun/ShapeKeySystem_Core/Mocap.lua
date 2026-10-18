@@ -1,7 +1,8 @@
 -- ShapeKeySystem: face mocap from iFacialMocap (iPhone ARKit tracking).
 --
--- REFramework Lua has no sockets: builtin/mocap/ifm_bridge.py receives the phone's UDP stream and
--- writes the latest frame to mocap/live.json, which this module reads once per tick. The 52 ARKit
+-- Input, once per tick: the native plugin ShapeKeySystem_Mocap.dll (global sks_mocap_native)
+-- receives the phone's UDP stream inside the game; without it, builtin/mocap/ifm_bridge.py writes
+-- the latest frame to mocap/live.json and this module reads that file. The 52 ARKit
 -- values go in as External leases (owner "mocap"), so they override expression and sculpt for
 -- those keys and pass the same warm-up / cutscene / rebuild guards as every other write. While
 -- the stream fades in or out the lease value is mixed with the pure expression weight, so the
@@ -31,8 +32,25 @@ local CFG_PATH = U.path("user", "mocap.json")
 local HEAD_JOINTS = { { "Neck_0", 0.25 }, { "Neck_1", 0.25 }, { "Head", 0.5 } }
 local AXES = { "pitch", "yaw", "roll" }
 
+-- input schemes the 面捕方案 select offers; each one reads its own transport into view.raw /
+-- view.head_raw.
+-- bridge = the script that writes live.json when the native receiver is missing (nil: the scheme
+-- only works through ShapeKeySystem_Mocap.dll); head = false:
+-- the app sends no head rotation, so the head turn is off altogether (the page hides its card,
+-- and a head neutral or test pose left from another scheme must not turn the head).
+M.SCHEMES = {
+    { id = "ifacialmocap", name = "iFacialMocap", bridge = "ifm_bridge.py", head = true },
+    { id = "rhylive", name = "RhyLive", bridge = "rhylive_bridge.py", head = false },
+    -- any VMC protocol sender that names expressions after ARKit (Perfect Sync)
+    { id = "vmc", name = "VMC（通用）", head = true },
+}
+local SCHEME_BY_ID = {}
+for _, sc in ipairs(M.SCHEMES) do SCHEME_BY_ID[sc.id] = sc end
+
 M.DEFAULTS = {
-    enabled = false, mirror = false, gain = 1.0, smoothing = 0.3,
+    enabled = false, scheme = "ifacialmocap", mirror = false, gain = 1.0, smoothing = 0.3,
+    phone_ip = "",       -- iFacialMocap only streams after a trigger sent to the phone
+    port = 0,            -- 0 = the scheme's default port
     timeout = 0.5, fade_sec = 0.25,
     neutral = {},        -- ARKit name -> resting value subtracted before gain
     channel_gains = {},  -- ARKit name -> extra gain
@@ -68,6 +86,7 @@ local view = {
     live = false, age = nil, rx_hz = 0, fade = 0, held = 0, derived = 0, resolved = 0,
     status = "未开启", head_status = "-", read_ms = 0,
     test = { on = false, pitch = 0, yaw = 0, roll = 0 },
+    schemes = M.SCHEMES,
     cfg = cfg,
 }
 M.view = view
@@ -90,7 +109,10 @@ end
 function M.load()
     local saved = U.load_json(CFG_PATH)
     if type(saved) == "table" then fill(cfg, saved, M.DEFAULTS) end
+    if not SCHEME_BY_ID[cfg.scheme] then cfg.scheme = M.DEFAULTS.scheme end
 end
+
+function M.scheme() return SCHEME_BY_ID[cfg.scheme] or M.SCHEMES[1] end
 
 function M.save()
     st.save_at = nil
@@ -116,6 +138,54 @@ local function read_live()
     end
     st.last_rx = clock()
     st.rx_n = st.rx_n + 1
+end
+
+-- in-game receiver (native plugin); nil when the DLL is not installed or refused this Lua release
+local function native_api()
+    local n = rawget(_G, "sks_mocap_native")
+    return type(n) == "table" and type(n.poll) == "function" and n or nil
+end
+
+-- ips_due: look up this PC's IPs on the next tick (once after load, then on the page's 刷新 button);
+-- the page shows them before mocap is switched on
+local nat = { key = nil, buf = {}, seq = 0, ips_due = true }
+
+function M.refresh_ips() nat.ips_due = true end
+-- ips = this PC's LAN IPv4 addresses (RhyLive is told where to send)
+view.native = { available = false, running = false, error = 0, sender = "", packets = 0, rejected = 0, port = 0, ips = {} }
+
+local function native_stop()
+    local n = native_api()
+    if n and nat.key then pcall(n.stop) end
+    nat.key = nil
+    view.native.running = false
+end
+
+-- (re)starts the socket when the scheme, port or phone IP changed; returns true when it polled
+local function read_native(n)
+    local key = cfg.scheme .. ":" .. cfg.port .. ":" .. cfg.phone_ip
+    local vn = view.native
+    if nat.key ~= key then
+        nat.key, nat.seq = key, 0
+        local port = cfg.port > 0 and math.floor(cfg.port) or nil
+        local ip = cfg.phone_ip ~= "" and cfg.phone_ip or nil
+        local ok, res, err = pcall(n.start, cfg.scheme, port, ip)
+        vn.error = (ok and res) and 0 or (ok and tonumber(err) or -1)
+    end
+    local ok, t = pcall(n.poll, nat.buf)
+    if not ok or type(t) ~= "table" then vn.running = false; return false end
+    vn.running, vn.error = t.running == true, t.error or vn.error
+    vn.sender, vn.packets, vn.rejected, vn.port = t.sender or "", t.packets or 0, t.rejected or 0, t.port or 0
+    if (t.seq or 0) == nat.seq then return true end
+    nat.seq = t.seq
+    local w, raw = t.w, view.raw
+    for i = 1, N do raw[i] = w[i] or 0 end
+    if type(t.head) == "table" then
+        for i = 1, 3 do view.head_raw[i] = t.head[i] or 0 end
+    end
+    st.last_rx = clock()
+    st.rx_n = st.rx_n + 1
+    return true
 end
 
 local function compute(dt)
@@ -182,18 +252,30 @@ end
 -- Returns true when the held values changed (API marks the sculpt layer dirty).
 function M.tick(dt, ctx)
     if st.save_at and clock() >= st.save_at then M.save() end
+    local n = native_api()
+    view.native.available = n ~= nil
+    if n and n.local_ips and nat.ips_due then
+        nat.ips_due = false
+        local ok, ips = pcall(n.local_ips)
+        view.native.ips = (ok and type(ips) == "table") and ips or {}
+    end
     if not cfg.enabled then
+        native_stop()
         view.status = "未开启"
         view.fade, view.live = 0, false
         return release()
     end
     local t0 = clock()
-    read_live()
+    -- live.json belongs to the bridge scripts: a scheme without one must not pick up their frames
+    if not (n and read_native(n)) and M.scheme().bridge then read_live() end
     view.read_ms = view.read_ms * 0.95 + (clock() - t0) * 1000 * 0.05
     compute(dt)
     local f = view.fade
     if f <= 0 then
-        view.status = st.last_rx < 0 and "等待 ifm_bridge.py 的数据" or "数据中断"
+        local sc = M.scheme()
+        if not n and not sc.bridge then view.status = "需要 ShapeKeySystem_Mocap.dll"
+        elseif st.last_rx >= 0 then view.status = "数据中断"
+        else view.status = "等待 " .. (n and sc.name or sc.bridge) .. " 的数据" end
         return release()
     end
     view.status = f < 1 and "淡入淡出中" or "面捕驱动中"
@@ -229,7 +311,7 @@ local function num(v, lim)
     return U.clamp(v, lim[1], lim[2]) + 0.0
 end
 
--- patch: enabled, mirror, gain, smoothing, fade_sec, timeout, channel_gains = {name = gain|false},
+-- patch: enabled, scheme (an M.SCHEMES id), phone_ip, port, mirror, gain, smoothing, fade_sec, timeout, channel_gains = {name = gain|false},
 -- head = {enabled, gain, max_deg, smoothing, invert = {axis = bool}, order = {axis = 1..3}},
 -- test = {on, pitch, yaw, roll} (not saved). Validates everything before changing anything;
 -- returns ok, err, msg.
@@ -244,6 +326,24 @@ function M.patch(p)
     end
     for _, k in ipairs({ "enabled", "mirror" }) do
         if not bool(cfg, k, p[k]) then return false, "E_BAD_ARGS", k .. " must be boolean" end
+    end
+    if p.phone_ip ~= nil then
+        local ip = p.phone_ip
+        local ok = type(ip) == "string" and (ip == "" or ip:match("^%d+%.%d+%.%d+%.%d+$") ~= nil)
+        if ok and ip ~= "" then
+            for part in ip:gmatch("%d+") do if #part > 3 or tonumber(part) > 255 then ok = false end end
+        end
+        if not ok then return false, "E_BAD_ARGS", "phone_ip: IPv4 address or empty" end
+        writes[#writes + 1] = { cfg, "phone_ip", ip }
+    end
+    if p.port ~= nil then
+        local v = tonumber(p.port)
+        if not v or v % 1 ~= 0 or v < 0 or v > 65535 then return false, "E_BAD_ARGS", "port: 0 (default) or 1..65535" end
+        writes[#writes + 1] = { cfg, "port", math.floor(v) }
+    end
+    if p.scheme ~= nil then
+        if not SCHEME_BY_ID[p.scheme] then return false, "E_BAD_ARGS", "unknown scheme " .. tostring(p.scheme) end
+        writes[#writes + 1] = { cfg, "scheme", p.scheme }
     end
     for k, lim in pairs(M.LIMITS) do
         if p[k] ~= nil then
@@ -335,7 +435,7 @@ function M.drop_refs()
 end
 
 function M.wants_head()
-    return cfg.enabled and cfg.head.enabled and (view.fade > 0 or view.test.on)
+    return cfg.enabled and cfg.head.enabled and M.scheme().head and (view.fade > 0 or view.test.on)
 end
 
 -- After UpdateMotion: the animation has written this frame's local rotations and constraints

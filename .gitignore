@@ -35,3 +35,4 @@ dist/
 
 # loacl
 AGENTS.md
+native/build/

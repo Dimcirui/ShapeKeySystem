@@ -83,6 +83,23 @@ check(U.load_json(U.path("user", "mocap.json")) ~= nil, "calibration saved to us
 SKS.call("mocap_calibrate", { what = "clear" })
 check(next(st.mocap.cfg.neutral) == nil, "clear removes the neutral pose")
 check(not SKS.call("mocap_calibrate", { what = "nose" }), "unknown calibration target rejected")
+check(st.mocap.cfg.scheme == "ifacialmocap" and #st.mocap.schemes == 3, "default scheme iFacialMocap, RhyLive and generic VMC offered too")
+ok, err = SKS.call("mocap", { patch = { scheme = "facecap" } })
+check(not ok and err == "E_BAD_ARGS" and st.mocap.cfg.scheme == "ifacialmocap", "unknown scheme rejected")
+-- RhyLive reads the same live.json but sends no head: no head turn at all, not even the test pose
+SKS.call("mocap", { patch = { head = { enabled = true } } })
+frame_in({ jawOpen = 0.6 }); ticks(2)
+check(Mocap.wants_head(), "iFacialMocap stream drives the head turn")
+ok = SKS.call("mocap", { patch = { scheme = "rhylive" } })
+check(ok and st.mocap.cfg.scheme == "rhylive", "scheme RhyLive selected")
+json.dump_file(LIVE, { seq = seq + 1, w = (function() local w = {}; for i = 1, 52 do w[i] = 0 end; w[25] = 0.4; return w end)() })
+seq = seq + 1
+ticks(2)
+check(math.abs((WEIGHTS[ji] or -1) - 0.4) < 1e-3, "RhyLive frame without head reaches the mesh")
+check(not Mocap.wants_head(), "RhyLive stream leaves the head alone")
+SKS.call("mocap", { patch = { test = { on = true } } })
+check(not Mocap.wants_head(), "test pose does not turn the head under RhyLive either")
+SKS.call("mocap", { patch = { scheme = "ifacialmocap", test = { on = false }, head = { enabled = false } } })
 
 -- the stream stops: fades out and hands the keys back
 SKS.call("mocap", { patch = { timeout = 0.1 } })
@@ -92,6 +109,87 @@ check(not st.mocap.live and held_by_mocap() == 0, "stale stream releases every m
 -- head turn needs a driven primary rig; with the head off nothing is touched
 local okm = pcall(CB.motion)
 check(okm and st.mocap.head_status ~= nil, "UpdateMotion hook runs with the head turn off")
+
+-- in-game receiver (ShapeKeySystem_Mocap.dll): a fake sks_mocap_native, live.json is not read
+local NAT = { starts = {}, stops = 0, seq = 0, w = {}, head = nil }
+for i = 1, 52 do NAT.w[i] = 0 end
+sks_mocap_native = {
+    version = 1,
+    start = function(scheme, port, ip) NAT.starts[#NAT.starts + 1] = { scheme, port, ip }; return true end,
+    stop = function() NAT.stops = NAT.stops + 1 end,
+    poll = function(t)
+        t = t or {}
+        t.running, t.scheme, t.port, t.seq, t.sender = true, "ifacialmocap", 49983, NAT.seq, "192.168.1.165"
+        t.packets, t.rejected, t.error, t.w, t.head = NAT.seq, 0, 0, NAT.w, NAT.head
+        return t
+    end,
+}
+local function nat_frame(vals)
+    NAT.seq = NAT.seq + 1
+    for i, n in ipairs(st.mocap.names) do NAT.w[i] = vals[n] or 0 end
+end
+ok = SKS.call("mocap", { patch = { phone_ip = "192.168.1.165", timeout = 5 } })
+check(ok and st.mocap.cfg.phone_ip == "192.168.1.165", "phone_ip saved")
+check(not SKS.call("mocap", { patch = { phone_ip = "192.168.1" } }) and not SKS.call("mocap", { patch = { phone_ip = "1.2.3.400" } }),
+    "incomplete or out-of-range phone_ip rejected")
+check(not SKS.call("mocap", { patch = { port = 70000 } }), "port outside 0..65535 rejected")
+frame_in({ eyeBlinkLeft = 0.1 })   -- live.json says something else: must be ignored
+nat_frame({ eyeBlinkLeft = 0.6 })
+for _ = 1, 20 do wait(0.002); ticks(1) end
+local s1 = NAT.starts[1]
+check(#NAT.starts == 1 and s1[1] == "ifacialmocap" and s1[2] == nil and s1[3] == "192.168.1.165",
+    "native receiver started with scheme, default port and phone IP")
+check(st.mocap.native.available and st.mocap.native.running and st.mocap.native.sender == "192.168.1.165",
+    "state.mocap.native reports the receiver")
+check(st.mocap.live and math.abs((WEIGHTS[bi] or -1) - 0.6) < 1e-3, "native frame reaches the mesh, live.json ignored")
+SKS.call("mocap", { patch = { phone_ip = "192.168.1.166" } }); ticks(1)
+check(#NAT.starts == 2 and NAT.starts[2][3] == "192.168.1.166", "changing the phone IP restarts the receiver")
+-- page with the receiver: phone IP field instead of the bridge hint
+Panel.set_open(true)
+SKS.call("set_setting", { key = "advanced", value = true })
+Panel.ui.page = "mocap"
+DRAWS = {}; CB.d2d_draw()
+local function seen(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then return true end end end
+check(seen("Destination IP address") and seen("游戏内直接接收") and seen("来自 192.168.1.165")
+    and not seen("手机 IP") and not seen("页面出错"), "基础配置 shows the in-game receiver, no phone IP field")
+sks_mocap_native.local_ips = function() return { "192.168.1.190" } end
+SKS.call("mocap", { patch = { enabled = false } }); ticks(1)   -- the IPs come without a running receiver
+DRAWS = {}; CB.d2d_draw()
+check(seen("本机 IP：192.168.1.190") and seen("端口 49983"), "PC IP and port shown while mocap is still off")
+sks_mocap_native.local_ips = function() return { "10.0.0.5" } end
+ticks(2); DRAWS = {}; CB.d2d_draw()
+check(seen("本机 IP：192.168.1.190") and seen("刷新"), "PC IPs are looked up once, not polled")
+SKS.call("mocap_refresh_ips"); ticks(1); DRAWS = {}; CB.d2d_draw()
+check(seen("本机 IP：10.0.0.5"), "mocap_refresh_ips looks them up again")
+sks_mocap_native.local_ips = function() return { "192.168.1.190" } end
+SKS.call("mocap_refresh_ips")
+SKS.call("mocap", { patch = { enabled = true } }); ticks(1)
+SKS.call("mocap", { patch = { scheme = "rhylive" } }); ticks(1)
+DRAWS = {}; CB.d2d_draw()
+check(NAT.starts[#NAT.starts][1] == "rhylive" and seen("本机 IP：192.168.1.190") and not seen("手机 IP")
+    and not seen("页面出错"), "RhyLive through the receiver: PC IP shown, no phone IP field")
+SKS.call("mocap", { patch = { scheme = "vmc" } }); ticks(1)
+local h_x = Panel.ui.win.h
+Panel.ui.win.h = 2000   -- the head card sits below the fold at the default height
+DRAWS = {}; CB.d2d_draw()
+Panel.ui.win.h = h_x
+check(NAT.starts[#NAT.starts][1] == "vmc" and seen("支持 VMC 协议") and seen("127.0.0.1、端口")
+    and not seen("本机 IP") and seen("头部转动") and not seen("页面出错"), "VMC through the receiver, head card kept")
+SKS.call("mocap", { patch = { scheme = "ifacialmocap" } }); ticks(1)
+Panel.set_open(false)
+local stops = NAT.stops
+SKS.call("mocap", { patch = { enabled = false } }); ticks(1)
+check(NAT.stops == stops + 1, "disabling mocap stops the receiver")
+SKS.call("mocap", { patch = { phone_ip = "" } })
+sks_mocap_native = nil
+SKS.call("mocap", { patch = { enabled = true } }); ticks(2)
+check(not st.mocap.native.available, "without the DLL the file path is used again")
+SKS.call("mocap", { patch = { scheme = "vmc", timeout = 0.1 } }); ticks(1)
+frame_in({ jawOpen = 0.5 }); wait(0.15); ticks(2)   -- a bridge's live.json is not VMC's
+check(st.mocap.status == "需要 ShapeKeySystem_Mocap.dll", "VMC without the DLL says it needs the plugin")
+SKS.call("mocap", { patch = { scheme = "ifacialmocap" } })
+SKS.call("mocap", { patch = { enabled = false, timeout = 0.5 } }); ticks(1)
+Panel.ui.page = "basic"
 
 -- page
 Panel.set_open(true)
@@ -109,7 +207,17 @@ if rail then
 end
 local function drawn(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then return true end end end
 check(Panel.ui.page == "mocap", "rail click opens the 面捕 page")
-check(drawn("面捕（iFacialMocap）") and drawn("头部转动") and not drawn("页面出错"), "面捕 page cards drawn")
+check(drawn("面捕总配置") and drawn("基础配置 · iFacialMocap") and drawn("校准面部") and drawn("头部转动")
+    and not drawn("页面出错"), "面捕 page cards drawn")
+SKS.call("mocap", { patch = { scheme = "rhylive" } })
+local h_page = Panel.ui.win.h
+Panel.ui.win.h = 2000   -- the head card sits below the fold at the default height
+DRAWS = {}; CB.d2d_draw()
+Panel.ui.win.h = h_page
+check(drawn("基础配置 · RhyLive") and drawn("并启用相应的收发程序") and not drawn("头部转动")
+    and drawn("各通道强度") and not drawn("页面出错"), "RhyLive scheme box, head card hidden")
+SKS.call("mocap", { patch = { scheme = "ifacialmocap" } })
+DRAWS = {}; CB.d2d_draw()
 Panel.ui.page_state.mocap.channels_open = true
 local h_before = Panel.ui.win.h
 Panel.ui.win.h = 2000

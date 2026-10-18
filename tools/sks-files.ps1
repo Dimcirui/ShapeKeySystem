@@ -12,7 +12,8 @@ $owned = @(
     "autorun\ShapeKeySystem_Game", # 清理旧的播放适配器目录
     "data\ShapeKeySystem\builtin",
     "data\ShapeKeySystem\faces",
-    "images\ShapeKeySystem"
+    "images\ShapeKeySystem",
+    "plugins\ShapeKeySystem_Mocap.dll"   # 面捕游戏内接收，由 native\build.ps1 生成
 )
 # 仅清理迁入 builtin 的三个旧内置文件，不镜像旧 games 目录，保留玩家另外放入的录制。
 $retired = @(
