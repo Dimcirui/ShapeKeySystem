@@ -120,17 +120,14 @@ check(#st.scene.rigs == 1 and #writes == n3, "rescan of the same mesh: no warm-u
 FC[52] = 0.008; ticks(1)
 check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 0.8) < 1e-6, "still writing right after rescan")
 
--- cutscene gate (cutscene_drive off)
+-- cutscene with cutscene_drive off: the gate pauses nothing, the master hunter stays driven
 check(st.settings.cutscene_drive == true, "cutscene_drive defaults to on")
 SKS.call("set_setting", { key = "cutscene_drive", value = false })
 DEMO.busy = true; ticks(1)
-check(#st.scene.rigs == 1 and st.debug.status:find("paused"), "cutscene: paused")
-check(WEIGHTS[idx("blendShape1.JawOpen")] == 0, "cutscene: weights zeroed before letting go")
-local n4 = #writes; FC[52] = 0.01; ticks(20)
-check(#writes == n4, "cutscene: nothing written while paused")
-DEMO.busy = false; ticks(40)
-check(#writes == n4, "after cutscene: settle + warm-up before writing")
-ticks(70)
+check(#st.scene.rigs == 1 and not st.debug.status:find("paused"), "cutscene: no pause")
+FC[52] = 0.01; ticks(20)
+check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 1.0) < 1e-6, "cutscene: the master hunter keeps being driven")
+DEMO.busy = false; ticks(110)
 check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 1.0) < 1e-6, "after cutscene: writing again")
 
 -- skip request / equipment rebuild / mesh not ready
@@ -140,9 +137,11 @@ local n5 = #writes; FC[52] = 0.002; ticks(5)
 check(#writes == n5, "skip request: all rigs released immediately")
 ticks(200)
 check(#writes > n5, "skip request: rescans on its own after settle + warm-up")
-SKS.on_rebuilt(); local n6 = #writes; ticks(20)
-check(#writes == n6, "equip rebuild: released, waiting to rescan")
-ticks(100)
+SKS.on_rebuilt(); local n6 = #writes; ticks(10)
+check(#writes == n6, "equip rebuild: released until the rescan")
+ticks(10)
+check(#writes > n6, "equip rebuild: a mesh found again resumes without a new warm-up")
+ticks(90)
 MESH_STATE.ready = false; local n7 = #writes; FC[52] = 0.009; ticks(3)
 check(#writes == n7, "mesh not ready: no writes, rig dropped")
 MESH_STATE.ready = true; ticks(130)
@@ -341,11 +340,10 @@ check(WEIGHTS[i_waist] == 0, "disable: sculpt channels zeroed")
 SKS.call("set_enabled", { on = true }); ticks(80)
 check(math.abs(WEIGHTS[i_waist] - 0.6) < 1e-6, "enable: sculpt values written again")
 
--- cutscene pause: references dropped, nothing written, values back after
+-- cutscene: sculpt edits keep being written
 DEMO.busy = true; ticks(1)
-local w2 = #writes
 SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.9 }); ticks(10)
-check(#writes == w2, "paused: no sculpt writes")
+check(math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6, "cutscene: sculpt edits written without a pause")
 DEMO.busy = false; ticks(130)
 check(math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6, "after the pause: pending sculpt value written")
 
@@ -400,8 +398,8 @@ SKS.call("set_profile", { id = "shinano" }); ticks(5)
 local s_close = idx("blendShape1.eye_close_L")
 check(HOOKS.onPlayStartTimeline and HOOKS.unload and HOOKS.requestSkip, "DemoMediator hooks registered")
 check(SKS.call("set_setting", { key = "cutscene_drive", value = true }), "enable cutscene_drive")
-DEMO.load = true; ticks(5)                       -- cutscene loading: paused
-check(st.debug.status:find("paused") ~= nil, "cutscene load: paused")
+DEMO.load = true; ticks(5)                       -- cutscene loading: no pause
+check(st.debug.status:find("paused") == nil, "cutscene load: no pause")
 COPY_ON = true
 HOOKS.onPlayStartTimeline({ nil, nil, 0 })       -- segment 0 starts
 DEMO.load = false; DEMO.busy = true
@@ -431,7 +429,7 @@ HOOKS.unload()
 local c2 = #writes; FC[1] = 0.004; ticks(10)
 check(#writes == c2, "unload: released")
 DEMO.busy = false; DEMO.load = true; ticks(5)
-check(#writes == c2, "end-of-cutscene load: nothing written")
+check(#writes > c2, "end-of-cutscene load: the master hunter resumes right away")
 DEMO.load = false; COPY_ON = false; ticks(130)
 check(math.abs(WEIGHTS[s_close] - 0.4) < 1e-6 and #st.scene.rigs == 1, "gameplay again, master player only")
 -- cutscene without a segment hook: playback start counts as the segment start
@@ -440,7 +438,7 @@ check(math.abs(WEIGHTS2[s_close] - 0.7) < 1e-6, "no segment hook: driving after 
 DEMO.busy = false; COPY_ON = false; ticks(130)
 SKS.call("set_setting", { key = "cutscene_drive", value = false })
 DEMO.busy = true; ticks(1)
-check(st.debug.status:find("paused") ~= nil, "switch off: cutscenes pause again")
+check(st.debug.status:find("paused") == nil and #st.scene.rigs > 0, "switch off: cutscenes keep the master hunter")
 DEMO.busy = false; ticks(130)
 
 -- signal layer: dictionary raw / param / lo / hi / no_signal, p through the adapter, game tags

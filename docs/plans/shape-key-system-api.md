@@ -169,7 +169,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 
 `scene_search_available` 由适配器的 `scene_search` 提供；适配器设为 `false` 时，两个面板均隐藏全场景搜索开关。该字段属于运行能力，不写入设置文件。
 
-`hotkey`、`hotkey_combo`（bool，默认 true：需同时按住 `hotkey_mod`）、`hotkey_mod`（`Ctrl` / `Shift` / `Alt`，默认 `Ctrl`）、`ui_scale`、`font_scale`（0.8–1.6，默认 1：只放大文字，不改布局；ImGui 后端需要支持动态字号的 REFramework）、`block_input`（bool，默认 true：面板打开时屏蔽游戏操控；关闭后游戏照常操控）、`language`、`scene_search_always`、`periodic_scan_sec`、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
+`hotkey`、`hotkey_combo`（bool，默认 true：需同时按住 `hotkey_mod`）、`hotkey_mod`（`Ctrl` / `Shift` / `Alt`，默认 `Ctrl`）、`ui_scale`、`font_scale`（0.8–1.6，默认 1：只放大文字，不改布局；ImGui 后端需要支持动态字号的 REFramework）、`block_input`（bool，默认 true：面板打开时屏蔽游戏操控；关闭后游戏照常操控）、`language`、`scene_search_always`（bool，默认 true：每次扫描都搜索整个场景）、`periodic_scan_sec`（0–120 秒，默认 5，0 = 不定期重扫）、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
 
 `hold_available` 表示当前适配器提供 `expression_joints` 与 `face_layers`；`hold_status` 是禁用骨骼表情的当前状态文字。二者属于运行能力，不写入设置文件。
 
@@ -671,7 +671,7 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 | `fallback`（默认） | 只补游戏缺失的部分：信号取 max(游戏, 生成)，视线加上偏移。信号缺失 = 字典没有原始通道；视线缺失 = 这个角色没有眼球关节；两者也可以由适配器的 `procedural` 表声明（崛起 `procedural = { blink = true, breath = true }`：眼睑骨和下颌骨有标定，但待机从不眨眼，嘴部呼吸低于 `jawOpen` 的 `lo`）。荒野、鬼武者、RE4R 都有眨眼、张嘴信号和眼球关节，行为不变 |
 | `add` | 全部叠加：信号 = 游戏 + 生成（游戏值不超过 1 时结果截到 1），视线 = 游戏视线 + 偏移 |
 
-生成器的时钟只在连续帧上前进：门（`gate`）关闭、过场不驱动等跳过的帧不计时，恢复后第一帧步长为 0；单帧步长最多 0.1 秒。所有角色共用一个时钟。
+生成器的时钟随 SKS 更新前进，gate 不通过时也不停；单帧步长最多 0.1 秒。所有角色共用一个时钟。
 三个生成器各用一条随机数序列，调一个的参数不影响另外两个的时间。
 
 `settings.json` 的 `procedural`（不随父预设的调整保存）：

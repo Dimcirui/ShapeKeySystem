@@ -70,7 +70,11 @@ function A.init(events) end       -- 唯一允许调用 sdk 的入口，见 2.5
 
 适配器可设 `scene_search = false`，由 Core 向面板提供 `state.settings.scene_search_available = false`，隐藏全场景搜索开关。省略时沿用原有显示。
 
-`gate(frame, cutscene_drive)` 的第二个参数为当前过场驱动设置。RE4R 关闭该设置时由适配器暂停当前玩家驱动；使用 Core 过场分段流程的适配器继续返回 `playing` 状态。
+`gate(frame, cutscene_drive)` 的第二个参数为当前过场驱动设置。Core 不再因 gate 不通过而暂停：读盘、重建和过场期间继续驱动已有的 rig，
+不清零、不放手，条件规则也不重置。gate 的 kind 只决定驱动对象：`playing` 且开启过场驱动时搜索整个场景找过场替身并按片段重扫，
+`setup` 进入菜单模式驱动预览角色。过场跳过、停止和片段开始的钩子仍放掉 rig 并重扫。
+部件签名变化、网格不再就绪和过场结束放掉 rig 后 2 帧即重扫；放掉时按网格地址记下预热进度，
+重扫找回的同一网格立即恢复写入（全部通道重写），新网格仍要预热。
 
 ### 2.2 找角色和脸
 

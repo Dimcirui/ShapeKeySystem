@@ -113,7 +113,7 @@ local function sks_settings_card(ctx, x, y, w)
         if ch then setting(ctx, "sculpt_max", v) end
     end)
     c.row("扫描间隔（秒，0=关）", function(sx, sw)
-        local ch, v = W.slider("periodic", sx, c.y, min(320, sw), 28, se.periodic_scan_sec or 10, 0, 60, { step = 1, fmt = "%.0f" })
+        local ch, v = W.slider("periodic", sx, c.y, min(320, sw), 28, se.periodic_scan_sec or 5, 0, 60, { step = 1, fmt = "%.0f" })
         if ch then setting(ctx, "periodic_scan_sec", v) end
     end)
     c.row("写入阈值", function(sx, sw)

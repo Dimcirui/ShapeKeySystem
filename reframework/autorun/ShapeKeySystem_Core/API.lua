@@ -48,7 +48,7 @@ local DEFAULTS = {
     block_input = true,
     -- show shape key labels (builtin/labels.json) instead of mesh names; Chinese only for now
     translate_keys = false,
-    scene_search_always = false, periodic_scan_sec = 10, write_epsilon = 0.001, clamp = true,
+    scene_search_always = true, periodic_scan_sec = 5, write_epsilon = 0.001, clamp = true,
     -- drive the hunter while a cutscene plays (released on skip / stop, re-armed per segment)
     cutscene_drive = true,
     -- off: the game's expression no longer reaches the shape keys (sculpt, conditions, touch and
@@ -170,7 +170,6 @@ local C = {
     pending_zero = {}, save_at = nil,
     P = {}, Pbuf = {}, inv_full = 100, dict_params = {},
     want_signals = false,
-    paused = nil,         -- reason string while the game gate is closed
     menu = false,         -- menu mode: master player not set up (title, save select, loading)
     prev_kind = nil,      -- Guard.game_stable kind of the previous frame (nil = stable)
     -- M2
@@ -231,10 +230,20 @@ end
 -- Let go of every engine object we hold (no writes). Used when parts are rebuilt or a cutscene
 -- takes over; references that outlive the objects crashed the game (SKS_Mocap investigation).
 local MENU_SCAN_FRAMES = 180
+-- rescan delay after a part or mesh change while driving: meshes found again resume writing at once
+-- (their warm-up survives the drop in C.warm), new ones still warm up
+local QUICK_RESCAN = 2
 
 local function drop_rigs(reason, rescan_after)
     Playback.stop(false, "角色或场景变化，录制播放已停止：" .. tostring(reason))
     if #C.rigs > 0 or #C.pending_zero > 0 then log("released rigs: %s", reason) end
+    -- warm-up by mesh address only (numbers, no engine references); the next scan consumes it
+    C.warm = C.warm or {}
+    for _, r in ipairs(C.rigs) do
+        for _, t in ipairs(r.targets) do
+            if t.addr then C.warm[t.addr] = { stable = t.stable, ready = t.ready } end
+        end
+    end
     C.rigs, C.parts, C.instances, C.pending_zero = {}, {}, {}, {}
     Sculpt.clear_targets()
     Cnd.reset()
@@ -285,8 +294,7 @@ end
 
 -- sculpt + expression targets of ready meshes back to 0 (disable / script reset)
 local function zero_sculpt()
-    if SKS.adapter.strict_bounds and
-        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then return end
+    if SKS.adapter.strict_bounds and Scene.children_signature(Scene.primary_root()) ~= C.sig then return end
     pcall(Sculpt.zero_all)
 end
 
@@ -952,21 +960,22 @@ local function do_scan()
                              known = (not Writer.M_CNAME or SKS.adapter.hash_names) and known_names() or nil })
     if cfg.enabled and SKS.adapter.prepare_parts then SKS.adapter.prepare_parts(res.instances or res.parts) end
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
-    -- rescans neither pause writing nor rewrite every channel
-    local old = {}
+    -- rescans neither pause writing nor rewrite every channel. A mesh that was dropped keeps only
+    -- its warm-up: every channel is written again.
+    local old, warm = {}, C.warm or {}
     for _, r in ipairs(C.rigs) do
         for _, t in ipairs(r.targets) do if t.addr then old[t.addr] = t end end
     end
     for _, r in ipairs(res.rigs) do
         for _, t in ipairs(r.targets) do
-            local o = t.addr and old[t.addr]
+            local o = t.addr and (old[t.addr] or warm[t.addr])
             if o then
                 t.stable, t.ready = o.stable, o.ready
                 if o.count == t.count then t.last = o.last end
             end
         end
     end
-    old = nil
+    old, C.warm = nil, nil
     C.rigs, C.parts, C.sig, C.mesh_name_of = res.rigs, res.parts, res.sig, res.mesh_name_of
     C.instances = res.instances or res.parts
     refresh_rig_params()
@@ -1235,7 +1244,7 @@ local function cs_end()
     C.cs_scene_search = false
 end
 
--- true when the experimental mode may drive on this frame
+-- segment bookkeeping for the cutscene mode: when to rescan for the cutscene copy
 local function cutscene_gate(f)
     if not CS.active then
         CS.active = true
@@ -1297,16 +1306,13 @@ local function tick()
         if Ext.rev ~= ext_rev then C.build_external_state() end
     end
     Sculpt.frame = f
+    -- The gate pauses nothing: loading, rebuilds and cutscenes keep driving whatever rigs exist.
+    -- Its kind only picks who is driven: "playing" searches the scene for the cutscene copy,
+    -- "setup" (title / save select) drives the preview hunters.
     local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
-    -- in a driven cutscene the recorder follows the driven face (see the cutscene branch below)
-    if stable or kind ~= "playing" or not cfg.cutscene_drive then NativeSignals.tick(SKS.adapter, stable) end
-    if SKS.adapter.strict_bounds and #(C.instances or {}) > 0 and
-        (not stable or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
-        drop_rigs(why or "part signature changed", Guard.SETTLE_FRAMES)
-    end
-    if not stable and C.cond_live ~= false then
-        C.cond_live = false
-        CondExpr.reset(); Cnd.reset(); Touch.reset()
+    if SKS.adapter.strict_bounds and #(C.instances or {}) > 0
+        and Scene.children_signature(Scene.primary_root()) ~= C.sig then
+        drop_rigs("part signature changed", QUICK_RESCAN)
     end
     Trail.frame = f
     local gate_now = stable and "stable" or why
@@ -1317,7 +1323,8 @@ local function tick()
     local prev_kind = C.prev_kind
     C.prev_kind = (not stable) and kind or nil
     local menu = (not stable) and kind == "setup"
-    if not stable and kind == "playing" and cfg.cutscene_drive then
+    local cutscene = (not stable) and kind == "playing" and cfg.cutscene_drive
+    if cutscene then
         -- a load finished: a new segment starts, whatever the hooks said before
         if prev_kind == "load" and CS.active then
             Trail.event("cutscene load -> playing: new segment")
@@ -1325,30 +1332,16 @@ local function tick()
             drop_rigs("cutscene loaded", nil)
             C.scan_at = {}
         end
-        local go = cutscene_gate(f)
-        -- rigs are dropped at each segment start and rescanned once it settles; until then the take waits
-        local face = go and C.rigs[1] and C.rigs[1].face
-        NativeSignals.tick(SKS.adapter, face and true or "hold", { face = face })
+        cutscene_gate(f)
         state.debug.status = "cutscene: " .. CS.status
-        if not go then
-            return
-        end
-    elseif not stable and not menu then
-        -- after cutscene driving the hunter is about to be rebuilt: only let go, never write
-        local was_cs = CS.active and not CS.released
-        cs_end()
-        if C.paused ~= why then
-            C.paused = why
-            if not was_cs then zero_ready_targets(why) end
-            drop_rigs(why, nil)
-            C.scan_at = {}
-            state.debug.status = "paused: " .. why
-        end
-        return
     elseif CS.active then
         cs_end()
-        drop_rigs("cutscene over", Guard.SETTLE_FRAMES)
+        drop_rigs("cutscene over", QUICK_RESCAN)
     end
+    -- the recorder follows the driven face; in a cutscene between segments there is none yet
+    -- (rigs are dropped at each segment start), so the take waits instead of ending
+    local face = C.rigs[1] and C.rigs[1].face
+    NativeSignals.tick(SKS.adapter, (face or not cutscene) and true or "hold", { face = face })
     -- menu mode (player not set up: title screen, save select, loading) drives whatever hunters
     -- the scene holds; entering or leaving it lets go of everything (the player is being built)
     if menu ~= C.menu then
@@ -1356,7 +1349,7 @@ local function tick()
         Trail.event(menu and "menu mode on" or "menu mode off")
         drop_rigs(menu and "menu mode" or "player set up", nil)
         C.scan_at = {}
-        if not C.paused then request_rescan(Guard.SETTLE_FRAMES) end
+        request_rescan(Guard.SETTLE_FRAMES)
     end
     local ev = C.menu_event
     if ev then
@@ -1369,11 +1362,6 @@ local function tick()
             request_rescan(Guard.SETTLE_FRAMES, 60, 120, 240)
         end
     end
-    if C.paused then
-        C.paused = nil
-        request_rescan(Guard.SETTLE_FRAMES)
-        state.debug.status = "resuming"
-    end
     if #C.pending_zero > 0 then
         for _, t in ipairs(C.pending_zero) do
             if t.stable >= Guard.STABLE_FRAMES and Guard.mesh_ready(t.mesh) then Writer.zero_target(t) end
@@ -1382,9 +1370,9 @@ local function tick()
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
     if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
-        drop_rigs("hunter parts changed", Guard.SETTLE_FRAMES)
+        drop_rigs("hunter parts changed", QUICK_RESCAN)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
-        drop_rigs("preview hunter changed", Guard.SETTLE_FRAMES)
+        drop_rigs("preview hunter changed", QUICK_RESCAN)
     elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         request_rescan(Guard.SETTLE_FRAMES)
     end
@@ -1406,7 +1394,6 @@ local function tick()
     if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dirty() end
     if Touch.update() then Sculpt.mark_dirty() end
     if state.runtime.ui_open then C.update_cond_live() end
-    -- only reached while the gate lets the rigs be driven: a skipped frame stops the generator's clock
     local lp = live.procedural
     lp.blink = Proc.tick(clock(), f)
     lp.mouth = Proc.out.jawOpen or 0
@@ -1423,7 +1410,7 @@ local function tick()
             for i, rig in ipairs(C.rigs) do
                 local ok, err = pcall(drive, rig, i == 1)
                 if not ok or err then
-                    drop_rigs(string.format("%s: %s", rig.label, tostring(err)), Guard.SETTLE_FRAMES)
+                    drop_rigs(string.format("%s: %s", rig.label, tostring(err)), QUICK_RESCAN)
                     break
                 end
             end
@@ -1435,7 +1422,7 @@ local function tick()
         local t0 = clock()
         local ok, w, err = pcall(Sculpt.tick, C.edit_mode, C.preview, cfg.write_epsilon)
         if not ok or err then
-            drop_rigs("sculpt: " .. tostring(ok and err or w), Guard.SETTLE_FRAMES)
+            drop_rigs("sculpt: " .. tostring(ok and err or w), QUICK_RESCAN)
         else
             prof.writes = prof.writes + w
         end
@@ -2338,28 +2325,25 @@ function SKS.shutdown()
     Trail.event("script reset")
     FaceHold.release()
     C.unpublish_api()
-    if SKS.adapter.strict_bounds and
-        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
+    if SKS.adapter.strict_bounds and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("shutdown after rebuild", nil)
     end
-    if not C.paused then
-        for _, r in ipairs(C.rigs) do
-            for _, t in ipairs(r.targets) do
-                if t.stable >= Guard.STABLE_FRAMES and Guard.mesh_ready(t.mesh) then Writer.zero_target(t) end
-            end
+    for _, r in ipairs(C.rigs) do
+        for _, t in ipairs(r.targets) do
+            if t.stable >= Guard.STABLE_FRAMES and Guard.mesh_ready(t.mesh) then Writer.zero_target(t) end
         end
-        zero_sculpt()
     end
+    zero_sculpt()
     if C.save_at then save_now() end
     Mocap.flush()
 end
 
 -- Optional pre-animation/render preparation uses the current scan only; it keeps no second
--- target cache and never touches a mesh after a failed gate or a changed signature.
+-- target cache and never touches a mesh after a changed signature.
 function SKS.prepare_targets()
     local A = SKS.adapter
     if not A.prepare_mesh or not cfg.enabled or #(C.instances or {}) == 0 then return end
-    if not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig then
+    if Scene.children_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("preparation after rebuild", Guard.SETTLE_FRAMES)
         return
     end

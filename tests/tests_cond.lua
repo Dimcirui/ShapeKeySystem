@@ -96,10 +96,12 @@ api.release_all("TestMod"); HSTATE.get_IsCombat = false; run_for(0.4)
 -- smoothing state stays the pure expression
 check(true, "W/O split (no smoothing drift) — covered by expression tests")
 
--- gate closed (player not set up): everything fades / resets
+-- player not set up (menu mode): no clip is picked, the playing one fades out
 HSTATE.get_IsCombat = true; ticks(2)
 SETUP = false; ticks(12)
-check(Cx.playing == nil and not Cx.any(), "menu / not set up: clips reset")
+check(Cx.playing == nil, "menu / not set up: no clip is picked")
+run_for(0.6)
+check(not Cx.any(), "menu / not set up: clips fade out")
 SETUP = true; ticks(130); HSTATE.get_IsCombat = false; run_for(0.4)
 
 -- save, select, bind
