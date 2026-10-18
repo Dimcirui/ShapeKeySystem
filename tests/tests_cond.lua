@@ -73,6 +73,13 @@ HEALTH.hp = 84; run_for(0.1)   -- 56 %
 check(Cx.playing == nil, "hp 56% leaves the band")
 HEALTH.hp = 150; ticks(2)
 
+-- a state bound to "" is switched off: skipped, and it does not outrank the states below
+data.states[1].clip = ""; SKS.call("cond_edit", { data = data })
+HSTATE.get_IsCombat = true; HEALTH.hp = 140; ticks(2)
+check(Cx.status[1] == "off" and Cx.playing == "fight", "clip \"\" switches the state off; the next state plays")
+data.states[1].clip = "hurt"; SKS.call("cond_edit", { data = data })
+HSTATE.get_IsCombat = false; HEALTH.hp = 150; run_for(0.4)
+
 -- auto off pauses rules; preview forces a clip
 data.auto = false; SKS.call("cond_edit", { data = data }); HSTATE.get_IsCombat = true; ticks(2)
 check(Cx.playing == nil, "auto off: rules paused")

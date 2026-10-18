@@ -7,7 +7,8 @@
 --     states = [ { clip = <clip id>, rules = [ { logic = "AND"|"OR", hold = s,
 --                                                conditions = [ {type, op, value, band} ] } ] } ] }
 -- states are in priority order: the first state with a matching rule (or still inside its hold
--- time) plays its clip. auto = false pauses the rules. A binding names the set ("conditions").
+-- time) plays its clip. A state with clip = "" is switched off: it is skipped and never outranks
+-- the states below it. auto = false pauses the rules. A binding names the set ("conditions").
 --
 -- Blending: every clip has a weight a (0..1). The playing clip fades in over its fade_in, all
 -- others fade out over their own fade_out. A key named by a clip becomes
@@ -32,7 +33,7 @@ E.preview = nil         -- clip id forced by the panel ("预览"), or nil
 local alpha = {}        -- clip id -> weight
 local hold_until = setmetatable({}, { __mode = "k" })   -- rule table -> os.clock deadline
 E.playing = nil         -- clip id the rules (or the preview) selected
-E.status = {}           -- per state index: "active" | "outranked" | "idle"
+E.status = {}           -- per state index: "active" | "outranked" | "idle" | "off"
 E.animating = false     -- some weight is moving (sculpt keys need rewriting)
 local last_clock = nil
 local slot_cache, slot_cache_for = nil, nil
@@ -195,12 +196,16 @@ function E.update(live)
     if data and live then
         for i, s in ipairs(data.states) do
             local hit = false
-            if data.auto ~= false then
-                for _, r in ipairs(s.rules) do if rule_hits(r, now) then hit = true end end
+            if s.clip == "" then
+                status[i] = "off"
+            else
+                if data.auto ~= false then
+                    for _, r in ipairs(s.rules) do if rule_hits(r, now) then hit = true end end
+                end
+                if hit and not pick then pick = s.clip; status[i] = "active"
+                elseif hit then status[i] = "outranked"
+                else status[i] = "idle" end
             end
-            if hit and not pick then pick = s.clip; status[i] = "active"
-            elseif hit then status[i] = "outranked"
-            else status[i] = "idle" end
         end
     end
     if E.preview and data and data.clips[E.preview] then pick = E.preview end

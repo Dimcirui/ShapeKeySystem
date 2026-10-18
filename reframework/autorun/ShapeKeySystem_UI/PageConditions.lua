@@ -14,7 +14,9 @@ local C = T.c
 local max, min, floor = math.max, math.min, math.floor
 
 local SOURCE = { user = "用户", mods = "mod 自带" }
-local STATUS = { active = { "生效中", C.ok }, outranked = { "命中，但被上面的压着", C.warn }, idle = { "未命中", C.faint } }
+local STATUS = { active = { "生效中", C.ok }, outranked = { "命中，但被上面的压着", C.warn }, idle = { "未命中", C.faint },
+    off = { "已停用", C.faint } }
+local UNBOUND = "-"
 local NUM_OPS = { "<=", "<", ">=", ">", "==" }
 local ENUM_OPS = { "==", "~=" }
 
@@ -210,10 +212,12 @@ local function states_section(ctx, x, y, w)
     local data = st.conditions.current.data
     local cy = y
     W.h2("状态", x, cy); cy = cy + 28
-    D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效", x, cy, C.faint, W.small(), w); cy = cy + 24
+    D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效；组合选「-」可临时停用", x, cy, C.faint, W.small(), w); cy = cy + 24
     local clip_ids = {}
     for id in pairs(data.clips) do clip_ids[#clip_ids + 1] = id end
     table.sort(clip_ids)
+    local clip_labels = { UNBOUND }
+    for k, id in ipairs(clip_ids) do clip_labels[k + 1] = id end
     local status = live.cond and live.cond.status or {}
     s.closed = s.closed or {}
     for si, state in ipairs(data.states) do
@@ -228,11 +232,12 @@ local function states_section(ctx, x, y, w)
             D.icon_tri(x + 12, cy + 22, 4, not closed, C.brass)
             if I.click(x + 4, cy + 8, 18, 28) then s.closed[si] = not closed end
             D.text_mid(tostring(si), x + 22, cy + 8, 28, C.faint, W.mono())
-            local ci = 1
-            for k, id in ipairs(clip_ids) do if id == state.clip then ci = k end end
-            local ch, i = W.select("st_clip" .. si, x + 38, cy + 8, min(200, w * 0.3), 28, clip_ids, ci, { placeholder = state.clip })
-            if ch then edit(ctx, function(d) d.states[si].clip = clip_ids[i] end) end
-            local stx = STATUS[status[si] or "idle"]
+            -- "-" binds no combination: the backend skips the state, so it works as a switch-off
+            local ci = state.clip == "" and 1 or nil
+            for k, id in ipairs(clip_ids) do if id == state.clip then ci = k + 1 end end
+            local ch, i = W.select("st_clip" .. si, x + 38, cy + 8, min(200, w * 0.3), 28, clip_labels, ci, { placeholder = state.clip })
+            if ch then edit(ctx, function(d) d.states[si].clip = i == 1 and "" or clip_ids[i - 1] end) end
+            local stx = STATUS[status[si] or (state.clip == "" and "off" or "idle")]
             local chx = x + 48 + min(200, w * 0.3)
             local chw = W.chip(stx[1], chx, cy + 13, stx[2])
             local bx = x + w - 10
@@ -355,9 +360,10 @@ local function clips_section(ctx, x, y, w)
                 ctx.call("cond_preview", { clip = s.preview })
             end
             if W.tbutton("删除", x + w - 60, cy + 11, { kind = "danger" }) then
+                -- states keep their rules and fall back to "-" (switched off)
                 edit(ctx, function(d)
                     d.clips[id] = nil
-                    for i = #d.states, 1, -1 do if d.states[i].clip == id then table.remove(d.states, i) end end
+                    for _, ds in ipairs(d.states) do if ds.clip == id then ds.clip = "" end end
                 end)
             end
             if open then
