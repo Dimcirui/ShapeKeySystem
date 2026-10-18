@@ -15,6 +15,7 @@ local T = require("ShapeKeySystem_UI.Theme")
 local D = {}
 
 D.S = 1.0
+D.FS = 1.0   -- text size on top of D.S (setting font_scale); only fonts change, not the layout
 local floor, max, min = math.floor, math.max, math.min
 
 local clip_stack = {}
@@ -140,11 +141,13 @@ local function bind_api()
     if src == "imgui" then bind_imgui() elseif type(src) == "table" then bind_d2d(src) end
 end
 
--- switch backends (fonts, text sizes and images belong to one backend)
+-- switch backends (fonts and text sizes belong to one backend). Images stay: d2d loads them once in
+-- its init callback, which can run before the first frame picks the backend; `D.images` limits
+-- their use to the d2d backend.
 function D.set_backend(name)
     if name == D.backend then return end
     D.backend = name
-    fonts, measure_cache, measure_count, images = {}, {}, 0, {}
+    fonts, measure_cache, measure_count = {}, {}, 0
     A_src = nil
     DL = nil
 end
@@ -162,15 +165,16 @@ local function refresh_surface()
 end
 
 -- 由 Panel.draw 调用；尺寸暂不可用时返回 false，让本次绘制停止并在下次回调重试。
-function D.reset_frame(scale)
+function D.reset_frame(scale, font_scale)
     bind_api()
     if not refresh_surface() then return false end
     if D.backend == "imgui" then
         local ok, dl = pcall(imgui.get_background_draw_list)
         DL = ok and dl or nil
     end
-    if scale ~= D.S then
-        D.S = scale
+    font_scale = font_scale or 1.0
+    if scale ~= D.S or font_scale ~= D.FS then
+        D.S, D.FS = scale, font_scale
         fonts, measure_cache, measure_count = {}, {}, 0
     end
     clip_stack, clip = {}, nil
@@ -184,7 +188,7 @@ function D.font(size, bold, mono)
     local key = size * 4 + (bold and 1 or 0) + (mono and 2 or 0)
     local f = fonts[key]
     if f == nil then
-        local px = max(6, floor(size * D.S + 0.5))
+        local px = max(6, floor(size * D.S * D.FS + 0.5))
         local ok, made = pcall(A.new_font, mono and T.font.mono or T.font.family, px, bold == true)
         f = (ok and made) or false
         fonts[key] = f

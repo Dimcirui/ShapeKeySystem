@@ -1,12 +1,15 @@
 -- ShapeKeySystem: observe native inputs and save diagnostic recordings.
 --
 -- Adapters return plain snapshots before weight writes. Recordings retain no engine objects;
--- unavailable sources end the recording, so character rebuilds never join two rigs in one take.
+-- unavailable sources end a diagnostic recording, so character rebuilds never join two rigs in one take.
+-- An adapter with `native_export` converts the take into its playback format instead of the
+-- diagnostic file and keeps it running through gaps; `native_sample` trims what each sample keeps.
 local U = require("ShapeKeySystem_Core.Util")
 local N = {}
 N.state = { available = false, recording = false, samples = 0, elapsed = 0, rows = {}, status = "" }
 local state = N.state
 local recording, baseline, summary = nil, nil, {}
+local export   -- the recording adapter's native_export, kept for a retried save
 local pending, next_sample, next_live = nil, 0, 0
 local sequence = 0
 
@@ -43,16 +46,25 @@ function N.finish(reason)
     r.reason, r.summary = r.reason or reason or "手动停止", r.summary or U.copy(summary)
     r.duration = r.duration or state.elapsed
     if #r.samples == 0 then state.status = "没有采样数据"; return false end
-    sequence = sequence + 1
-    local path = U.path("native_signals_" .. r.game .. "_" .. os.date("%Y%m%d_%H%M%S") .. "_" .. sequence .. ".json")
-    -- Existing files are preserved even when a script reset restarts the sequence.
-    while U.file_exists(path) do
-        sequence = sequence + 1
-        path = U.path("native_signals_" .. r.game .. "_" .. os.date("%Y%m%d_%H%M%S") .. "_" .. sequence .. ".json")
+    local data, dir, prefix = r, nil, "native_signals_" .. r.game
+    if export then
+        local ok, converted, folder = pcall(export, r)
+        -- a take that cannot be converted cannot be retried either
+        if not ok then N.unsaved = nil; state.status = "录制无法转换：" .. tostring(converted):gsub("^.-:%d+: ", ""); return false end
+        data, dir, prefix = converted, folder, r.game
     end
-    local ok = U.save_json(path, r)
-    state.status = ok and ("已保存：" .. path) or "保存失败，可点击重试保存"
+    local function name()
+        local file = prefix .. "_" .. os.date("%Y%m%d_%H%M%S") .. "_" .. sequence .. ".json"
+        return dir and U.path(dir, file) or U.path(file)
+    end
+    sequence = sequence + 1
+    local path = name()
+    -- Existing files are preserved even when a script reset restarts the sequence.
+    while U.file_exists(path) do sequence = sequence + 1; path = name() end
+    local ok = U.save_json(path, data)
+    state.status = ok and ((export and "已保存，可在面部动画测试中播放：" or "已保存：") .. path) or "保存失败，可点击重试保存"
     if ok then state.file, N.unsaved = path, nil else N.unsaved = r end
+    if ok and export and N.on_export then N.on_export() end
     return ok
 end
 
@@ -68,7 +80,30 @@ function N.command(adapter, args)
     return true
 end
 
-function N.tick(adapter, stable)
+local function begin(adapter, cmd)
+    baseline, summary = nil, {}
+    state.source = nil
+    recording = { schema = "sks.native-signals/1", game = adapter.id, label = cmd.label,
+        rate_hz = 20, position_unit = "metre", rotation_order = "xyzw", samples = {}, started = os.clock() }
+    state.recording, state.samples, state.elapsed, state.status = true, 0, 0, "录制中（最长 90 秒）"
+    next_sample, export = 0, adapter.native_export
+end
+
+-- Appends a sample at the recording rate; values nil marks a gap (no readable source).
+local function append(now, values, status)
+    local r = recording
+    if not r or now < next_sample then return end
+    next_sample = now + 0.05
+    local t = now - r.started
+    r.samples[#r.samples+1] = { t = t, values = values }
+    state.samples, state.elapsed, state.status = #r.samples, t, status
+    if t >= 90 or #r.samples >= 1801 then N.finish("达到录制时长") end
+end
+
+-- stable: true samples, false ends the take, "hold" pauses sampling (a cutscene segment settling).
+-- context.face is the face SKS currently drives. A take saved through `native_export` ends only on
+-- stop or at the limit: unreadable stretches and source changes are recorded as gaps instead.
+function N.tick(adapter, stable, context)
     state.available = type(adapter.native_snapshot) == "function"
     if not state.available then return end
     local cmd = pending
@@ -79,6 +114,20 @@ function N.tick(adapter, stable)
         return
     end
     if cmd and cmd.action == "stop" then N.finish(); return end
+    local now = os.clock()
+    if stable ~= true then
+        if adapter.native_export and cmd and cmd.action == "start" then begin(adapter, cmd); cmd = nil end
+        if recording and export then
+            pending = cmd
+            append(now, nil, "录制中 · " .. (stable == "hold" and "等待过场片段稳定" or "角色暂不可用") .. "，此段记为 0")
+            return
+        end
+    end
+    if stable == "hold" then
+        pending = cmd
+        if recording or cmd then state.status = (recording and "录制中 · " or "") .. "等待过场片段稳定" end
+        return
+    end
     if not stable then
         N.finish("角色暂不可用")
         baseline, summary, state.rows = nil, {}, {}
@@ -86,27 +135,22 @@ function N.tick(adapter, stable)
         if cmd then state.status = "角色尚未就绪" end
         return
     end
-    if cmd and cmd.action == "start" then
-        baseline, summary = nil, {}
-        state.source = nil
-        recording = { schema = "sks.native-signals/1", game = adapter.id, label = cmd.label,
-            rate_hz = 20, position_unit = "metre", rotation_order = "xyzw", samples = {}, started = os.clock() }
-        state.recording, state.samples, state.elapsed, state.status = true, 0, 0, "录制中（最长 90 秒）"
-        next_sample = 0
-    end
+    if cmd and cmd.action == "start" then begin(adapter, cmd) end
     if cmd and cmd.action == "baseline" then baseline, summary = nil, {} end
-    local now = os.clock()
     local due = recording and now >= next_sample or cmd ~= nil or N.viewing and now >= next_live
     if not due then return end
-    local ok, snapshot, why = pcall(adapter.native_snapshot)
+    local ok, snapshot, why = pcall(adapter.native_snapshot, context)
     if not ok or not snapshot then
+        local reason = tostring(ok and why or snapshot)
+        state.ready = false
+        if recording and export then append(now, nil, "录制中 · 暂无信号，此段记为 0：" .. reason); return end
         N.finish("采样中断")
-        state.ready, state.status = false, tostring(ok and why or snapshot)
+        state.status = reason
         return
     end
     state.ready = true
     if state.source ~= snapshot.source then
-        if state.source ~= nil then N.finish("角色或部件已重建") end
+        if state.source ~= nil and not (recording and export) then N.finish("角色或部件已重建") end
         baseline, summary = nil, {}
         state.source = snapshot.source
     end
@@ -122,14 +166,9 @@ function N.tick(adapter, stable)
         if saved then state.file = path end
     end
     if recording and now >= next_sample then
-        local r = recording
-        next_sample = now + 0.05
-        local t = now - r.started
-        r.calibration = r.calibration or snapshot.calibration
+        recording.calibration = recording.calibration or snapshot.calibration
         snapshot.calibration = nil
-        r.samples[#r.samples+1] = { t = t, values = snapshot }
-        state.samples, state.elapsed = #r.samples, t
-        if t >= 90 or #r.samples >= 1801 then N.finish("达到录制时长") end
+        append(now, adapter.native_sample and adapter.native_sample(snapshot) or snapshot, "录制中（最长 90 秒）")
     end
 end
 

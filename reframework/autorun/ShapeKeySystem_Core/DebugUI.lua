@@ -245,6 +245,17 @@ function D.draw()
     local changed, v = imgui.checkbox("启用", rt.enabled)
     if changed then call("set_enabled", { on = v }) end
     imgui.same_line()
+    changed, v = imgui.checkbox("表情驱动", st.settings.expression_enabled ~= false)
+    if changed then call("set_setting", { key = "expression_enabled", value = v }) end
+    if st.settings.hold_available then
+        imgui.same_line()
+        changed, v = imgui.checkbox("禁用骨骼表情", st.settings.hold_face_bones == true)
+        if changed then call("set_setting", { key = "hold_face_bones", value = v }) end
+        if st.settings.hold_face_bones and (st.settings.hold_status or "") ~= "" then
+            imgui.same_line(); imgui.text(st.settings.hold_status)
+        end
+    end
+    imgui.same_line()
     if imgui.button("重新扫描") then call("rescan") end
 
     -- profile
@@ -256,11 +267,8 @@ function D.draw()
     if #labels > 0 then
         changed, v = imgui.combo("表情配置", cur, labels)
         if changed then call("set_profile", { id = plist[v].id }) end
-    end
-    local cov = ex.coverage
-    if cov then
-        imgui.text(string.format("ARKit 覆盖 %d/%d  扩展 %d  推荐: %s", cov.arkit_hit, cov.arkit_total, cov.extra,
-            tostring(cov.recommended)))
+        imgui.same_line()
+        if imgui.button("自动匹配") then call("auto_match_profile", {}) end
     end
 
     changed, v = imgui.slider_float("整体表情强度", ex.master_gain, 0, 2); if changed then call("set_master_gain", { value = v }) end

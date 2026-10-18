@@ -8,6 +8,7 @@ reframework/data/ShapeKeySystem/re4r_input_status.json
 reframework/data/ShapeKeySystem/native_signals_*.json
 reframework/data/ShapeKeySystem/native_snapshot_*.json
 reframework/data/ShapeKeySystem/Runtime/
+reframework/data/ShapeKeySystem/mocap/
 
 # third-party runtime (install separately)
 reframework/autorun/reframework-d2d.lua
@@ -34,3 +35,4 @@ dist/
 
 # loacl
 AGENTS.md
+native/build/

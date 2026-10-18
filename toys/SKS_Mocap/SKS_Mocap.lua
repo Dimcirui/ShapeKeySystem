@@ -3,6 +3,9 @@
 -- Input: reframework/data/SKS_Mocap/live.json, written by ifm_bridge.py in the same folder.
 -- Loads after ShapeKeySystem.lua (file order), so in LateUpdateBehavior our writes land last.
 -- Head turn (head# from the phone) is added onto Neck_0 / Neck_1 / Head after UpdateMotion.
+-- Only the 52 ARKit channels are written. Profile channels built from them with `ref` (combination
+-- correctives such as eyeWideLeft_BlinkFix) stay on SKS's game-signal path and disagree with the
+-- tracked face; SKS's own mocap (ShapeKeySystem_Core/Mocap.lua) re-evaluates those from mocap values.
 
 local U      = require("ShapeKeySystem_Core.Util")
 local Names  = require("ShapeKeySystem_Core.Names")

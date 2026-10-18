@@ -1,5 +1,5 @@
--- ShapeKeySystem panel, advanced page "预设": the parent preset (binding) in effect and its lookup
--- chain, where the gains come from, sculpt presets (load / delete) and expression profiles.
+-- ShapeKeySystem panel, advanced page "总体绑定与配置": the parent preset (binding) in effect and its
+-- lookup chain, where the gains come from, sculpt presets (load / delete) and expression profiles.
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")

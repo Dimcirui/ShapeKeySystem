@@ -24,6 +24,8 @@ local Labels  = require("ShapeKeySystem_Core.Labels")
 local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
 local ActorInstances = require("ShapeKeySystem_Core.ActorInstances")
 local Proc    = require("ShapeKeySystem_Core.Procedural")
+local Mocap   = require("ShapeKeySystem_Core.Mocap")
+local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -39,11 +41,22 @@ local DEFAULTS = {
     -- Delete: Home opens ArmorVariantManager's panel (same audience), End is the game's pause key,
     -- Insert is REFramework's menu. hotkey_rev 2 = the End -> Delete move has been applied.
     hotkey = "Delete", hotkey_migrated = false, hotkey_rev = 2, ui_scale = 1.0, language = "zh",
+    -- Delete alone by default; with hotkey_combo the modifier must be held too
+    hotkey_combo = false, hotkey_mod = "Ctrl",
+    -- panel text size on top of ui_scale (ImGui draws small by default)
+    font_scale = 1.0,
+    -- block the game's controls while the panel is open
+    block_input = true,
     -- show shape key labels (builtin/labels.json) instead of mesh names; Chinese only for now
     translate_keys = false,
-    scene_search_always = false, periodic_scan_sec = 10, write_epsilon = 0.001, clamp = true,
+    scene_search_always = true, periodic_scan_sec = 5, write_epsilon = 0.001, clamp = true,
     -- drive the hunter while a cutscene plays (released on skip / stop, re-armed per segment)
     cutscene_drive = true,
+    -- off: the game's expression no longer reaches the shape keys (sculpt, conditions, touch and
+    -- other plugins still do)
+    expression_enabled = true,
+    -- hold the face's expression bones at the neutral pose so only the shape keys show expression
+    hold_face_bones = false,
     -- sculpt slider upper end, for every key (1 = the authored shape; 2 = exaggerated)
     sculpt_max = 1.0,
     -- conditional expression set used when no parent preset names one ("" = none)
@@ -147,6 +160,9 @@ SKS.state, SKS.live = state, live
 state.playback = Playback.state
 state.native_signals = NativeSignals.state
 state.scene.additional = ActorInstances.state
+NativeSignals.on_export = function() Playback.refresh() end
+state.mocap = Mocap.view
+
 
 -- ---------------------------------------------------------------- internal
 local C = {
@@ -157,7 +173,6 @@ local C = {
     pending_zero = {}, save_at = nil,
     P = {}, Pbuf = {}, inv_full = 100, dict_params = {},
     want_signals = false,
-    paused = nil,         -- reason string while the game gate is closed
     menu = false,         -- menu mode: master player not set up (title, save select, loading)
     prev_kind = nil,      -- Guard.game_stable kind of the previous frame (nil = stable)
     -- M2
@@ -218,15 +233,28 @@ end
 -- Let go of every engine object we hold (no writes). Used when parts are rebuilt or a cutscene
 -- takes over; references that outlive the objects crashed the game (SKS_Mocap investigation).
 local MENU_SCAN_FRAMES = 180
+-- rescan delay after a part or mesh change while driving: meshes found again resume writing at once
+-- (their warm-up survives the drop in C.warm), new ones still warm up
+local QUICK_RESCAN = 2
 
 local function drop_rigs(reason, rescan_after)
     ActorInstances.release(reason)
     Playback.stop(false, "角色或场景变化，录制播放已停止：" .. tostring(reason))
     if #C.rigs > 0 or #C.pending_zero > 0 then log("released rigs: %s", reason) end
+    -- warm-up by mesh address only (numbers, no engine references); the next scan consumes it
+    C.warm = C.warm or {}
+    for _, r in ipairs(C.rigs) do
+        for _, t in ipairs(r.targets) do
+            if t.addr then C.warm[t.addr] = { stable = t.stable, ready = t.ready } end
+        end
+    end
     C.rigs, C.parts, C.instances, C.pending_zero = {}, {}, {}, {}
     Sculpt.clear_targets()
     Cnd.reset()
     Scene.no_targets = {}
+    Mocap.drop_refs()
+    FaceHold.release()
+    C.driven_frame, C.held_frame = nil, nil
     Guard.release_refs()
     if rescan_after then
         C.scan_at = { C.frame + rescan_after }
@@ -270,8 +298,7 @@ end
 
 -- sculpt + expression targets of ready meshes back to 0 (disable / script reset)
 local function zero_sculpt()
-    if SKS.adapter.strict_bounds and
-        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then return end
+    if SKS.adapter.strict_bounds and Scene.children_signature(Scene.primary_root()) ~= C.sig then return end
     pcall(Sculpt.zero_all)
 end
 
@@ -303,9 +330,11 @@ end
 
 local function build_settings_state()
     local st = state.settings
-    for _, k in ipairs({ "hotkey", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
+    for _, k in ipairs({ "hotkey", "hotkey_combo", "hotkey_mod", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
                          "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend",
-                         "translate_keys" }) do st[k] = cfg[k] end
+                         "translate_keys", "expression_enabled", "hold_face_bones", "font_scale", "block_input" }) do st[k] = cfg[k] end
+    st.hold_available = SKS.adapter.expression_joints ~= nil and SKS.adapter.face_layers ~= nil
+    st.hold_status = FaceHold.status
     st.scene_search_available = SKS.adapter.scene_search ~= false
     st.window = U.copy(cfg.window)
     state.runtime.enabled = cfg.enabled
@@ -943,21 +972,22 @@ local function do_scan()
                              known = (not Writer.M_CNAME or SKS.adapter.hash_names) and known_names() or nil })
     if cfg.enabled and SKS.adapter.prepare_parts then SKS.adapter.prepare_parts(res.instances or res.parts) end
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
-    -- rescans neither pause writing nor rewrite every channel
-    local old = {}
+    -- rescans neither pause writing nor rewrite every channel. A mesh that was dropped keeps only
+    -- its warm-up: every channel is written again.
+    local old, warm = {}, C.warm or {}
     for _, r in ipairs(C.rigs) do
         for _, t in ipairs(r.targets) do if t.addr then old[t.addr] = t end end
     end
     for _, r in ipairs(res.rigs) do
         for _, t in ipairs(r.targets) do
-            local o = t.addr and old[t.addr]
+            local o = t.addr and (old[t.addr] or warm[t.addr])
             if o then
                 t.stable, t.ready = o.stable, o.ready
                 if o.count == t.count then t.last = o.last end
             end
         end
     end
-    old = nil
+    old, C.warm = nil, nil
     C.rigs, C.parts, C.sig, C.mesh_name_of = res.rigs, res.parts, res.sig, res.mesh_name_of
     C.instances = res.instances or res.parts
     refresh_rig_params()
@@ -989,7 +1019,9 @@ local function do_scan()
     local b = C.binding
     local want = b and b.data and b.data.profile
     local man = C.profile_manual
-    if man and man.hit ~= (b and b.hit or nil) then C.profile_manual, man = nil, nil end   -- other parts / preset
+    -- other parts / preset. A scan that finds no binding (loading, menus, an equipment rebuild in
+    -- progress) keeps the user's choice: only a different binding replaces it.
+    if man and b and man.hit ~= b.hit then C.profile_manual, man = nil, nil end
     if man and want and Profile.registry[man.id] then want = nil end                     -- the user's choice stands
     if want and not Profile.registry[want] then
         if C.missing_profile ~= want then
@@ -1026,17 +1058,6 @@ local function do_scan()
     C.select_conditions()
     rebuild_sculpt()
     build_presets_state()
-    -- the current profile drives nothing on these parts but another one would: switch. Only
-    -- without a parent preset that names a profile.
-    local cov = state.expression.coverage
-    if not want and C.prog.n > 0 and not state.mapping.dirty and #res.rigs == 0 and cov and cov.recommended and cov.recommended ~= C.prog.id and (cov.recommended_hits or 0) >= 3 then
-        local from = C.prog.name
-        if apply_profile(cov.recommended, false) then
-            cfg.profile = cov.recommended; save_soon()
-            notice("info", string.format("当前部件没有 %s 的通道，已切换到 %s", from, C.prog.name))
-            return
-        end
-    end
     bump("scene")
     build_expression_state()
     local tn = {}
@@ -1125,13 +1146,14 @@ local function drive(rig, primary)
     -- conditional clips and other plugins change a copy of the expression weights: rig.W is also
     -- the smoothing state of the next frame and must stay the pure expression
     local out, ext_skip = rig.W, nil
+    local expr_on = cfg.expression_enabled ~= false
     local cond_on = rig.primary and C.cond_live and CondExpr.any()
     local touch_on = Touch.any()
-    if cond_on or touch_on or Ext.any() then
+    if not expr_on or cond_on or touch_on or Ext.any() then
         out = rig.O or {}
         rig.O = out
         local Wt = rig.W
-        for s = 1, prog.n do out[s] = Wt[s] end
+        for s = 1, prog.n do out[s] = expr_on and Wt[s] or 0 end
         if cond_on then CondExpr.apply(prog, C.resolve_slot, out) end
         if touch_on then Touch.apply(prog, C.resolve_slot, out) end
         if Ext.any() then ext_skip = Ext.apply(prog, C.resolve_slot, out) end
@@ -1234,7 +1256,7 @@ local function cs_end()
     C.cs_scene_search = false
 end
 
--- true when the experimental mode may drive on this frame
+-- segment bookkeeping for the cutscene mode: when to rescan for the cutscene copy
 local function cutscene_gate(f)
     if not CS.active then
         CS.active = true
@@ -1262,25 +1284,48 @@ local function cutscene_gate(f)
     return true
 end
 
+-- a mocap channel reaches the hunter: its expression slot drives a mesh key on the primary rig,
+-- or a sculpt key carries its name (External.for_key matches those by normalised name)
+local function mocap_reaches(name, slot)
+    local r = C.rigs[1]
+    if slot and r then
+        for _, t in ipairs(r.targets) do
+            for k = 1, t.count do if t.slots[k] == slot then return true end end
+        end
+    end
+    local n = Ext.norm(name)
+    for _, k in ipairs(Sculpt.K.keys) do
+        if k.owner ~= "expression" and Ext.norm(k.name) == n then return true end
+    end
+    return false
+end
+C.mocap_ctx = { resolve = function(name) return C.resolve_slot(name) end, reaches = mocap_reaches,
+                expr = live.weight }
+
 local function tick()
     Playback.tick(false)
     C.frame = C.frame + 1
     local f = C.frame
     if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
-    Sculpt.frame = f
-    local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
-    NativeSignals.tick(SKS.adapter, stable)
-    local fallback_expression, fallback_eyes = fallback_tuning()
-    ActorInstances.tick(f, { enabled = cfg.enabled, cutscene_drive = cfg.cutscene_drive,
-        profile = cfg.profile, expression = fallback_expression, eyes = fallback_eyes,
-        inv_full = C.inv_full, clamp = cfg.clamp, epsilon = cfg.write_epsilon, known = known_names() })
-    if SKS.adapter.strict_bounds and #(C.instances or {}) > 0 and
-        (not stable or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
-        drop_rigs(why or "part signature changed", Guard.SETTLE_FRAMES)
+    local now = clock()
+    local dt = min(now - (C.last_tick or now), 0.1)
+    C.last_tick = now
+    local ext_rev = Ext.rev
+    local mc = C.mocap_ctx
+    mc.prog, mc.gen = C.prog, state.scene.rev
+    if Mocap.tick(dt, mc) then
+        Sculpt.mark_dirty()
+        if Ext.rev ~= ext_rev then C.build_external_state() end
+
     end
-    if not stable and C.cond_live ~= false then
-        C.cond_live = false
-        CondExpr.reset(); Cnd.reset(); Touch.reset()
+    Sculpt.frame = f
+    -- The gate pauses nothing: loading, rebuilds and cutscenes keep driving whatever rigs exist.
+    -- Its kind only picks who is driven: "playing" searches the scene for the cutscene copy,
+    -- "setup" (title / save select) drives the preview hunters.
+    local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
+    if SKS.adapter.strict_bounds and #(C.instances or {}) > 0
+        and Scene.children_signature(Scene.primary_root()) ~= C.sig then
+        drop_rigs("part signature changed", QUICK_RESCAN)
     end
     Trail.frame = f
     local gate_now = stable and "stable" or why
@@ -1291,7 +1336,8 @@ local function tick()
     local prev_kind = C.prev_kind
     C.prev_kind = (not stable) and kind or nil
     local menu = (not stable) and kind == "setup"
-    if not stable and kind == "playing" and cfg.cutscene_drive then
+    local cutscene = (not stable) and kind == "playing" and cfg.cutscene_drive
+    if cutscene then
         -- a load finished: a new segment starts, whatever the hooks said before
         if prev_kind == "load" and CS.active then
             Trail.event("cutscene load -> playing: new segment")
@@ -1299,27 +1345,21 @@ local function tick()
             drop_rigs("cutscene loaded", nil)
             C.scan_at = {}
         end
-        local go = cutscene_gate(f)
+        cutscene_gate(f)
         state.debug.status = "cutscene: " .. CS.status
-        if not go then
-            return
-        end
-    elseif not stable and not menu then
-        -- after cutscene driving the hunter is about to be rebuilt: only let go, never write
-        local was_cs = CS.active and not CS.released
-        cs_end()
-        if C.paused ~= why then
-            C.paused = why
-            if not was_cs then zero_ready_targets(why) end
-            drop_rigs(why, nil)
-            C.scan_at = {}
-            state.debug.status = "paused: " .. why
-        end
-        return
     elseif CS.active then
         cs_end()
-        drop_rigs("cutscene over", Guard.SETTLE_FRAMES)
+        drop_rigs("cutscene over", QUICK_RESCAN)
     end
+    -- the recorder follows the driven face; in a cutscene between segments there is none yet
+    -- (rigs are dropped at each segment start), so the take waits instead of ending
+    local face = C.rigs[1] and C.rigs[1].face
+    NativeSignals.tick(SKS.adapter, (face or not cutscene) and true or "hold", { face = face })
+    local fallback_expression, fallback_eyes = fallback_tuning()
+    ActorInstances.tick(f, { enabled = cfg.enabled, cutscene_drive = cfg.cutscene_drive,
+        profile = cfg.profile, expression = fallback_expression, eyes = fallback_eyes,
+        expression_enabled = cfg.expression_enabled,
+        inv_full = C.inv_full, clamp = cfg.clamp, epsilon = cfg.write_epsilon, known = known_names() })
     -- menu mode (player not set up: title screen, save select, loading) drives whatever hunters
     -- the scene holds; entering or leaving it lets go of everything (the player is being built)
     if menu ~= C.menu then
@@ -1327,7 +1367,7 @@ local function tick()
         Trail.event(menu and "menu mode on" or "menu mode off")
         drop_rigs(menu and "menu mode" or "player set up", nil)
         C.scan_at = {}
-        if not C.paused then request_rescan(Guard.SETTLE_FRAMES) end
+        request_rescan(Guard.SETTLE_FRAMES)
     end
     local ev = C.menu_event
     if ev then
@@ -1340,11 +1380,6 @@ local function tick()
             request_rescan(Guard.SETTLE_FRAMES, 60, 120, 240)
         end
     end
-    if C.paused then
-        C.paused = nil
-        request_rescan(Guard.SETTLE_FRAMES)
-        state.debug.status = "resuming"
-    end
     if #C.pending_zero > 0 then
         for _, t in ipairs(C.pending_zero) do
             if t.stable >= Guard.STABLE_FRAMES and Guard.mesh_ready(t.mesh) then Writer.zero_target(t) end
@@ -1353,9 +1388,9 @@ local function tick()
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
     if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
-        drop_rigs("hunter parts changed", Guard.SETTLE_FRAMES)
+        drop_rigs("hunter parts changed", QUICK_RESCAN)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
-        drop_rigs("preview hunter changed", Guard.SETTLE_FRAMES)
+        drop_rigs("preview hunter changed", QUICK_RESCAN)
     elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         request_rescan(Guard.SETTLE_FRAMES)
     end
@@ -1377,17 +1412,25 @@ local function tick()
     if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dirty() end
     if Touch.update() then Sculpt.mark_dirty() end
     if state.runtime.ui_open then C.update_cond_live() end
-    -- only reached while the gate lets the rigs be driven: a skipped frame stops the generator's clock
     local lp = live.procedural
     lp.blink = Proc.tick(clock(), f)
     lp.mouth = Proc.out.jawOpen or 0
     lp.gaze[1], lp.gaze[2] = Proc.gaze[1], Proc.gaze[2]
     if cfg.enabled and C.prog then
-        for i, rig in ipairs(C.rigs) do
-            local ok, err = pcall(drive, rig, i == 1)
-            if not ok or err then
-                drop_rigs(string.format("%s: %s", rig.label, tostring(err)), Guard.SETTLE_FRAMES)
-                break
+        -- the head turn after the next UpdateMotion may touch the master player only if this
+        -- tick drove it (drop_rigs clears the mark)
+        local r1 = C.rigs[1]
+        C.driven_frame = (r1 and r1.primary) and f or nil
+        C.held_frame = f
+        -- while the face bones' neutral pose is captured fcParam reads 0: the meshes keep last
+        -- frame's weights instead
+        if not FaceHold.capturing() then
+            for i, rig in ipairs(C.rigs) do
+                local ok, err = pcall(drive, rig, i == 1)
+                if not ok or err then
+                    drop_rigs(string.format("%s: %s", rig.label, tostring(err)), QUICK_RESCAN)
+                    break
+                end
             end
         end
         update_live()
@@ -1397,13 +1440,37 @@ local function tick()
         local t0 = clock()
         local ok, w, err = pcall(Sculpt.tick, C.edit_mode, C.preview, cfg.write_epsilon)
         if not ok or err then
-            drop_rigs("sculpt: " .. tostring(ok and err or w), Guard.SETTLE_FRAMES)
+            drop_rigs("sculpt: " .. tostring(ok and err or w), QUICK_RESCAN)
         else
             prof.writes = prof.writes + w
         end
         prof.write = prof.write + (clock() - t0)
     end
     if C.save_at and f >= C.save_at then save_now() end
+end
+
+local function update_hold()
+    local want = cfg.enabled and cfg.hold_face_bones and C.held_frame and C.held_frame == C.frame
+    if want then
+        local faces = {}
+        for _, rig in ipairs(C.rigs) do faces[#faces + 1] = rig.face end
+        FaceHold.update(SKS.adapter, faces)
+    elseif FaceHold.active() then
+        FaceHold.release()
+    end
+    if state.settings.hold_status ~= FaceHold.status then build_settings_state() end
+end
+
+-- re.on_application_entry("UpdateMotion"): face bone hold on every driven rig, mocap head turn on
+-- the master player
+function SKS.update_motion()
+    local ok, err = pcall(update_hold)
+    if not ok then
+        FaceHold.release()
+        FaceHold.status = "禁用骨骼表情出错：" .. tostring(err)
+    end
+    if not (C.driven_frame and C.driven_frame == C.frame and Mocap.wants_head()) then return end
+    Mocap.update_motion(Scene.primary_root(), Writer.M_JBN)
 end
 
 -- 计时覆盖提前返回和延迟保存；游戏动画回调与面板绘制另行计量。
@@ -1438,7 +1505,7 @@ function cmds.set_enabled(a)
     if type(a.on) ~= "boolean" then return false, "E_BAD_ARGS", "on must be boolean" end
     cfg.enabled = a.on
     if not a.on then Playback.request("stop") end
-    if not a.on then queue_zero_all(); zero_sculpt() else Sculpt.mark_dirty(); request_rescan(1) end
+    if not a.on then queue_zero_all(); zero_sculpt(); FaceHold.release() else Sculpt.mark_dirty(); request_rescan(1) end
     build_settings_state(); save_soon()
     return true
 end
@@ -1455,7 +1522,11 @@ local SETTING_TYPES = {
     clamp = "boolean", window = "table", advanced = "boolean",
     cutscene_drive = "boolean", sculpt_max = { 1, Sculpt.MAX_LIMIT }, face_style = "string",
     ui_backend = "string", translate_keys = "boolean",
+    expression_enabled = "boolean", hold_face_bones = "boolean",
+    font_scale = { 0.8, 1.6 }, block_input = "boolean",
+    hotkey_combo = "boolean", hotkey_mod = "string",
 }
+local HOTKEY_MODS = { Ctrl = true, Shift = true, Alt = true }
 local UI_BACKENDS = { auto = true, d2d = true, imgui = true }
 function cmds.set_setting(a)
     local t = SETTING_TYPES[a.key]
@@ -1466,11 +1537,13 @@ function cmds.set_setting(a)
     elseif type(v) ~= t then
         return false, "E_BAD_ARGS", t .. " expected"
     end
+    if a.key == "hotkey_mod" and not HOTKEY_MODS[v] then return false, "E_BAD_ARGS", "hotkey_mod: Ctrl / Shift / Alt" end
     if a.key == "ui_backend" and not UI_BACKENDS[v] then return false, "E_BAD_ARGS", "ui_backend: auto / d2d / imgui" end
     if a.key == "window" then v = { x = tonumber(v.x) or 0, y = tonumber(v.y) or 0, w = tonumber(v.w) or 900, h = tonumber(v.h) or 640 } end
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end
     if a.key == "sculpt_max" then cfg.sculpt_max = Sculpt.set_max(v); build_sculpt_state() end
+    if a.key == "hold_face_bones" and not v then FaceHold.release(); FaceHold.status = "" end
     if a.key == "translate_keys" or a.key == "language" then
         build_sculpt_state(); build_expression_state()   -- the expression build refreshes a preview too
     end
@@ -1498,6 +1571,19 @@ function cmds.preview_profile(a)
     C.preview_profile = a.id
     build_preview_state()
     return true
+end
+
+-- 「自动匹配」: the profile with the most channels on the worn parts (coverage.recommended); scans
+-- never switch on their own
+function cmds.auto_match_profile()
+    local cov = state.expression.coverage
+    local id = cov and cov.recommended
+    if not id or (cov.recommended_hits or 0) <= 0 then return false, "E_NOT_FOUND", "当前部件没有能匹配的表情配置" end
+    if C.prog and id == C.prog.id then return true, nil, nil, { id = id, changed = false } end
+    local ok, code, msg = cmds.set_profile({ id = id })
+    if not ok then return false, code, msg end
+    notice("info", string.format("已切换到匹配度最高的表情配置：%s", C.prog.name))
+    return true, nil, nil, { id = id, changed = true }
 end
 
 function cmds.set_profile(a)
@@ -1592,6 +1678,32 @@ function cmds.set_eye_cfg(a)
 end
 
 -- patch = { enabled, mode, frequency, speed, blink = { interval_min, ... } }; unknown keys are ignored
+-- face mocap (Mocap.lua): settings patch; user/mocap.json is written shortly after, unless only
+-- the test pose moved
+function cmds.mocap(a)
+    local ok, err, msg = Mocap.patch(a.patch)
+    if not ok then return ok, err, msg end
+    local p = a.patch
+    if next(p) ~= "test" or next(p, "test") ~= nil then Mocap.save_soon() end
+    return true
+end
+
+-- look up this PC's LAN IPs again (state.mocap.native.ips, shown in the 基础配置 box)
+function cmds.mocap_refresh_ips()
+    Mocap.refresh_ips()
+    return true
+end
+
+-- what = "face" (neutral face from the current frame) / "head" (straight-ahead head) / "clear"
+function cmds.mocap_calibrate(a)
+    if a.what == "face" then Mocap.calibrate_face()
+    elseif a.what == "head" then Mocap.calibrate_head()
+    elseif a.what == "clear" then Mocap.cfg.neutral = {}
+    else return false, "E_BAD_ARGS", "what: face / head / clear" end
+    if not Mocap.save() then return false, "E_IO", "mocap.json save failed" end
+    return true
+end
+
 function cmds.set_procedural(a)
     local p = a.patch
     if type(p) ~= "table" then return false, "E_BAD_ARGS", "patch must be a table" end
@@ -2155,6 +2267,7 @@ function SKS.init(adapter)
     Proc.configure(cfg.procedural)
     Names.load_aliases()
     Labels.load()
+    Mocap.load()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
     for _, s in ipairs(sig.list) do
@@ -2183,6 +2296,16 @@ end
 -- skip / stop / unload (pre-hook): let go before the game destroys the cutscene actors
 function SKS.on_release(reason)
     Trail.event("hook %s (cs active %s, released %s, rigs %d)", tostring(reason), tostring(CS.active), tostring(CS.released), #C.rigs)
+    -- MH Wilds calls requestStop on every monster hit, cutscene or not (HP loss from equipment
+    -- skills does not); releasing there blanked the face for a full rescan delay. With no
+    -- cutscene and only the master hunter driven nothing is torn down, so stop / skip are ignored.
+    -- unload still releases: it follows a cutscene while the gate already reads stable, with the
+    -- cutscene copy still driven.
+    if reason ~= "unload" and C.last_gate == "stable" then
+        local all_primary = true
+        for _, r in ipairs(C.rigs) do if not r.primary then all_primary = false end end
+        if all_primary then Trail.event("hook %s ignored: no cutscene", tostring(reason)); return end
+    end
     zero_ready_targets(reason)   -- the meshes are still valid in the pre-hook
     CS.released, CS.released_at = true, C.frame
     CS.status = tostring(reason) .. ": released until the next segment"
@@ -2238,29 +2361,28 @@ function SKS.shutdown()
     NativeSignals.finish("脚本重置")
     Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
+    FaceHold.release()
     C.unpublish_api()
-    if SKS.adapter.strict_bounds and
-        (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
+    if SKS.adapter.strict_bounds and Scene.children_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("shutdown after rebuild", nil)
     end
-    if not C.paused then
-        for _, r in ipairs(C.rigs) do
-            for _, t in ipairs(r.targets) do
-                if t.stable >= Guard.STABLE_FRAMES and Guard.mesh_ready(t.mesh) then Writer.zero_target(t) end
-            end
+    for _, r in ipairs(C.rigs) do
+        for _, t in ipairs(r.targets) do
+            if t.stable >= Guard.STABLE_FRAMES and Guard.mesh_ready(t.mesh) then Writer.zero_target(t) end
         end
-        zero_sculpt()
     end
+    zero_sculpt()
     if C.save_at then save_now() end
+    Mocap.flush()
 end
 
 -- Optional pre-animation/render preparation uses the current scan only; it keeps no second
--- target cache and never touches a mesh after a failed gate or a changed signature.
+-- target cache and never touches a mesh after a changed signature.
 function SKS.prepare_targets()
     ActorInstances.prepare()
     local A = SKS.adapter
     if not A.prepare_mesh or not cfg.enabled or #(C.instances or {}) == 0 then return end
-    if not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig then
+    if Scene.children_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("preparation after rebuild", Guard.SETTLE_FRAMES)
         return
     end

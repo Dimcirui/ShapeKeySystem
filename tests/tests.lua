@@ -120,29 +120,35 @@ check(#st.scene.rigs == 1 and #writes == n3, "rescan of the same mesh: no warm-u
 FC[52] = 0.008; ticks(1)
 check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 0.8) < 1e-6, "still writing right after rescan")
 
--- cutscene gate (cutscene_drive off)
+-- cutscene with cutscene_drive off: the gate pauses nothing, the master hunter stays driven
 check(st.settings.cutscene_drive == true, "cutscene_drive defaults to on")
 SKS.call("set_setting", { key = "cutscene_drive", value = false })
 DEMO.busy = true; ticks(1)
-check(#st.scene.rigs == 1 and st.debug.status:find("paused"), "cutscene: paused")
-check(WEIGHTS[idx("blendShape1.JawOpen")] == 0, "cutscene: weights zeroed before letting go")
-local n4 = #writes; FC[52] = 0.01; ticks(20)
-check(#writes == n4, "cutscene: nothing written while paused")
-DEMO.busy = false; ticks(40)
-check(#writes == n4, "after cutscene: settle + warm-up before writing")
-ticks(70)
+check(#st.scene.rigs == 1 and not st.debug.status:find("paused"), "cutscene: no pause")
+FC[52] = 0.01; ticks(20)
+check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 1.0) < 1e-6, "cutscene: the master hunter keeps being driven")
+DEMO.busy = false; ticks(110)
 check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 1.0) < 1e-6, "after cutscene: writing again")
 
+-- stop hook in gameplay (MH Wilds calls requestStop on hits): no cutscene, the face keeps being driven
+SKS.on_release("requestStop")
+local n4 = #writes; FC[52] = 0.004; ticks(2)
+check(#writes > n4, "stop hook with no cutscene: ignored, writing goes on")
+
 -- skip request / equipment rebuild / mesh not ready
+DEMO.busy = true; ticks(1)
 SKS.on_release("requestSkip")
 check(#st.scene.rigs == 1, "state.scene keeps last scan info")
 local n5 = #writes; FC[52] = 0.002; ticks(5)
 check(#writes == n5, "skip request: all rigs released immediately")
+DEMO.busy = false
 ticks(200)
 check(#writes > n5, "skip request: rescans on its own after settle + warm-up")
-SKS.on_rebuilt(); local n6 = #writes; ticks(20)
-check(#writes == n6, "equip rebuild: released, waiting to rescan")
-ticks(100)
+SKS.on_rebuilt(); local n6 = #writes; ticks(10)
+check(#writes == n6, "equip rebuild: released until the rescan")
+ticks(10)
+check(#writes > n6, "equip rebuild: a mesh found again resumes without a new warm-up")
+ticks(90)
 MESH_STATE.ready = false; local n7 = #writes; FC[52] = 0.009; ticks(3)
 check(#writes == n7, "mesh not ready: no writes, rig dropped")
 MESH_STATE.ready = true; ticks(130)
@@ -192,6 +198,11 @@ SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.7 }); ticks(1)
 check(math.abs(WEIGHTS[i_waist] - 0.7) < 1e-6, "set_sculpt_key writes on the next tick")
 local w1 = #writes; ticks(10)
 check(#writes == w1, "lazy: no rewrite while the value stays")
+-- rigs dropped and found again (parts change mid-combat): sculpt-only keys resume without a warm-up
+SKS.on_rebuilt(); ticks(20)
+SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.4 }); ticks(1)
+check(math.abs(WEIGHTS[i_waist] - 0.4) < 1e-6, "sculpt key after a rig drop: written on the next tick")
+SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.7 }); ticks(1)
 check(st.settings.sculpt_max == 1, "sculpt slider cap defaults to 1")
 SKS.call("set_sculpt_key", { name = "Waist_thin", value = 3 }); ticks(1)
 check(math.abs(WEIGHTS[i_waist] - 1.0) < 1e-6, "default cap: clamped to 0..1")
@@ -341,11 +352,10 @@ check(WEIGHTS[i_waist] == 0, "disable: sculpt channels zeroed")
 SKS.call("set_enabled", { on = true }); ticks(80)
 check(math.abs(WEIGHTS[i_waist] - 0.6) < 1e-6, "enable: sculpt values written again")
 
--- cutscene pause: references dropped, nothing written, values back after
+-- cutscene: sculpt edits keep being written
 DEMO.busy = true; ticks(1)
-local w2 = #writes
 SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.9 }); ticks(10)
-check(#writes == w2, "paused: no sculpt writes")
+check(math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6, "cutscene: sculpt edits written without a pause")
 DEMO.busy = false; ticks(130)
 check(math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6, "after the pause: pending sculpt value written")
 
@@ -360,24 +370,48 @@ check(true, "debug UI drew sculpt + preset sections")
 WEIGHTS[i_waist], WEIGHTS[i_other] = nil, nil
 end
 
--- Shinano-native mesh: current profile drives nothing -> switch to shinano
+-- Shinano-native mesh: the current profile drives nothing; scans keep it, 自动匹配 picks shinano
 SKS.call("set_profile", { id = "arkit" }); ticks(2)
 for i = 1, #CHANNELS do CHANNELS[i] = nil end
 for i, n in ipairs({ "blendShape1.eye_close_L", "blendShape1.eye_close_R", "blendShape1.mouth_a1",
                      "blendShape1.mouth_smile_L", "blendShape1.option_jaw_narrow", "blendShape1.eye_look_up" }) do CHANNELS[i] = n end
 SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == "arkit" and st.expression.coverage.recommended == "shinano",
+    "a scan keeps the chosen profile and only recommends shinano")
+local okm, _, _, rm = SKS.call("auto_match_profile", {}); ticks(5)
 print("profile now:", st.expression.profile.id, st.runtime.notices[#st.runtime.notices].text)
-check(st.expression.profile.id == "shinano", "auto-switched to shinano profile")
+check(okm and rm.changed and st.expression.profile.id == "shinano", "自动匹配 switches to shinano")
+local okm2, _, _, rm2 = SKS.call("auto_match_profile", {})
+check(okm2 and not rm2.changed, "自动匹配 on the best profile changes nothing")
 ticks(70)
 check(math.abs(WEIGHTS[idx("blendShape1.eye_close_L")] - 1.0) < 1e-6, "shinano eye_close_L driven by blink.L")
 check(WEIGHTS[idx("blendShape1.option_jaw_narrow")] == nil, "sculpt key untouched")
+
+-- a manual pick outlives a scan that finds no binding (loading, menus): only another binding replaces it
+local BIND = "ShapeKeySystem\\user\\ch03_012_001\\ch03_012_0012.json"
+json.dump_file(BIND, { schema = "sks.binding/1", profile = "arkit" })
+SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == "arkit" and st.expression.binding_source ~= nil, "the binding picks arkit")
+SKS.call("set_profile", { id = "shinano" }); ticks(2)
+local part_name = ARMOR._name
+ARMOR._name = "xx_not_a_part"; ticks(130)
+ARMOR._name = part_name; ticks(130)
+check(st.expression.profile.id == "shinano", "the manual pick survives a scan without the binding")
+json.dump_file(BIND, { deleted = true })
+SKS.call("rescan"); ticks(5)
+
+-- a new profile starts empty and drives nothing; scans keep it until the user picks another
+local okc, _, _, rc = SKS.call("create_profile", { name = "Blank Test" })
+SKS.call("rescan"); ticks(5)
+check(okc and st.expression.profile.id == rc.id, "a new empty profile stays in effect through rescans")
+SKS.call("set_profile", { id = "shinano" }); ticks(5)
 
 -- experimental cutscene mode (segments from DemoMediator hooks)
 local s_close = idx("blendShape1.eye_close_L")
 check(HOOKS.onPlayStartTimeline and HOOKS.unload and HOOKS.requestSkip, "DemoMediator hooks registered")
 check(SKS.call("set_setting", { key = "cutscene_drive", value = true }), "enable cutscene_drive")
-DEMO.load = true; ticks(5)                       -- cutscene loading: paused
-check(st.debug.status:find("paused") ~= nil, "cutscene load: paused")
+DEMO.load = true; ticks(5)                       -- cutscene loading: no pause
+check(st.debug.status:find("paused") == nil, "cutscene load: no pause")
 COPY_ON = true
 HOOKS.onPlayStartTimeline({ nil, nil, 0 })       -- segment 0 starts
 DEMO.load = false; DEMO.busy = true
@@ -407,7 +441,7 @@ HOOKS.unload()
 local c2 = #writes; FC[1] = 0.004; ticks(10)
 check(#writes == c2, "unload: released")
 DEMO.busy = false; DEMO.load = true; ticks(5)
-check(#writes == c2, "end-of-cutscene load: nothing written")
+check(#writes > c2, "end-of-cutscene load: the master hunter resumes right away")
 DEMO.load = false; COPY_ON = false; ticks(130)
 check(math.abs(WEIGHTS[s_close] - 0.4) < 1e-6 and #st.scene.rigs == 1, "gameplay again, master player only")
 -- cutscene without a segment hook: playback start counts as the segment start
@@ -416,7 +450,7 @@ check(math.abs(WEIGHTS2[s_close] - 0.7) < 1e-6, "no segment hook: driving after 
 DEMO.busy = false; COPY_ON = false; ticks(130)
 SKS.call("set_setting", { key = "cutscene_drive", value = false })
 DEMO.busy = true; ticks(1)
-check(st.debug.status:find("paused") ~= nil, "switch off: cutscenes pause again")
+check(st.debug.status:find("paused") == nil and #st.scene.rigs > 0, "switch off: cutscenes keep the master hunter")
 DEMO.busy = false; ticks(130)
 
 -- signal layer: dictionary raw / param / lo / hi / no_signal, p through the adapter, game tags

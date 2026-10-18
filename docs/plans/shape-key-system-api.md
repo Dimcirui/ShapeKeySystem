@@ -66,7 +66,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 |---|---|---|
 | `rev` | int | |
 | `profile` | `{id, name, source, extends}` | 当前表情配置。`source`：`builtin` / `mod` / `user` |
-| `coverage` | `{arkit_hit, arkit_total, extra, recommended}` | 覆盖率和自动推荐结果 |
+| `coverage` | `{arkit_hit, arkit_total, extra, recommended}` | 覆盖率；`recommended` 是匹配通道最多的配置，供「自动匹配」使用 |
 | `binding_source` | string? | 配置是由哪个父预设指定的 |
 | `no_signals` | bool | 适配器没有原始通道（`A.raw`），表情不读游戏信号；捏脸、预设和外部 API 照常 |
 | `master_gain` | number | 整体表情强度，0~2 |
@@ -169,7 +169,15 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 
 `scene_search_available` 由适配器的 `scene_search` 提供；适配器设为 `false` 时，两个面板均隐藏全场景搜索开关。该字段属于运行能力，不写入设置文件。
 
-`hotkey`、`ui_scale`、`language`、`scene_search_always`、`periodic_scan_sec`、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`。修改后立即持久化。
+`hotkey`、`hotkey_combo`（bool，默认 false：开启后需同时按住 `hotkey_mod`）、`hotkey_mod`（`Ctrl` / `Shift` / `Alt`，默认 `Ctrl`）、`ui_scale`、`font_scale`（0.8–1.6，默认 1：只放大文字，不改布局；ImGui 后端需要支持动态字号的 REFramework）、`block_input`（bool，默认 true：面板打开时屏蔽游戏操控；关闭后游戏照常操控）、`language`、`scene_search_always`（bool，默认 true：每次扫描都搜索整个场景）、`periodic_scan_sec`（0–120 秒，默认 5，0 = 不定期重扫）、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
+
+`hold_available` 表示当前适配器提供 `expression_joints` 与 `face_layers`；`hold_status` 是禁用骨骼表情的当前状态文字。二者属于运行能力，不写入设置文件。
+
+### 3.8a 禁用骨骼表情
+
+`FaceHold.lua` 在 UpdateMotion 之后把每个被驱动 rig 的面部表情骨骼写回中性姿势，使游戏的面部骨骼动画不再改变脸型，表情只由形态键表现。中性姿势取自运行时而非骨架的 Base 姿势：捏脸会让面部骨骼偏离 Base。读取时把该面部的所有动画层 `BlendRate` 置 0 约 2–3 帧，记下未动画姿势后恢复原值；期间 fcParam 读数为 0，Core 跳过表情写入，网格保留上一帧的权重。rig 被放掉（换装、过场、菜单）后重新读取。
+
+被禁用的骨骼仍可作为信号来源：适配器用 `FaceHold.watch(names)` 登记需要的骨骼名，`FaceHold.pose(face_addr, name)` 返回本帧写回之前的动画姿势。眼球骨骼不在禁用范围内，视线照常读取。
 
 ### 3.9 `state.debug`
 | 字段 | 类型 | 说明 |
@@ -311,6 +319,8 @@ reframework/data/ShapeKeySystem/
   mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
   user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
             recordings/*.json                             （用户面部动画录制）
+            mocap.json                                    （面捕设置，见「面捕」一节）
+  mocap/    live.json                                     （没有 ShapeKeySystem_Mocap.dll 时由桥接脚本写入的最新一帧；脚本在 builtin/mocap/）
 ```
 
 `names/*.json`（`sks.names/1`，`{"names": ["Breasts_big", …]}`）只在引擎没有可用的 `getBlendShapeChannelName` 时用到（鬼武者、崛起；`tools/mesh_names.py` 能从 mod 的 `.mesh` 生成）。这时通道名只能从 `get_ChannelNameHash()` 反查：哈希是完整通道名 UTF-16LE 的 murmur3（seed 0xFFFFFFFF），SKS 拿自己知道的名字去算（ARKit、别名表、所有表情配置的通道和 `any`、捏脸预设和条件片段里的键、显示名表里的名字，再加上这些名字表），每个 ASCII 名字还会试 `BrowDownLeft`、`browDownLeft`、`Brow_Down_Left`、`brow_down_left` 几种写法。名字表按 `user/names` → `mods/names` → `builtin/names` 的顺序读，同一个哈希先到先得。`builtin/names/` 随插件发布、每个游戏都一样：`vrc.json`、`mmd.json` 是 VRChat / MMD 模型调查里的全部形态键名（`tests/vrc_faces.json`、`tests/mmd_names.json` 的并集），用常见命名的 mod 不用自带名字表。哈希数组的读法由适配器的 `hash_item_only` 决定：为 true 时只读 `get_Item`（有的游戏装箱的元素读出来是错数），否则先读 `get_elements()`、读不到再用 `get_Item`；RE4R 的原生通道查找用同一个读取函数。反查不到的通道显示为 `#XXXXXXXX`；用这个名字存进捏脸预设的值，以后名字能反查出来时照样生效（`NameHash.lua`）。
@@ -343,7 +353,7 @@ reframework/data/ShapeKeySystem/
 - 装备构建完成（`app.HunterCharacter.onEquipBuildEnd`）后，或部件名单发生变化时（每 5 帧检查一次），立即放掉引用，30 帧后重新扫描。
 - 每个网格要连续 60 帧处于就绪状态（MeshReady、BlendShapeEnable、缓冲区没有被释放、权重缓冲已分配）才开始写入；之后每帧再做两项快速检查。定期重扫时，同一个网格（按地址识别）保留之前的就绪计数和上次写入的值，所以不会停写，也不会重写。
 - 每帧只读网格上实际存在的通道要用到的 fcParam（引用也会追踪）。测试网格每帧的读取次数从 51 降到 10。`scene.rigs[i].reads` 显示这个数。
-- 如果当前表情配置在这些部件上一个通道都驱动不了，而另一个配置能匹配到至少 3 个，就自动切换过去并给出提示。这是 M2 父预设出来之前的临时办法。
+- 扫描不会自行切换表情配置。命令 `auto_match_profile`（面板「自动匹配」按钮）切换到 `coverage.recommended`，效果等同手动 `set_profile`；已是最佳配置时返回 `{changed = false}`。
 - 新增内置配置 `shinano.json`，对应 Shinano 原生的形态键名。
 - 开关 `cutscene_drive`（2026-10-09 起默认开启；跳过后仍在播放 90 帧会自动重新驱动，加载结束进入播放也视为新的一段）：过场播放中（IsBusy 为真、IsBusyLoad 为假）照常驱动猎人。分段靠 `app.DemoMediator` 的钩子，都是前置钩子，在游戏执行之前先放掉引用：
   - `onPlayStartTimeline(i)`：每一段开始时触发（Lua Bone System 也挂在这里）。触发后放掉所有引用，等 30 帧，然后**搜索整个场景**重新扫描（过场里显示的猎人通常是副本 `Pl000_00`，不是主角色），再经过 60 帧预热后写入。
@@ -398,7 +408,7 @@ reframework/data/ShapeKeySystem/
 每一级都先 `user/` 后 `mods/`。同系列下不同建模的模型不同，所以不按系列回退。
 
 - **过期预设**：`mods/` 下的父预设可以带 `"fingerprints": {"<部件ID>": "<通道指纹>"}`。指纹和实际穿着的 mesh 不一致时，说明这是被后装 mod 覆盖了 mesh、但没覆盖预设而留下的旧文件，跳过并提示一次。`user/` 下的文件不做这个检查。
-- **生效的父预设**：在身上所有部件命中的父预设里，按 global、部位自己、建模代表、`default.json` 的顺序取最具体的一个；同级时选通道多的部件。它的 `profile` 在部件穿戴期间代替全局配置，部件脱下后恢复全局配置。只有在没有父预设指定配置时，才会按覆盖率自动切换配置。
+- **生效的父预设**：在身上所有部件命中的父预设里，按 global、部位自己、建模代表、`default.json` 的顺序取最具体的一个；同级时选通道多的部件。它的 `profile` 在部件穿戴期间代替全局配置，部件脱下后恢复全局配置。手动选择的配置优先于父预设，直到出现另一个父预设为止；扫描暂时找不到父预设（加载、菜单、换装途中）不会清除手动选择。
 - **父预设里的捏脸预设名**：先在这个父预设所在的建模文件夹里找，再到通用预设里找。不会跨到别的建模文件夹。
 - **没有形态键的部件**：不需要任何 json。
 - **删除 = 写删除标记**：REFramework 的 Lua 不能可靠地删除文件，所以删除和"恢复 mod 父预设"都是往 `user/` 下写 `{"deleted": true}`，读取时当作不存在。
@@ -521,7 +531,7 @@ end)
 
 - **优先级**：外部插件 > 条件表情 > fcParam 表情（含捏脸合成）> 纯捏脸。片段的值相当于"表情值"：`e' = e × (1 − α) + 目标 × α`，然后照常和捏脸值做重映射 `s + (1 − s) × e'`，外部插件仍然可以覆盖。不受表情驱动的键按 e = 0 处理，走同一个重映射（2026-10-10 用户决定统一成重映射；之前是从捏脸值线性插值到目标，会把捏过的值往下拉）。所以片段只会在捏脸值之上往上加，不会压低捏脸值；捏脸值 ≥ 1 时片段不起作用。面部图互动同理。
 - **作用范围**：只作用于游戏中的主角色。菜单、加载、过场、公会卡里不判断条件，片段会重置。
-- **规则**（沿用用户 RE4 变体管理器的设计）：状态列表从上到下排优先级，第一个命中的状态播放它的片段。每个状态可以有多条规则，任意一条命中即算命中。规则内的条件统一用"且"或"或"连接，空规则永远不命中。条件读不到值时算不满足。`hold` 表示条件结束后再保持多少秒。数值条件的 `band` 是回差，命中后要越过阈值这么多才算结束。`auto = false` 时暂停所有规则。面板的「预览」可以强制播放某个片段。
+- **规则**（沿用用户 RE4 变体管理器的设计）：状态列表从上到下排优先级，第一个命中的状态播放它的片段。每个状态可以有多条规则，任意一条命中即算命中。规则内的条件统一用"且"或"或"连接，空规则永远不命中。条件读不到值时算不满足。`hold` 表示条件结束后再保持多少秒。数值条件的 `band` 是回差，命中后要越过阈值这么多才算结束。状态的 `clip` 为空字符串时（面板里选「-」）该状态停用：跳过判断，也不压住下面的状态；删除片段时引用它的状态改为空字符串，规则保留。`auto = false` 时暂停所有规则。面板的「预览」可以强制播放某个片段。面板把片段称为「形态键配置组合」。
 - **文件**：`user/conditions/<id>.json` 或 `mods/conditions/<id>.json`，schema 为 `sks.conditions/1`，格式见 `CondExpr.lua` 文件头。父预设用 `"conditions": "<id>"` 引用；没有父预设引用时，使用 `settings.conditions`。
 - **命令**：`cond_select {name}`、`cond_new {name}`、`cond_edit {data}`（整份替换工作副本）、`cond_save {as_name?}`、`cond_revert`、`cond_preview {clip?}`；删除走 `request_delete {kind = "conditions"}`。`write_binding` 增加 `conditions` 参数；不传这个参数时，保留同一部件原有的引用。
 - **状态**：`state.conditions = {rev, sets, current = {id, name, source, dirty, data}, defs, binding_name, binding_part, global_name}`。实时值在 `live.cond = {values, status, playing, alpha, sampled}`，只在面板打开时更新。
@@ -618,6 +628,23 @@ UI 通过 `SKS.call("playback", args)` 提交命令，`args.action` 为 `refresh
 
 录制格式为 `sks.native-signals/1`，包含 `game`、`label`、`rate_hz`、`duration`、`calibration`、`summary`、`reason` 和 `samples`。目标采样率为 20 Hz，每个样本以 `t` 保存实际经过秒数，`values` 保存快照；标定表只在文件顶层保存一次。录制最长 90 秒，来源消失或身份变化时自动结束。文件保存在 `ShapeKeySystem/native_signals_<game>_*.json`，保存失败时保留数据用于重试。
 
+适配器提供 `native_export` 时不保存诊断文件，录制停止后转换为该适配器的回放格式，保存在它返回的目录，
+并刷新面部动画测试的录制列表；转换失败的录制不能重试保存。这类录制只在手动停止或达到上限时结束：
+过场片段切换、角色不可用、采样失败和来源身份变化都按采样率记为空档样本（不含 `values`），录制继续。
+
+### 荒野游戏内录制
+
+荒野的录制保存为 `fcparam.recording/2`，路径为 `user/recordings/mhwilds_<时间>_<序号>.json`，同时含 raw 和 final 两条轨道：
+
+- raw 在面部动画钩子里、`FacialController.updateAfterMotion` 之前读取 `TreeLayer.getExtraValue`，与内置录制的读取时机相同；
+  录制器每次采样都重新登记，超过 1 秒未登记时钩子停止读取。
+- final 为 fcParam 骨骼局部 z 除以 `final_unit`，在同一帧的权重写入前读取。
+- 每次采样只读参数索引和骨骼都存在的 fcParam；导出的列为整段录制中出现过的全部 fcParam。
+  空档样本、尚未取得 raw 的样本，以及当时面部没有的参数都记为 0，时间从第一个样本起算。
+  raw 超过 0.5 秒未更新的采样按失败处理，记为空档。
+- 录制名称写入 `label`，作为面部动画测试列表中的显示名称；没有名称时显示文件名。
+- 诊断卡片的骨骼变化列出 fcParam 位移和两侧眼球旋转。
+
 独立快照格式为 `sks.native-snapshot/1`，包含 `game` 和 `snapshot`，文件保存在 `ShapeKeySystem/native_snapshot_<game>_*.json`。诊断数据供信号分析和标定使用，与面部动画测试的 `fcparam.recording` 格式分别处理。
 
 ### 命名信号回放
@@ -644,7 +671,7 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 | `fallback`（默认） | 只补游戏缺失的部分：信号取 max(游戏, 生成)，视线加上偏移。信号缺失 = 字典没有原始通道；视线缺失 = 这个角色没有眼球关节；两者也可以由适配器的 `procedural` 表声明（崛起 `procedural = { blink = true, breath = true }`：眼睑骨和下颌骨有标定，但待机从不眨眼，嘴部呼吸低于 `jawOpen` 的 `lo`）。荒野、鬼武者、RE4R 都有眨眼、张嘴信号和眼球关节，行为不变 |
 | `add` | 全部叠加：信号 = 游戏 + 生成（游戏值不超过 1 时结果截到 1），视线 = 游戏视线 + 偏移 |
 
-生成器的时钟只在连续帧上前进：门（`gate`）关闭、过场不驱动等跳过的帧不计时，恢复后第一帧步长为 0；单帧步长最多 0.1 秒。所有角色共用一个时钟。
+生成器的时钟随 SKS 更新前进，gate 不通过时也不停；单帧步长最多 0.1 秒。所有角色共用一个时钟。
 三个生成器各用一条随机数序列，调一个的参数不影响另外两个的时间。
 
 `settings.json` 的 `procedural`（不随父预设的调整保存）：
@@ -676,3 +703,45 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 `state.scene.additional` 提供 `rev`、`instances`、`errors` 与释放时的 `reason`。实例行包含角色标识、显示名、Profile、绑定、通道数、就绪状态、眼睛参数、增益及提示，不暴露引擎对象。
 
 当前面板与外部 API 编辑主角色；额外角色按自己的模型绑定驱动。RE4R 绑定可用 `eyes.neutral.L/R.yaw/pitch` 保存对应角色的眼睛中立位。
+
+## 面捕
+
+进阶「面捕」页。顶部「面捕总配置」放各方案共用的设置（开关、镜像、强度、平滑、淡入淡出、面部校准），其中「面捕方案」下拉选输入来源，所选方案独有的内容放在它下面的「基础配置」框里。方案列在 `Mocap.SCHEMES`：iFacialMocap、RhyLive 和 VMC（通用）。
+
+**游戏内接收（默认）**：原生插件 `reframework/plugins/ShapeKeySystem_Mocap.dll`（源码 `native/sks_mocap/`，`native/build.ps1` 用 MinGW gcc 编译，`-Test` 跑离线测试）在游戏里直接收 UDP，Lua 通过全局表 `sks_mocap_native` 调用：`start(scheme, port?, phone_ip?)`（scheme：`ifacialmocap` 49983 / `rhylive` 9000 / `vmc` 39539）、`stop()`、`poll(t?)`（每帧一次，非阻塞取完积压的包，返回 `running, scheme, port, seq, age_ms, packets, rejected, error, sender, w[52], head[6]|nil`）、`local_ips()`（本机局域网 IPv4，去掉回环和 169.254）。「基础配置」框列出本机 IP 和端口，玩家在手机 App 里把发送目标设成它（iFacialMocap 的 Destination IP address），手机就会主动发送。iFacialMocap 另有开始信号：断流时每 2 秒向最后的发送方（或设置里的 `phone_ip`，面板上不显示）补发，让手机恢复发送。插件自带 Lua 5.4.3，在 REFramework 自己的 Lua 环境上工作，只在 REFramework 也是 5.4.3 时安全：加载时在 REFramework 模块里找 `$LuaVersion: Lua 5.4.3`，找不到就不注册全局表，面捕退回桥接脚本。开启面捕后 `Mocap.lua` 按方案、端口（`cfg.port`，0 = 默认）和手机 IP 启动接收，任何一项改了就重新启动；关闭面捕时停止。
+
+**桥接脚本（没有插件时）**：REFramework 的 Lua 不能开 socket，所以每个方案由 `builtin/mocap/` 下一个只用标准库的 Python 桥接脚本接收手机的 UDP 数据，每收到一包就把最新一帧整体替换写入 `mocap/live.json`（先写 `.tmp` 再 `os.replace`，游戏正占用文件时跳过这一包）。两个桥接写同一种格式，SKS 每帧读一次（`Mocap.lua`），读取路径与方案无关；同一时间只运行一个桥接。
+
+**iFacialMocap**：手机把 ARKit 52 个通道和头部角度以文本协议发到 UDP 49983，需要电脑先发开始信号。
+
+```
+python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py <手机 IP>   # 向手机发开始信号
+python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py             # 只监听（手机已在发）
+```
+
+**RhyLive**：手机主动把 OSC 推到电脑，不需要开始信号。在 RhyLive 里把发送目标设成电脑的局域网 IPv4 和端口（默认 9000）；桥接启动时打印本机 IP 和端口，之后每 5 秒打印一次收包速率。
+
+```
+python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py          # 监听 UDP 9000
+python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     # 换端口
+```
+
+协议：一个 UDP 包是一条 OSC 消息或一个 `#bundle`（可嵌套；8 字节时间标签被忽略，元素 = 大端 int32 长度 + 内容，长度须为 4 的倍数）。字符串以 NUL 结尾并补齐到 4 字节。面部数据是地址 `/Face`、类型标签 `,` 加 52 个 `f`、52 个大端 float32，顺序同 `Names.ARKIT52`；数值截到 0..1。其他地址忽略；类型标签不符、长度不符或含 NaN / 无穷的 `/Face` 整条丢弃；结构损坏的包整包丢弃。一个包里有多帧时写最后一帧。RhyLive 不发头部数据，`head` 写 `null`：选这个方案时没有头部转动：「头部转动」卡片隐藏，测试姿势和另一方案下校准的头部基准也不生效。
+
+**VMC（通用）**：任何按 VMC 协议（OSC）发送、表情名用 ARKit 52 个名字（Perfect Sync）的软件，发到 127.0.0.1:39539。只能走游戏内接收（没有桥接脚本，`bridge = nil`；没装插件时状态显示「需要 ShapeKeySystem_Mocap.dll」，也不读 `live.json`）。插件读这几种消息（单条或 `#bundle`）：`/VMC/Ext/Blend/Val`（`,sf`：名字、数值）按名字不区分大小写对上 ARKit 52 个通道；其他名字按发送方的写法保留（最多 128 个，名字不超过 63 字节），`poll` 以 `extra = {名字 = 数值}` 返回，`Mocap.lua` 把它们和 ARKit 通道一样以所有者 `mocap` 写成外部值，按名字（不区分大小写）作用于同名形态键或表情配置通道，相当于发送方逐个调用 `ShapeKeySystemAPI.set`；只乘总强度、做平滑和淡入淡出，不做校准、单通道强度和镜像，规范化后与 ARKit 名字相同的名字跳过；收到 `/VMC/Ext/Blend/Apply` 才算一帧，从没收到过 Apply 的发送方每个带表情值的包算一帧。`/VMC/Ext/Bone/Pos`（`,sfffffff`：名字、位置 xyz、四元数 xyzw）里 `Head` 骨骼的旋转按 Unity 的 ZXY 顺序换成绕 X（俯仰）、Y（左右转）、Z（歪头）的角度，作为 `head[1..3]`（位置作为 `head[4..6]`），随下一帧一起生效；方向不对时在「头部转动」里调「反向」和来源。其他 VMC 消息忽略。
+
+按 [VMC 规范](https://protocol.vmc.info/marionette-spec)，`Blend/Val` 是发送方模型的表情（VRM BlendShapeProxy）值，不是网格形态键：虚拟形象软件（Warudo 的「VMC 发送器」、VSeeFace 等）发的是所加载角色的表情列表，角色要有 52 个按 ARKit 命名的表情（Perfect Sync）才会发 ARKit 名字。实测 Warudo 一个只有自定义表情的角色，发出的就只有那些表情名，ARKit 值没有经过 VMC。
+
+`live.json`：`{"seq": n, "w": [52 个 0..1，顺序同 Names.ARKIT52], "head": [6 个数] | null, "le": [...], "re": [...]}`（`le` / `re` 只有 iFacialMocap 写）。`seq` 不变就当没有新数据；SKS 启动后看到的第一份文件不算数（可能是上次留下的）。Windows Defender 实时扫描开着时每次读取约 5 毫秒，需要把 `mocap/` 加入排除项。
+
+写入：52 个通道作为外部值（`External.lua`，所有者 `mocap`）每帧续租，和其他插件一样覆盖表情和捏脸、走同一套写入保护（预热、过场、换装重建）。每个通道 = 手机值 × 淡入系数 + 纯表情值 ×（1 − 淡入系数），所以数据开始或中断时脸在 `fade_sec` 秒内平滑交接；系数回到 0 时放掉全部外部值。通道名先按当前表情配置的槽位解析，解析不到的再按名字匹配捏脸键；部件上没有 ARKit 键（或别名）的脸收不到。
+
+头部转动：`UpdateMotion` 之后，把转角按 Neck_0 25%、Neck_1 25%、Head 50% 分到荒野猎人的骨骼上（角色空间：yaw 绕上、pitch 绕侧、roll 绕前，叠加在动画之上）。只在上一帧驱动了主角色时才碰骨骼；SKS 放掉角色（换装、过场跳过或结束、菜单）时同时放掉骨骼引用，下次再重新取。
+
+| 命令 | 参数 | 作用 | 持久化 |
+|---|---|---|---|
+| `mocap` | `{patch}` | 修改面捕设置：`enabled`、`scheme`（`Mocap.SCHEMES` 里的 id：`ifacialmocap`、`rhylive` 或 `vmc`）、`phone_ip`（IPv4 或空，iFacialMocap 的开始信号发到这里）、`port`（0 = 方案默认端口，或 1–65535）、`mirror`、`gain`（0–3）、`smoothing`（0–1）、`fade_sec`（0–2）、`timeout`（0.1–5 秒，多久没新数据算中断）、`channel_gains = {ARKit 名 = 0–3 或 false}`（1 和 false 都表示不单独调）、`head = {enabled, gain 0–2, max_deg 5–90, smoothing 0–1, invert = {pitch/yaw/roll = bool}, order = {pitch/yaw/roll = 1–3}}`、`test = {on, pitch, yaw, roll}`（−60–60°，不用手机的测试姿势，不保存）。数值截到范围内；类型不对、未知方案、IP 不完整、未知通道、`order` 不在 1–3 时返回 `E_BAD_ARGS`，什么都不改 | `user/mocap.json`（约 0.5 秒后写） |
+| `mocap_refresh_ips` | `{}` | 重新查一次本机局域网 IP（`state.mocap.native.ips`）；插件加载后自动查一次，之后只在「基础配置」框点「刷新」时查 | — |
+| `mocap_calibrate` | `{what}` | `face`：把手机当前各通道值记为放松时的基准（之后按 `(v − 基准) / (1 − 基准)` 换算）；`head`：把当前头部角度记为正前方；`clear`：清除面部基准 | `user/mocap.json` |
+
+`state.mocap`：`native = {available, running, error, sender, packets, rejected, port, ips}`（游戏内接收的状态）、`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。

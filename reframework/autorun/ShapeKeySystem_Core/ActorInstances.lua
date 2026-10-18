@@ -198,10 +198,16 @@ local function drive(rig, options)
     local alpha = smoothing > 0 and 1 - math.min(smoothing, 1) * 0.9 or 1
     X.compute(rig.prog, rig, rig.P, rig.gains, rig.forced, options.clamp, alpha,
         rig.eye_settings.full_deg.yaw, rig.eye_settings.full_deg.pitch)
+    local out = rig.W
+    if options.expression_enabled == false then
+        rig.O = rig.O or {}
+        for slot = 1, rig.prog.n do rig.O[slot] = 0 end
+        out = rig.O
+    end
     for _, target in ipairs(rig.targets) do
         if not Guard.mesh_ready(target.mesh) then target.stable = 0
         elseif target.stable < Guard.STABLE_FRAMES then target.stable = target.stable + 1
-        else Writer.write_target(target, rig.W, false, options.epsilon, target.base, Sculpt.mix) end
+        else Writer.write_target(target, out, false, options.epsilon, target.base, Sculpt.mix) end
     end
     for _, target in ipairs(rig.manual) do
         if not Guard.mesh_ready(target.mesh) then target.stable = 0

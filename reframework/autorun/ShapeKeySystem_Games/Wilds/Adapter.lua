@@ -12,6 +12,9 @@ local Input = require("ShapeKeySystem_Games.Wilds.Input")
 local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 
 local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
+local Recorder = require("ShapeKeySystem_Games.Wilds.Recorder")
+local B = require("ShapeKeySystem_Core.BoneSignals")
+local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
 local A = {
     id = "mhwilds",
@@ -19,6 +22,10 @@ local A = {
     conditions = Cond,
     input = Input,
     playback = Playback,
+    -- in-game recordings are saved straight into the face animation test format
+    native_snapshot = Recorder.snapshot,
+    native_sample = Recorder.sample,
+    native_export = Recorder.export,
 }
 
 local M_JBN, M_DEMO_BUSY, M_DEMO_LOAD
@@ -70,6 +77,44 @@ function A.eye_joints(face)
     return { L = jbn(face, "L_EyeJ_LOD02"), R = jbn(face, "R_EyeJ_LOD02") }
 end
 
+-- Bones held by the "hold face bones" option: every joint under HeadAll_SCL except the eyeballs
+-- (gaze is read from them), the charamake scale joints and the helmet attach points.
+local HOLD_SKIP = { HeadAll_SCL = true, Ear_SCL = true, Head_SCL = true, L_EyeJ_LOD02 = true, R_EyeJ_LOD02 = true }
+
+local function under_head(j)
+    local p = j:call("get_Parent")
+    for _ = 1, 16 do
+        if not p then return false end
+        if p:call("get_Name") == "HeadAll_SCL" then return true end
+        p = p:call("get_Parent")
+    end
+    return false
+end
+
+function A.expression_joints(face)
+    local arr = face:call("get_Joints")
+    local out = {}
+    for _, j in ipairs(arr and arr:get_elements() or {}) do
+        local name = j:call("get_Name")
+        if name and not HOLD_SKIP[name] and name:find("HelmJoint_", 1, true) ~= 1 and under_head(j) then
+            out[#out + 1] = { joint = j, name = name }
+        end
+    end
+    return out
+end
+
+-- every motion layer of the face: muting them all leaves the character-creation pose
+function A.face_layers(face)
+    local motion = face:call("get_GameObject"):call("getComponent(System.Type)", sdk.typeof("via.motion.Motion"))
+    if not motion then return nil end
+    local out = {}
+    for i = 0, (motion:call("getLayerCount") or 0) - 1 do
+        local layer = motion:call("getLayer(System.UInt32)", i)
+        if layer then out[#out + 1] = layer end
+    end
+    return out
+end
+
 -- ---------------------------------------------------------------- signals
 -- Raw channels are fcParam numbers 0..200; a channel's value is the z of its fcParam_NNN joint's
 -- local position, normalised by the dictionary's `full`.
@@ -85,16 +130,78 @@ A.raw = {
     label = function(n) return string.format("fcParam_%03d", n) end,
 }
 
-local M_LPOS
+local M_LPOS, M_LROT
+
+-- Bone fallback: gestures and shouts can leave every fcParam at 0 while the face joints still move.
+-- builtin/mhwilds/face.json projects a few face joints onto ARKit keys, and each rule's `raw` names
+-- the fcParam channel it backs up. read keeps the larger of the two in P, so profiles, the
+-- procedural layer and the signal display all see one merged channel. Without A.init (toys) or with
+-- an invalid file there is no fallback.
+local bones
+
+local function load_bones()
+    local ok, data = pcall(json.load_file, "ShapeKeySystem/builtin/mhwilds/face.json")
+    if not ok or type(data) ~= "table" then return nil, "荒野面部骨骼标定文件无法读取" end
+    local valid, why = B.validate(data, { label = "荒野" })
+    if not valid then return nil, why end
+    local names = {}
+    for id, spec in pairs(data.joints) do names[#names + 1] = spec.bone or id end
+    FaceHold.watch(names)
+    local raw_of = {}
+    for _, rule in ipairs(data.rules) do
+        local n = A.raw.parse(rule.raw)
+        if not n or (raw_of[rule.key] and raw_of[rule.key] ~= n) then return nil, "荒野骨骼标定的 raw 通道无效" end
+        raw_of[rule.key] = n
+    end
+    return { calibration = data, raw_of = raw_of }
+end
+
+-- Only rules whose fcParam channel is bound and whose joint exists on this face; nil when none.
+local function bind_bones(face, keys)
+    if not bones then return nil end
+    local wanted, joints, rules, raw_of = {}, {}, {}, {}
+    for _, n in ipairs(keys) do wanted[n] = true end
+    for _, rule in ipairs(bones.calibration.rules) do
+        local n = bones.raw_of[rule.key]
+        if wanted[n] then
+            local spec = bones.calibration.joints[rule.joint]
+            if joints[rule.joint] == nil then joints[rule.joint] = jbn(face, spec.bone or rule.joint) or false end
+            if joints[rule.joint] then rules[#rules + 1] = rule; raw_of[rule.key] = n end
+        end
+    end
+    if #rules == 0 then return nil end
+    local specs = bones.calibration.joints
+    local addr = face:get_address()
+    return {
+        calibration = { joints = specs, rules = rules },
+        raw_of = raw_of,
+        -- one engine call per joint: position for pos joints, rotation for rot joints. While
+        -- FaceHold holds the face the joints read neutral; its copy of the animated pose is used.
+        sample = function(name)
+            local spec = specs[name]
+            local hp, hr = FaceHold.pose(addr, spec.bone or name)
+            if hp then
+                if spec.kind == "pos" then return hp end
+                return nil, hr
+            end
+            local j = joints[name]
+            if spec.kind == "pos" then return M_LPOS:call(j) end
+            return nil, M_LROT:call(j)
+        end,
+    }
+end
 
 -- Returns { n1, joint1, n2, joint2, ... } and the number of joints found; missing joints are skipped.
+-- `bones` rides on the same handle (a hash field, so #handle still counts fcParam pairs).
 function A.bind(face, keys)
     M_LPOS = M_LPOS or sdk.find_type_definition("via.Joint"):get_method("get_LocalPosition")
+    M_LROT = M_LROT or sdk.find_type_definition("via.Joint"):get_method("get_LocalRotation")
     local out = {}
     for _, n in ipairs(keys) do
         local j = jbn(face, string.format("fcParam_%03d", n))
         if j then out[#out + 1] = n; out[#out + 1] = j end
     end
+    out.bones = bind_bones(face, keys)
     return out, #out // 2
 end
 
@@ -102,6 +209,14 @@ function A.read(handle, P, inv_full)
     for k = 1, #handle, 2 do
         local p = M_LPOS:call(handle[k + 1])
         P[handle[k]] = p and p.z * inv_full or 0
+    end
+    local b = handle.bones
+    if not b then return end
+    -- bone values are already 0..1, the same scale as P (fcParam z normalised by full)
+    local values = B.evaluate(b.calibration, b.sample)
+    for key, v in pairs(values) do
+        local n = b.raw_of[key]
+        if v > (P[n] or 0) then P[n] = v end
     end
 end
 
@@ -181,6 +296,9 @@ function A.init(events)
     local T_DEMO = sdk.find_type_definition("app.DemoMediator")
     M_DEMO_BUSY = T_DEMO and T_DEMO:get_method("get_IsBusy")
     M_DEMO_LOAD = T_DEMO and T_DEMO:get_method("get_IsBusyLoad")
+
+    -- a missing or invalid calibration only disables the bone fallback
+    bones, A.bones_error = load_bones()
 
     hook_cutscene(T_DEMO, events)
     -- any hunter rebuilt its equipment: the meshes may be new even when the part names are not

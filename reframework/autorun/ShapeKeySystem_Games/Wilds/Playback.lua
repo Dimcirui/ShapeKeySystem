@@ -9,6 +9,7 @@ local clock = os.clock
 local A = { id = "mhwilds", name = "怪物猎人：荒野", final_unit = 0.01, raw_unit = 0.01 }
 local facial, app_type
 local session, callbacks, installed
+local watched   -- 录制器关注的控制器与动画层；钩子把读到的 raw 存回这张表
 
 function A.now()
     local app = sdk.get_native_singleton("via.Application")
@@ -36,14 +37,35 @@ local function locate()
         local go = child:call("get_GameObject")
         local name = go and go:call("get_Name") or ""
         if name:find("Player_Face", 1, true) == 1 then
-            local controller = go:call("getComponent(System.Type)", sdk.typeof("app.FacialController"))
-            local motion = go:call("getComponent(System.Type)", sdk.typeof("via.motion.Motion"))
-            local count = motion and motion:call("getLayerCount") or 0
-            local layer = count > 0 and count <= 32 and motion:call("getLayer(System.UInt32)", 0) or nil
-            if controller and layer then return child, controller, layer end
+            local controller, layer = A.face_parts(child)
+            if controller then return child, controller, layer end
         end
         child = child:call("get_Next")
     end
+end
+A.locate = locate
+
+-- 面部变换上的表情控制器和第 0 个动画层；过场里的猎人替身也用这一组
+function A.face_parts(face)
+    local go = face:call("get_GameObject")
+    local controller = go and go:call("getComponent(System.Type)", sdk.typeof("app.FacialController"))
+    local motion = go and go:call("getComponent(System.Type)", sdk.typeof("via.motion.Motion"))
+    local count = motion and motion:call("getLayerCount") or 0
+    local layer = count > 0 and count <= 32 and motion:call("getLayer(System.UInt32)", 0) or nil
+    if controller and layer then return controller, layer end
+end
+
+-- 录制器每次采样都重新登记；超过 1 秒没有登记就停止读取，录制结束后不再逐帧调用引擎。
+function A.watch(target) watched = target end
+
+local function read_watched(w, layer)
+    local raw = {}
+    for i, index in ipairs(w.indices) do
+        local v = layer:call("getExtraValue(System.Int32)", index)
+        assert(Recording.finite(v, 1000), "面部动画输入无效")
+        raw[i] = v
+    end
+    w.raw, w.read_at = raw, clock()
 end
 
 function A.catalog()
@@ -58,6 +80,11 @@ function A.catalog()
         out[row.param], seen[row.hash] = row.hash, true
     end
     return out
+end
+
+-- 游戏内录制把录制名称写在 label；不过滤文件，读不了的文件仍按文件名列出
+function A.describe(data)
+    return { name = type(data) == "table" and type(data.label) == "string" and data.label ~= "" and data.label or nil }
 end
 
 function A.valid()
@@ -151,12 +178,22 @@ function A.attach(cb)
     local ok, err = pcall(sdk.hook, method, function(args)
         local storage = thread.get_hook_storage()
         storage.sks_playback_target = false
-        if not session then return end
-        local ok_target, is_target = pcall(function()
+        local w = watched
+        if w and clock() - w.touched > 1 then watched, w = nil, nil end
+        if not session and not w then return end
+        local ok_target, actor, layer_addr, layer = pcall(function()
             local actor, layer = sdk.to_managed_object(args[2]), sdk.to_managed_object(args[4])
-            return actor and layer and actor:get_address() == session.controller_addr and layer:get_address() == session.layer_addr
+            if actor and layer then return actor:get_address(), layer:get_address(), layer end
         end)
-        if ok_target and is_target then storage.sks_playback_target = true; inject() end
+        if not ok_target or not actor then return end
+        -- 先于注入读取，录到的是动画本身给出的输入
+        if w and actor == w.controller_addr and layer_addr == w.layer_addr then
+            local read_ok, read_err = pcall(read_watched, w, layer)
+            if not read_ok then w.error = tostring(read_err) end
+        end
+        if session and actor == session.controller_addr and layer_addr == session.layer_addr then
+            storage.sks_playback_target = true; inject()
+        end
     end, function(retval)
         if thread.get_hook_storage().sks_playback_target then inject() end
         return retval

@@ -30,7 +30,7 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 - **面部动画测试**：回放录制的面部动画，检查映射效果；荒野支持原版输入与最终信号，RE4R 支持诊断录制中的表情信号和视线。
 - **公开 API**：其他插件可以通过 `ShapeKeySystemAPI` 临时接管形态键的值，优先级高于表情和捏脸。
 
-面板默认用 Delete 键打开。操作说明见 [docs/guide.md](docs/guide.md)。
+面板默认用 Delete 打开；和其他插件冲突时，可在设置里启用组合键（Ctrl / Shift / Alt + Delete）。操作说明见 [docs/guide.md](docs/guide.md)。
 
 ## 依赖
 

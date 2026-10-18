@@ -24,6 +24,7 @@ milestones) and `docs/plans/shape-key-system-api.md` (UI ↔ backend contract, c
   `v + 0.0` before engine calls.
 - Blendshape writes only in `LateUpdateBehavior`, only after the mesh weight buffer exists, and
   never hold engine object references across part rebuilds / cutscene teardown (`Guard.lua`).
-- Shipped features stay pure Lua; C#/.NET plugins are for exploration probes only.
+- Shipped features must not depend on REFramework.NET (C#); C# plugins are for exploration probes
+  only. Native C plugins (reframework/plugins/*.dll) are fine where Lua cannot do the job (sockets).
 - Never conflict with ArmorVariantManager: default hotkey Delete (Home = AVM, End = game pause),
   share AVM's input-blocker globals, do not replace the d2d global.

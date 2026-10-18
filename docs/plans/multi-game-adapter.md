@@ -38,7 +38,9 @@ ShapeKeySystem_Games/Wilds/*.lua   荒野适配器
 
 RE4R 的角色扫描、通道保护、网格准备与持续写入接口见 [re4r-adapter.md](re4r-adapter.md)。崛起（没有表情信号、只做捏脸）见 [rise-adapter.md](rise-adapter.md)。
 
-可选接口 `native_snapshot()` 返回纯数据快照，包含 `source`、`joints`、`measurements`、`taps`、`outputs` 和 `status`。Core 在权重写入前采样，负责诊断状态与录制保存；游戏对象查找和单位换算由适配器完成。当前由 RE4R 提供此接口。
+可选接口 `native_snapshot()` 返回纯数据快照，包含 `source`、`joints`、`measurements`、`taps`、`outputs` 和 `status`。Core 在权重写入前采样，负责诊断状态与录制保存；游戏对象查找和单位换算由适配器完成。RE4R、崛起和荒野提供此接口。
+可选的 `native_sample(snapshot)` 精简每个录制样本，`native_export(recording)` 返回转换后的录制和保存目录；
+荒野用这两项把游戏内录制直接存成面部动画测试格式（`ShapeKeySystem_Games/Wilds/Recorder.lua`）。
 
 下面每一节都写了：接口、荒野怎么实现、现在的代码在哪里、搬到哪里。行号以 `f067d8c` 为准。
 
@@ -68,7 +70,11 @@ function A.init(events) end       -- 唯一允许调用 sdk 的入口，见 2.5
 
 适配器可设 `scene_search = false`，由 Core 向面板提供 `state.settings.scene_search_available = false`，隐藏全场景搜索开关。省略时沿用原有显示。
 
-`gate(frame, cutscene_drive)` 的第二个参数为当前过场驱动设置。RE4R 关闭该设置时由适配器暂停当前玩家驱动；使用 Core 过场分段流程的适配器继续返回 `playing` 状态。
+`gate(frame, cutscene_drive)` 的第二个参数为当前过场驱动设置。Core 不再因 gate 不通过而暂停：读盘、重建和过场期间继续驱动已有的 rig，
+不清零、不放手，条件规则也不重置。gate 的 kind 只决定驱动对象：`playing` 且开启过场驱动时搜索整个场景找过场替身并按片段重扫，
+`setup` 进入菜单模式驱动预览角色。过场跳过、停止和片段开始的钩子仍放掉 rig 并重扫。
+部件签名变化、网格不再就绪和过场结束放掉 rig 后 2 帧即重扫；放掉时按网格地址记下预热进度，
+重扫找回的同一网格立即恢复写入（全部通道重写），新网格仍要预热。
 
 ### 2.2 找角色和脸
 
@@ -144,6 +150,16 @@ A.eye_angles(joint) -> yaw, pitch    -- SKS 约定：+yaw = 脸自己的右侧�
   只有轴向不同的游戏才需要自己实现。
 - 中立位标定、反向、满权重角度仍由 Core 处理并存进 `settings.json`；默认值从 `A.defaults.eyes` 读。
 - 没有 `caps.eyes` 时 eye 节点的值恒为 0，视线组在界面上标为不可用。
+
+### 2.4a 禁用骨骼表情（可选）
+
+```lua
+A.expression_joints(face) -> { { joint = via.Joint, name = string }, ... }   -- 要禁用的面部表情骨骼，不含眼球
+A.face_layers(face)       -> { via.motion.TreeLayer, ... }                  -- 读取中性姿势时临时静音的动画层
+```
+
+- 两个函数都提供时设置项 `hold_face_bones` 可用（`state.settings.hold_available`），流程见 shape-key-system-api.md 3.8a。
+- 荒野：`HeadAll_SCL` 之下的全部骨骼，排除 `Ear_SCL` / `Head_SCL`（捏脸缩放）、`HelmJoint_*`（头盔挂点）和 `L/R_EyeJ_LOD02`；动画层取面部 `via.motion.Motion` 的全部层。
 
 ### 2.5 生命周期事件
 

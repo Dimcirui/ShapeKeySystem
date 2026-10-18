@@ -148,14 +148,23 @@ for c = 65, 90 do VK[string.char(c)] = c end
 for i = 0, 9 do VK["NumPad" .. i] = 0x60 + i end
 I.VK = VK
 
-local key_was = {}
-function I.key_pressed(name)
-    local vk = VK[name or "Delete"] or VK.Delete
+I.MODIFIERS = { Ctrl = 0x11, Shift = 0x10, Alt = 0x12 }
+
+local function is_down(vk)
     local ok, down = pcall(function() return reframework:is_key_down(vk) end)
-    down = ok and down == true
+    return ok and down == true
+end
+
+local key_was = {}
+-- The key went down this frame; with `mod` ("Ctrl" / "Shift" / "Alt") that modifier must be held.
+function I.key_pressed(name, mod)
+    local vk = VK[name or "Delete"] or VK.Delete
+    local down = is_down(vk)
     local was = key_was[vk]
     key_was[vk] = down
-    return down and not was
+    if not down or was then return false end
+    local m = mod and I.MODIFIERS[mod]
+    return not m or is_down(m)
 end
 
 return I

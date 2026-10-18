@@ -74,6 +74,15 @@ local function top_bars(ctx, x, y, w)
         end
     end
     bx = bx + create_w + 6
+    if not pick then
+        local matched, match_w = W.button("自动匹配", bx, by, nil, 28)
+        W.tooltip("切换到与当前部件匹配度最高的表情配置", bx, by, match_w, 28)
+        if matched then
+            if st.mapping.dirty then ctx.toast("warn", "请先保存或恢复映射，再自动匹配")
+            else call("auto_match_profile", {}) end
+        end
+        bx = bx + match_w + 6
+    end
     local tu = ex.tuning
     -- gains / gaze follow the outfit: with a binding they are saved into it, otherwise they are
     -- the global settings (saved automatically)
@@ -98,11 +107,9 @@ local function top_bars(ctx, x, y, w)
         D.text("本游戏目前暂不支持表情", x + 2, cy, C.warn, W.body(), w)
         cy = cy + 26
     end
-    -- one info line: coverage, gains tuned for another profile
+    -- one info line: gains tuned for another profile, unsaved tuning
     if not pv then
     local info = {}
-    local cov = ex.coverage
-    if cov then info[#info + 1] = string.format("ARKit 覆盖 %d/%d · 扩展 %d", cov.arkit_hit or 0, cov.arkit_total or 0, cov.extra or 0) end
     if tu and tu.profile_mismatch then info[#info + 1] = "单通道增益属于 " .. tostring(tu.for_profile) .. "，切回它时生效" end
     if tu and tu.source == "binding" and tu.dirty then info[#info + 1] = "调整未保存" end
     if #info > 0 then
@@ -150,6 +157,12 @@ local function key_name(c)
     return c.label and ("形态键名：" .. c.name .. "\n") or ""
 end
 
+-- on the name line, so it reads as being about the shape key, not the source formula below
+local function missing_note(c, nx, right, y)
+    if c.present then return end
+    D.text("未找到此形态键", nx + 8, y + 6, C.faint, W.small(), right - nx - 12)
+end
+
 local function channel_row(ctx, c, x, y, w)
     local h = 40
     if not visible(y, h) then return h end
@@ -163,8 +176,9 @@ local function channel_row(ctx, c, x, y, w)
         if ctx.state.mapping_draft and ctx.state.mapping_draft.original_name == c.canonical then ctx.state.mapping_draft = nil
         else Mapping.open(ctx, c.canonical) end
     end
-    if c.guessed then W.chip("推测", nx + 6, y + 4, C.warn, 16) end
-    D.text((c.source_text or "") .. (c.present and "" or "  · 网格里没有"), x + 8, y + 22, C.faint, W.small(), nw - 12)
+    if c.guessed then nx = nx + 6 + W.chip("推测", nx + 6, y + 4, C.warn, 16) end
+    missing_note(c, nx, x + nw, y)
+    D.text(c.source_text or "", x + 8, y + 22, C.faint, W.small(), nw - 12)
     W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, nw, h)
     local mx = x + nw
     local mw = max(60, (w - nw) * 0.36)
@@ -191,9 +205,10 @@ local function preview_row(ctx, c, x, y, w)
     local nw = max(170, w * 0.3)
     local fg = c.present and C.text or C.faint
     local nx = x + 8 + D.text(c.label or c.name, x + 8, y + 3, fg, W.body(), nw - 60)
-    if c.guessed then W.chip("推测", nx + 6, y + 4, C.warn, 16) end
-    if c.extension then W.chip("扩展", nx + 6 + (c.guessed and 44 or 0), y + 4, C.faint, 16) end
-    D.text(c.present and ("网格：" .. c.name) or "网格里没有", x + 8, y + 22, C.faint, W.small(), nw - 12)
+    if c.guessed then nx = nx + 6 + W.chip("推测", nx + 6, y + 4, C.warn, 16) end
+    if c.extension then nx = nx + 6 + W.chip("扩展", nx + 6, y + 4, C.faint, 16) end
+    missing_note(c, nx, x + nw, y)
+    if c.present then D.text("形态键：" .. c.name, x + 8, y + 22, C.faint, W.small(), nw - 12) end
     D.text(c.source_text or "", x + nw, y + 12, C.muted, W.small(), w - nw - 12)
     W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, w, h)
     return h

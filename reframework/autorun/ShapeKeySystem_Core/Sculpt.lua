@@ -54,6 +54,8 @@ local function preset_value(preset, part, name)
     return lookup(preset.values, name)
 end
 
+local warm = {}   -- mesh address -> warm-up count of targets dropped by clear_targets
+
 -- parts: Scene parts { id, mesh, names, n }; owned[mesh] = { [index] = true } (expression)
 -- presets_of(part_id) -> active, mod: the sculpt preset the part's binding selects, and the one
 -- its mod binding selects (the "default" for reset / A-B preview). Either may be nil.
@@ -135,13 +137,16 @@ function S.rebuild(parts, owned, presets_of)
                                       last = {}, stable = 0, dirty = true, copy = true }
         end
     end
-    -- a rebuilt target for the same mesh keeps its warm-up and last written values
+    -- a rebuilt target for the same mesh keeps its warm-up and last written values; one dropped
+    -- by clear_targets keeps only its warm-up (every channel is read and written again)
     local prev_t = {}
     for _, t in ipairs(K.targets) do if t.addr then prev_t[t.addr] = t end end
     for _, t in ipairs(targets) do
         local o = t.addr and prev_t[t.addr]
-        if o then t.stable, t.last = o.stable, o.last end
+        if o then t.stable, t.last = o.stable, o.last
+        elseif t.addr and warm[t.addr] then t.stable = warm[t.addr] end
     end
+    warm = {}
     for _, k in ipairs(keys) do k.owner = (k.free == 0) and "expression" or "self" end
     table.sort(keys, function(a, b)
         if a.group ~= b.group then return a.group < b.group end
@@ -151,7 +156,10 @@ function S.rebuild(parts, owned, presets_of)
     return keys
 end
 
+-- Rigs are dropped many times in combat (parts change on hits): without the warm-up surviving,
+-- every drop paused all sculpt-only keys for STABLE_FRAMES.
 function S.clear_targets()
+    for _, t in ipairs(K.targets) do if t.addr then warm[t.addr] = t.stable end end
     K.targets = {}
 end
 

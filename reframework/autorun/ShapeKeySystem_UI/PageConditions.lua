@@ -14,7 +14,9 @@ local C = T.c
 local max, min, floor = math.max, math.min, math.floor
 
 local SOURCE = { user = "用户", mods = "mod 自带" }
-local STATUS = { active = { "生效中", C.ok }, outranked = { "命中，但被上面的压着", C.warn }, idle = { "未命中", C.faint } }
+local STATUS = { active = { "生效中", C.ok }, outranked = { "命中，但被上面的压着", C.warn }, idle = { "未命中", C.faint },
+    off = { "已停用", C.faint } }
+local UNBOUND = "-"
 local NUM_OPS = { "<=", "<", ">=", ">", "==" }
 local ENUM_OPS = { "==", "~=" }
 
@@ -204,16 +206,31 @@ local function rules_text(st, rules)
     return #parts == 0 and "没有规则" or table.concat(parts, "  或者  ")
 end
 
+-- section title that folds its section; click_w leaves room for buttons drawn on the right
+local function section_head(s, key, title, stat, x, y, click_w)
+    s.fold = s.fold or {}
+    local open = not s.fold[key]
+    D.icon_tri(x + 6, y + 10, 4, open, C.brass)
+    local tw = W.h2(title, x + 18, y)
+    if stat then D.text(stat, x + 28 + tw, y + 2, C.muted, W.small()) end
+    if I.click(x, y - 2, click_w, 26) then s.fold[key] = open end
+    return open
+end
+
 -- ---------------------------------------------------------------- states
 local function states_section(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
     local data = st.conditions.current.data
     local cy = y
-    W.h2("状态", x, cy); cy = cy + 28
-    D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效", x, cy, C.faint, W.small(), w); cy = cy + 24
+    local open = section_head(s, "states", "状态", string.format("%d 个", #data.states), x, cy, w)
+    cy = cy + 28
+    if not open then return cy + 4 - y end
+    D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效；组合选「-」可临时停用", x, cy, C.faint, W.small(), w); cy = cy + 24
     local clip_ids = {}
     for id in pairs(data.clips) do clip_ids[#clip_ids + 1] = id end
     table.sort(clip_ids)
+    local clip_labels = { UNBOUND }
+    for k, id in ipairs(clip_ids) do clip_labels[k + 1] = id end
     local status = live.cond and live.cond.status or {}
     s.closed = s.closed or {}
     for si, state in ipairs(data.states) do
@@ -228,11 +245,12 @@ local function states_section(ctx, x, y, w)
             D.icon_tri(x + 12, cy + 22, 4, not closed, C.brass)
             if I.click(x + 4, cy + 8, 18, 28) then s.closed[si] = not closed end
             D.text_mid(tostring(si), x + 22, cy + 8, 28, C.faint, W.mono())
-            local ci = 1
-            for k, id in ipairs(clip_ids) do if id == state.clip then ci = k end end
-            local ch, i = W.select("st_clip" .. si, x + 38, cy + 8, min(200, w * 0.3), 28, clip_ids, ci, { placeholder = state.clip })
-            if ch then edit(ctx, function(d) d.states[si].clip = clip_ids[i] end) end
-            local stx = STATUS[status[si] or "idle"]
+            -- "-" binds no combination: the backend skips the state, so it works as a switch-off
+            local ci = state.clip == "" and 1 or nil
+            for k, id in ipairs(clip_ids) do if id == state.clip then ci = k + 1 end end
+            local ch, i = W.select("st_clip" .. si, x + 38, cy + 8, min(200, w * 0.3), 28, clip_labels, ci, { placeholder = state.clip })
+            if ch then edit(ctx, function(d) d.states[si].clip = i == 1 and "" or clip_ids[i - 1] end) end
+            local stx = STATUS[status[si] or (state.clip == "" and "off" or "idle")]
             local chx = x + 48 + min(200, w * 0.3)
             local chw = W.chip(stx[1], chx, cy + 13, stx[2])
             local bx = x + w - 10
@@ -306,7 +324,7 @@ local function states_section(ctx, x, y, w)
         cy = cy + h + 8
     end
     if #clip_ids == 0 then
-        D.text("先在下面新建一个表情组合，再添加状态。", x, cy, C.muted, W.small()); cy = cy + 24
+        D.text("先在下面新建一个形态键配置组合，再添加状态。", x, cy, C.muted, W.small()); cy = cy + 24
     elseif W.button("＋ 添加状态", x, cy, nil, 28) then
         edit(ctx, function(d) table.insert(d.states, { clip = clip_ids[1], rules = {} }) end)
         s.closed[#data.states + 1] = false
@@ -319,19 +337,21 @@ local function clips_section(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
     local data = st.conditions.current.data
     local cy = y
-    W.h2("表情组合", x, cy)
+    local ids = {}
+    for id in pairs(data.clips) do ids[#ids + 1] = id end
+    table.sort(ids)
+    local open_all = section_head(s, "clips", "形态键配置组合", string.format("%d 个", #ids), x, cy, w - 120)
     if W.button("＋ 新建组合", x + w - 110, cy - 2, 110, 26, { font = W.small() }) then
-        W.start_text(s, "clip_form", { title = "新建表情组合", on_submit = function(name)
+        W.start_text(s, "clip_form", { title = "新建形态键配置组合", on_submit = function(name)
             if name == "" then return end
             edit(ctx, function(d) if not d.clips[name] then d.clips[name] = { values = {}, fade_in = 0.15, fade_out = 0.3 } end end)
             s.open_clip = name
+            s.fold.clips = nil
         end })
     end
     cy = cy + 32
     cy = cy + W.text_form(s, "clip_form", "conditions_clip", x, cy, w)
-    local ids = {}
-    for id in pairs(data.clips) do ids[#ids + 1] = id end
-    table.sort(ids)
+    if not open_all then return cy - y end
     local playing = live.cond and live.cond.playing
     -- keys a clip can use: every merged mesh key
     local key_names = {}
@@ -355,9 +375,10 @@ local function clips_section(ctx, x, y, w)
                 ctx.call("cond_preview", { clip = s.preview })
             end
             if W.tbutton("删除", x + w - 60, cy + 11, { kind = "danger" }) then
+                -- states keep their rules and fall back to "-" (switched off)
                 edit(ctx, function(d)
                     d.clips[id] = nil
-                    for i = #d.states, 1, -1 do if d.states[i].clip == id then table.remove(d.states, i) end end
+                    for _, ds in ipairs(d.states) do if ds.clip == id then ds.clip = "" end end
                 end)
             end
             if open then
@@ -388,22 +409,27 @@ local function clips_section(ctx, x, y, w)
         end
         cy = cy + h + 8
     end
-    if #ids == 0 then D.text("还没有表情组合。", x, cy, C.faint, W.small()); cy = cy + 24 end
+    if #ids == 0 then D.text("还没有形态键配置组合。", x, cy, C.faint, W.small()); cy = cy + 24 end
     return cy - y
 end
 
 -- ---------------------------------------------------------------- live values
+local function live_cols(w) return w >= 640 and 3 or w >= 340 and 2 or 1 end
+
+local function live_height(ctx, w)
+    return 44 + math.ceil(#(ctx.st.conditions.defs or {}) / live_cols(w)) * 22
+end
+
 local function live_section(ctx, x, y, w)
     local st, live = ctx.st, ctx.live
     local defs = st.conditions.defs or {}
-    local cols = w >= 640 and 3 or 2
+    local cols = live_cols(w)
     local cw = w / cols
-    local rows = math.ceil(#defs / cols)
-    local h = 44 + rows * 22
+    local h = live_height(ctx, w)
     W.panel_box(x, y, w, h, true)
     W.h2("实时条件", x + 12, y + 10)
     if not (live.cond and live.cond.sampled) then
-        D.text("（只在游戏中、主角色可操作时读取）", x + 100, y + 13, C.faint, W.small())
+        D.text("（只在游戏中、主角色可操作时读取）", x + 100, y + 13, C.faint, W.small(), w - 112)
     end
     for i, d in ipairs(defs) do
         local col, row = (i - 1) % cols, floor((i - 1) / cols)
@@ -423,10 +449,25 @@ function Page.draw(ctx, x, y, w)
         cy = cy + 30
         return cy + live_section(ctx, x, cy, w) - y
     end
-    cy = cy + states_section(ctx, x, cy, w) + 6
-    cy = cy + clips_section(ctx, x, cy, w) + 10
-    cy = cy + live_section(ctx, x, cy, w)
-    return cy - y
+    if w < 900 then
+        cy = cy + states_section(ctx, x, cy, w) + 6
+        cy = cy + clips_section(ctx, x, cy, w) + 10
+        cy = cy + live_section(ctx, x, cy, w)
+        return cy - y
+    end
+    -- wide: live values in a right column that stays in view while the left column scrolls
+    local rw = min(400, max(300, floor(w * 0.32)))
+    local lw = w - rw - 12
+    local top = cy
+    local ly = top + states_section(ctx, x, top, lw) + 6
+    ly = ly + clips_section(ctx, x, ly, lw)
+    local lh = ly - top
+    local rh = live_height(ctx, rw)
+    local clip = D.get_clip()
+    local ry = top
+    if clip and lh > rh then ry = min(max(top, clip[2] + 8), top + lh - rh) end
+    live_section(ctx, x + lw + 12, ry, rw)
+    return max(lh, rh) + cy - y
 end
 
 Page.want_cond = true

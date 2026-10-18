@@ -184,11 +184,11 @@ check(math.abs(jaw_max - 0.1) < 0.02, string.format("Rise, fallback: the mouth o
 flags.ready = false; ticks(2)
 local t_closed = Pr.time
 run_for(0.2)
-check(Pr.time == t_closed, "gate closed: the generator's clock stands still")
+check(Pr.time > t_closed, "player not ready: the generator keeps running")
 flags.ready = true; ticks(1)
 do local w = os.clock() + 0.02; while os.clock() < w do end end   -- the second frame needs real time to pass
 ticks(1)
-check(Pr.time > t_closed and Pr.time - t_closed <= 0.1 + 1e-9, "gate open again: the clock resumes without a jump")
+check(Pr.time > t_closed, "player ready again: the generator still runs")
 SKS.call("set_procedural", { patch = { mode = "game" } })
 ticks(60)
 check(run_for(0.6) == 0, "Rise, game only: no blink")
