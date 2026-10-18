@@ -291,24 +291,36 @@ local function log_card(ctx, x, y, w)
     return h
 end
 
--- author, version and the latest release notes; h = the space it may use (fills the gap under
--- the performance card in the two-column layout)
+-- the items of a version's notes ("；"-separated), one line each so a narrow card does not cut them
+local function note_lines(notes)
+    local out = {}
+    for part in tostring(notes or ""):gmatch("[^；]+") do out[#out + 1] = part end
+    return out
+end
+
+-- author, version and the latest two release notes; h = the space it may use (fills the gap under
+-- the performance card in the two-column layout), grown to fit every line
 local function about_card(ctx, x, y, w, h)
-    h = max(h or 0, 96)
+    local shown = {}
+    for i = 1, min(2, #Version.history) do shown[i] = note_lines(Version.history[i].notes) end
+    local lines = 0
+    for _, l in ipairs(shown) do lines = lines + max(1, #l) end
+    h = max(h or 0, 10 + 30 + 22 + lines * 22 + 6)
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
-    local tw = W.h2("关于", rx, cy) or 36
-    D.text(string.format("%s v%s · 作者 %s", Version.name, Version.number, Version.author), rx + tw + 12, cy + 3, C.muted,
-        W.small(), rw - tw - 12)
+    W.h2("关于", rx, cy)
     cy = cy + 30
-    for i, e in ipairs(Version.history) do
-        if cy + 20 > y + h - 6 then break end
-        local label = (i == 1) and "本版" or "上一版"
-        D.text(string.format("%s v%s", label, e.version), rx, cy, i == 1 and C.brass or C.faint, W.small(), 110)
-        D.text(e.notes or "", rx + 110, cy, i == 1 and C.text or C.muted, W.small(), rw - 110)
-        cy = cy + 22
-        if i >= 2 then break end
+    D.text(string.format("%s v%s · 作者 %s", Version.name, Version.number, Version.author), rx, cy, C.muted, W.small(), rw)
+    cy = cy + 22
+    for i, parts in ipairs(shown) do
+        local e = Version.history[i]
+        D.text(string.format("%s v%s", i == 1 and "本版" or "上一版", e.version), rx, cy, i == 1 and C.brass or C.faint, W.small(), 110)
+        if #parts == 0 then cy = cy + 22 end
+        for _, part in ipairs(parts) do
+            D.text(part, rx + 110, cy, i == 1 and C.text or C.muted, W.small(), rw - 110)
+            cy = cy + 22
+        end
     end
     return h
 end
