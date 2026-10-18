@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.4.1"
+V.number = "1.5.0"
 V.author = "谛听, MK, Funnyguyz"
 
 V.history = {
+    { version = "1.5.0", notes = "新增面捕；荒野新增表情录制；其他优化与问题修复" },
     { version = "1.4.1", notes = "条件表情更名为条件规则" },
     { version = "1.4.0", notes = "支持怪物猎人崛起；新增自动表情" },
     { version = "1.3.0", notes = "支持生化危机4 重制版" },
