@@ -169,7 +169,15 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 
 `scene_search_available` 由适配器的 `scene_search` 提供；适配器设为 `false` 时，两个面板均隐藏全场景搜索开关。该字段属于运行能力，不写入设置文件。
 
-`hotkey`、`ui_scale`、`language`、`scene_search_always`、`periodic_scan_sec`、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`。修改后立即持久化。
+`hotkey`、`ui_scale`、`language`、`scene_search_always`、`periodic_scan_sec`、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
+
+`hold_available` 表示当前适配器提供 `expression_joints` 与 `face_layers`；`hold_status` 是禁用骨骼表情的当前状态文字。二者属于运行能力，不写入设置文件。
+
+### 3.8a 禁用骨骼表情
+
+`FaceHold.lua` 在 UpdateMotion 之后把每个被驱动 rig 的面部表情骨骼写回中性姿势，使游戏的面部骨骼动画不再改变脸型，表情只由形态键表现。中性姿势取自运行时而非骨架的 Base 姿势：捏脸会让面部骨骼偏离 Base。读取时把该面部的所有动画层 `BlendRate` 置 0 约 2–3 帧，记下未动画姿势后恢复原值；期间 fcParam 读数为 0，Core 跳过表情写入，网格保留上一帧的权重。rig 被放掉（换装、过场、菜单）后重新读取。
+
+被禁用的骨骼仍可作为信号来源：适配器用 `FaceHold.watch(names)` 登记需要的骨骼名，`FaceHold.pose(face_addr, name)` 返回本帧写回之前的动画姿势。眼球骨骼不在禁用范围内，视线照常读取。
 
 ### 3.9 `state.debug`
 | 字段 | 类型 | 说明 |

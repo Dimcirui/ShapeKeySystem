@@ -13,6 +13,7 @@ local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 
 local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
 local B = require("ShapeKeySystem_Core.BoneSignals")
+local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
 local A = {
     id = "mhwilds",
@@ -71,6 +72,44 @@ function A.eye_joints(face)
     return { L = jbn(face, "L_EyeJ_LOD02"), R = jbn(face, "R_EyeJ_LOD02") }
 end
 
+-- Bones held by the "hold face bones" option: every joint under HeadAll_SCL except the eyeballs
+-- (gaze is read from them), the charamake scale joints and the helmet attach points.
+local HOLD_SKIP = { HeadAll_SCL = true, Ear_SCL = true, Head_SCL = true, L_EyeJ_LOD02 = true, R_EyeJ_LOD02 = true }
+
+local function under_head(j)
+    local p = j:call("get_Parent")
+    for _ = 1, 16 do
+        if not p then return false end
+        if p:call("get_Name") == "HeadAll_SCL" then return true end
+        p = p:call("get_Parent")
+    end
+    return false
+end
+
+function A.expression_joints(face)
+    local arr = face:call("get_Joints")
+    local out = {}
+    for _, j in ipairs(arr and arr:get_elements() or {}) do
+        local name = j:call("get_Name")
+        if name and not HOLD_SKIP[name] and name:find("HelmJoint_", 1, true) ~= 1 and under_head(j) then
+            out[#out + 1] = { joint = j, name = name }
+        end
+    end
+    return out
+end
+
+-- every motion layer of the face: muting them all leaves the character-creation pose
+function A.face_layers(face)
+    local motion = face:call("get_GameObject"):call("getComponent(System.Type)", sdk.typeof("via.motion.Motion"))
+    if not motion then return nil end
+    local out = {}
+    for i = 0, (motion:call("getLayerCount") or 0) - 1 do
+        local layer = motion:call("getLayer(System.UInt32)", i)
+        if layer then out[#out + 1] = layer end
+    end
+    return out
+end
+
 -- ---------------------------------------------------------------- signals
 -- Raw channels are fcParam numbers 0..200; a channel's value is the z of its fcParam_NNN joint's
 -- local position, normalised by the dictionary's `full`.
@@ -100,6 +139,9 @@ local function load_bones()
     if not ok or type(data) ~= "table" then return nil, "荒野面部骨骼标定文件无法读取" end
     local valid, why = B.validate(data, { label = "荒野" })
     if not valid then return nil, why end
+    local names = {}
+    for id, spec in pairs(data.joints) do names[#names + 1] = spec.bone or id end
+    FaceHold.watch(names)
     local raw_of = {}
     for _, rule in ipairs(data.rules) do
         local n = A.raw.parse(rule.raw)
@@ -124,13 +166,21 @@ local function bind_bones(face, keys)
     end
     if #rules == 0 then return nil end
     local specs = bones.calibration.joints
+    local addr = face:get_address()
     return {
         calibration = { joints = specs, rules = rules },
         raw_of = raw_of,
-        -- one engine call per joint: position for pos joints, rotation for rot joints
+        -- one engine call per joint: position for pos joints, rotation for rot joints. While
+        -- FaceHold holds the face the joints read neutral; its copy of the animated pose is used.
         sample = function(name)
+            local spec = specs[name]
+            local hp, hr = FaceHold.pose(addr, spec.bone or name)
+            if hp then
+                if spec.kind == "pos" then return hp end
+                return nil, hr
+            end
             local j = joints[name]
-            if specs[name].kind == "pos" then return M_LPOS:call(j) end
+            if spec.kind == "pos" then return M_LPOS:call(j) end
             return nil, M_LROT:call(j)
         end,
     }

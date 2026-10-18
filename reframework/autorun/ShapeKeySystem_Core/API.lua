@@ -24,6 +24,7 @@ local Labels  = require("ShapeKeySystem_Core.Labels")
 local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
 local Proc    = require("ShapeKeySystem_Core.Procedural")
 local Mocap   = require("ShapeKeySystem_Core.Mocap")
+local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
 local Version = require("ShapeKeySystem_Core.Version")
 local SKS = { version = Version.number }
@@ -44,6 +45,11 @@ local DEFAULTS = {
     scene_search_always = false, periodic_scan_sec = 10, write_epsilon = 0.001, clamp = true,
     -- drive the hunter while a cutscene plays (released on skip / stop, re-armed per segment)
     cutscene_drive = true,
+    -- off: the game's expression no longer reaches the shape keys (sculpt, conditions, touch and
+    -- other plugins still do)
+    expression_enabled = true,
+    -- hold the face's expression bones at the neutral pose so only the shape keys show expression
+    hold_face_bones = false,
     -- sculpt slider upper end, for every key (1 = the authored shape; 2 = exaggerated)
     sculpt_max = 1.0,
     -- conditional expression set used when no parent preset names one ("" = none)
@@ -227,7 +233,8 @@ local function drop_rigs(reason, rescan_after)
     Cnd.reset()
     Scene.no_targets = {}
     Mocap.drop_refs()
-    C.driven_frame = nil
+    FaceHold.release()
+    C.driven_frame, C.held_frame = nil, nil
     Guard.release_refs()
     if rescan_after then
         C.scan_at = { C.frame + rescan_after }
@@ -306,7 +313,9 @@ local function build_settings_state()
     local st = state.settings
     for _, k in ipairs({ "hotkey", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
                          "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend",
-                         "translate_keys" }) do st[k] = cfg[k] end
+                         "translate_keys", "expression_enabled", "hold_face_bones" }) do st[k] = cfg[k] end
+    st.hold_available = SKS.adapter.expression_joints ~= nil and SKS.adapter.face_layers ~= nil
+    st.hold_status = FaceHold.status
     st.scene_search_available = SKS.adapter.scene_search ~= false
     st.window = U.copy(cfg.window)
     state.runtime.enabled = cfg.enabled
@@ -1118,13 +1127,14 @@ local function drive(rig, primary)
     -- conditional clips and other plugins change a copy of the expression weights: rig.W is also
     -- the smoothing state of the next frame and must stay the pure expression
     local out, ext_skip = rig.W, nil
+    local expr_on = cfg.expression_enabled ~= false
     local cond_on = rig.primary and C.cond_live and CondExpr.any()
     local touch_on = Touch.any()
-    if cond_on or touch_on or Ext.any() then
+    if not expr_on or cond_on or touch_on or Ext.any() then
         out = rig.O or {}
         rig.O = out
         local Wt = rig.W
-        for s = 1, prog.n do out[s] = Wt[s] end
+        for s = 1, prog.n do out[s] = expr_on and Wt[s] or 0 end
         if cond_on then CondExpr.apply(prog, C.resolve_slot, out) end
         if touch_on then Touch.apply(prog, C.resolve_slot, out) end
         if Ext.any() then ext_skip = Ext.apply(prog, C.resolve_slot, out) end
@@ -1404,11 +1414,16 @@ local function tick()
         -- tick drove it (drop_rigs clears the mark)
         local r1 = C.rigs[1]
         C.driven_frame = (r1 and r1.primary) and f or nil
-        for i, rig in ipairs(C.rigs) do
-            local ok, err = pcall(drive, rig, i == 1)
-            if not ok or err then
-                drop_rigs(string.format("%s: %s", rig.label, tostring(err)), Guard.SETTLE_FRAMES)
-                break
+        C.held_frame = f
+        -- while the face bones' neutral pose is captured fcParam reads 0: the meshes keep last
+        -- frame's weights instead
+        if not FaceHold.capturing() then
+            for i, rig in ipairs(C.rigs) do
+                local ok, err = pcall(drive, rig, i == 1)
+                if not ok or err then
+                    drop_rigs(string.format("%s: %s", rig.label, tostring(err)), Guard.SETTLE_FRAMES)
+                    break
+                end
             end
         end
         update_live()
@@ -1427,8 +1442,26 @@ local function tick()
     if C.save_at and f >= C.save_at then save_now() end
 end
 
--- re.on_application_entry("UpdateMotion"): mocap head turn on the master player
+local function update_hold()
+    local want = cfg.enabled and cfg.hold_face_bones and C.held_frame and C.held_frame == C.frame
+    if want then
+        local faces = {}
+        for _, rig in ipairs(C.rigs) do faces[#faces + 1] = rig.face end
+        FaceHold.update(SKS.adapter, faces)
+    elseif FaceHold.active() then
+        FaceHold.release()
+    end
+    if state.settings.hold_status ~= FaceHold.status then build_settings_state() end
+end
+
+-- re.on_application_entry("UpdateMotion"): face bone hold on every driven rig, mocap head turn on
+-- the master player
 function SKS.update_motion()
+    local ok, err = pcall(update_hold)
+    if not ok then
+        FaceHold.release()
+        FaceHold.status = "禁用骨骼表情出错：" .. tostring(err)
+    end
     if not (C.driven_frame and C.driven_frame == C.frame and Mocap.wants_head()) then return end
     Mocap.update_motion(Scene.primary_root(), Writer.M_JBN)
 end
@@ -1465,7 +1498,7 @@ function cmds.set_enabled(a)
     if type(a.on) ~= "boolean" then return false, "E_BAD_ARGS", "on must be boolean" end
     cfg.enabled = a.on
     if not a.on then Playback.request("stop") end
-    if not a.on then queue_zero_all(); zero_sculpt() else Sculpt.mark_dirty(); request_rescan(1) end
+    if not a.on then queue_zero_all(); zero_sculpt(); FaceHold.release() else Sculpt.mark_dirty(); request_rescan(1) end
     build_settings_state(); save_soon()
     return true
 end
@@ -1482,6 +1515,7 @@ local SETTING_TYPES = {
     clamp = "boolean", window = "table", advanced = "boolean",
     cutscene_drive = "boolean", sculpt_max = { 1, Sculpt.MAX_LIMIT }, face_style = "string",
     ui_backend = "string", translate_keys = "boolean",
+    expression_enabled = "boolean", hold_face_bones = "boolean",
 }
 local UI_BACKENDS = { auto = true, d2d = true, imgui = true }
 function cmds.set_setting(a)
@@ -1498,6 +1532,7 @@ function cmds.set_setting(a)
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end
     if a.key == "sculpt_max" then cfg.sculpt_max = Sculpt.set_max(v); build_sculpt_state() end
+    if a.key == "hold_face_bones" and not v then FaceHold.release(); FaceHold.status = "" end
     if a.key == "translate_keys" or a.key == "language" then
         build_sculpt_state(); build_expression_state()   -- the expression build refreshes a preview too
     end
@@ -2282,6 +2317,7 @@ function SKS.shutdown()
     NativeSignals.finish("脚本重置")
     Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
+    FaceHold.release()
     C.unpublish_api()
     if SKS.adapter.strict_bounds and
         (not Guard.game_stable(C.frame) or Scene.children_signature(Scene.primary_root()) ~= C.sig) then

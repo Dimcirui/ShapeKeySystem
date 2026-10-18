@@ -145,6 +145,16 @@ A.eye_angles(joint) -> yaw, pitch    -- SKS 约定：+yaw = 脸自己的右侧�
 - 中立位标定、反向、满权重角度仍由 Core 处理并存进 `settings.json`；默认值从 `A.defaults.eyes` 读。
 - 没有 `caps.eyes` 时 eye 节点的值恒为 0，视线组在界面上标为不可用。
 
+### 2.4a 禁用骨骼表情（可选）
+
+```lua
+A.expression_joints(face) -> { { joint = via.Joint, name = string }, ... }   -- 要禁用的面部表情骨骼，不含眼球
+A.face_layers(face)       -> { via.motion.TreeLayer, ... }                  -- 读取中性姿势时临时静音的动画层
+```
+
+- 两个函数都提供时设置项 `hold_face_bones` 可用（`state.settings.hold_available`），流程见 shape-key-system-api.md 3.8a。
+- 荒野：`HeadAll_SCL` 之下的全部骨骼，排除 `Ear_SCL` / `Head_SCL`（捏脸缩放）、`HelmJoint_*`（头盔挂点）和 `L/R_EyeJ_LOD02`；动画层取面部 `via.motion.Motion` 的全部层。
+
 ### 2.5 生命周期事件
 
 ```lua

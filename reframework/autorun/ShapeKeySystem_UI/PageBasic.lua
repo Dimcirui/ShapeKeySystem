@@ -211,13 +211,28 @@ local function draw_controls(ctx, x, y, w)
     cy = cy + card_h + 12
 
     -- overall
-    W.panel_box(x, cy, w, 108, true)
+    local se = st.settings
+    W.panel_box(x, cy, w, 140, true)
     W.h2("整体", x + 14, cy + 10)
-    local c3, v3 = big_slider(ctx, "master", "表情强度", x + 14, cy + 38, w - 28, ex.master_gain or 1, 0, 2)
+    local tx = x + 14
+    local c5, v5, w5 = W.toggle("表情驱动", tx, cy + 38, se.expression_enabled ~= false)
+    if c5 then call("set_setting", { key = "expression_enabled", value = v5 }) end
+    W.tooltip("关闭后游戏表情不再驱动形态键；捏脸、条件规则和面部互动照常生效", tx, cy + 38, w5, 28)
+    if se.hold_available then
+        tx = tx + w5 + 24
+        local c6, v6, w6 = W.toggle("禁用骨骼表情", tx, cy + 38, se.hold_face_bones == true)
+        if c6 then call("set_setting", { key = "hold_face_bones", value = v6 }) end
+        W.tooltip("禁用骨骼驱动的表情，只用形态键控制", tx, cy + 38, w6, 28)
+        if se.hold_face_bones and (se.hold_status or "") ~= "" then
+            tx = tx + w6 + 12
+            D.text_mid(se.hold_status, tx, cy + 38, 28, C.muted, W.small(), x + w - 14 - tx)
+        end
+    end
+    local c3, v3 = big_slider(ctx, "master", "表情强度", x + 14, cy + 70, w - 28, ex.master_gain or 1, 0, 2)
     if c3 then call("set_master_gain", { value = v3 }) end
-    local c4, v4 = big_slider(ctx, "gaze", "视线强度", x + 14, cy + 70, w - 28, ex.gaze_gain or 1, 0, 2)
+    local c4, v4 = big_slider(ctx, "gaze", "视线强度", x + 14, cy + 102, w - 28, ex.gaze_gain or 1, 0, 2)
     if c4 then call("set_gaze_gain", { value = v4 }) end
-    cy = cy + 120
+    cy = cy + 152
 
     -- zone pills
     local pw = (w - 8) / 2
