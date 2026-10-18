@@ -194,6 +194,14 @@ local function scene_card(ctx, x, y, w)
         for _, x2 in ipairs(r.targets or {}) do t[#t + 1] = string.format("%s（%d 通道）", x2.display or x2.name, x2.channels) end
         lines[#lines + 1] = (r.primary and "★ " or "   ") .. r.label .. "：" .. table.concat(t, "，")
     end
+    local additional = sc.additional or {}
+    for _, actor in ipairs(additional.instances or {}) do
+        lines[#lines + 1] = string.format("实例 %s · Profile %s · %d 通道 · %s", actor.label,
+            actor.profile, actor.channels, actor.ready and "驱动中" or "等待网格就绪")
+        if actor.binding then lines[#lines + 1] = "  绑定 " .. actor.binding end
+        for _, warning in ipairs(actor.warnings or {}) do lines[#lines + 1] = "  " .. warning end
+    end
+    for _, message in ipairs(additional.errors or {}) do lines[#lines + 1] = "实例：" .. message end
     for _, p in ipairs(sc.parts or {}) do
         lines[#lines + 1] = string.format("部件 %s · %d 通道 · 指纹 %s%s", p.display ~= p.id and p.display and (p.display .. "（" .. p.id .. "）") or p.id, p.channels, tostring(p.fingerprint),
             p.binding and (" · 绑定 " .. p.binding) or "")

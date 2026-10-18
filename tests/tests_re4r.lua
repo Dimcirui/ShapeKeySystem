@@ -98,6 +98,64 @@ check(A.primary_root()==ROOT and #A.parts(ROOT)==1, "head may be separate from p
 check(not A.channel_writable(native) and not A.channel_writable(Hash.label(Hash.hash(native))), "native and unresolved labels are read-only")
 check(not ShapeKeySystemAPI.set("test",native,1), "public API rejects native channels")
 check(A.raw.parse("jawOpen") and not A.raw.parse("typo"), "raw labels compile to stable keys")
+local old_channels = CHANNELS
+local set_count = 0
+m.set_BlendShapeChannelWeightCount = function(_, value) count = value; set_count = set_count+1 end
+CHANNELS = {}; for i=1,536 do CHANNELS[i] = "Custom_"..i end
+local part = {id="cha000_10",mesh=m,n=536,names=CHANNELS}
+count,length = 0,536
+A.prepare_parts({part})
+check(count==536 and part.weights.count==536, "Leon 536-channel custom head enables an already allocated list")
+A.prepare_parts({part})
+check(set_count==1, "allocation preparation is idempotent with a compatibility wrapper")
+count,length = 0,535; A.prepare_parts({part})
+check(count==0, "short allocated list is never enabled")
+length=536; MESH_STATE.ready=false; A.prepare_parts({part})
+check(count==0, "unready mesh is never enabled")
+MESH_STATE.ready=true
+m.get_BlendShapeReleasedBuffers=function() return true end; A.prepare_parts({part})
+check(count==0, "released mesh is never enabled")
+m.get_BlendShapeReleasedBuffers=function() return false end
+local save_n=part.n; part.n=535; A.prepare_parts({part}); part.n=save_n
+check(count==0, "channel count mismatch is never enabled")
+CHANNELS={native}; part.n=1; part.names=CHANNELS; length=1; A.prepare_parts({part})
+check(count==0, "native-only mesh retains engine-owned weight count")
+CHANNELS=old_channels; count,length=#CHANNELS,#CHANNELS
+m.get_BlendShapeReleasedBuffers=nil
+local function node(name, resource)
+    local tr = { _name=name }
+    local mm = resource and {call=call,getMesh=function() return {call=call,get_ResourcePath=function() return resource end} end}
+    local object = {call=call,get_Name=function()return name end,get_Transform=function()return tr end,
+        getComponent=function()return mm end}
+    tr.call=call; tr.get_GameObject=function()return object end
+    tr.get_Parent=function()return tr.parent end; tr.get_Child=function()return tr.child end
+    tr.get_Next=function()return tr.next end; tr.get_address=function()return name end
+    tr.getJointByName=function()return {} end
+    return tr
+end
+local ada_root=node("Ada actor")
+local ada_face=node("Ada head","/Character/cha800/10/cha800_10.mesh.221108797")
+local ada_body=node("Ada body","/Character/cha800/00/cha800_00.mesh.221108797")
+ada_face.parent=ada_root; ada_body.parent=ada_root; ada_root.child=ada_face; ada_face.next=ada_body
+local saved_address=ARMOR.get_address; ARMOR.get_address=function()return "player head" end
+local old_scene=SCENE
+SCENE={call=function()
+    local comps={ {call=function()return go(ARMOR) end}, {call=function()return ada_face:get_GameObject() end},
+        {call=function()return ada_body:get_GameObject() end} }
+    return {call=function(_, method,i) if method=="get_Length" then return #comps else return comps[i+1] end end}
+end}
+local extra=A.additional_faces()
+check(#extra==1 and extra[1]==ada_face, "scene discovery excludes player-owned meshes and body meshes carrying face bones")
+check(A.face_root(ada_face, ROOT)==ada_root, "secondary face is grouped under its own actor root")
+local ada_parts=A.parts(ada_root,ada_face)
+local includes_player=false;for _,tr in ipairs(ada_parts) do includes_player=includes_player or tr==ARMOR end
+check(#ada_parts==2 and not includes_player, "secondary actor parts never include the player's head")
+local ah=A.bind(ada_face,{A.raw.parse("jawOpen")})
+check(ah.calibration.joints.L_U_Eyelid03~=nil, "secondary Ada handle selects Ada calibration rather than player's Leon calibration")
+check(type(HOOKS.changeEventPhase)=="function" and type(HOOKS.unload)=="function", "RE4R phase and unload hooks register reference release")
+SCENE=old_scene;ARMOR.get_address=saved_address
+
+
 local spec={kind="pos",neutral={0,0,0,0,0,0,1},axis={0,1,0}}
 check(math.abs(Signals.measure(spec,{x=9,y=0.008,z=-3})-8)<1e-9, "position projection is in calibrated millimetres")
 spec={kind="rot",neutral={0,0,0,0,0,0,1},axis={1,0,0}}

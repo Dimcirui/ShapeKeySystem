@@ -22,6 +22,7 @@ local Playback = require("ShapeKeySystem_Core.Playback")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
 local Labels  = require("ShapeKeySystem_Core.Labels")
 local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
+local ActorInstances = require("ShapeKeySystem_Core.ActorInstances")
 local Proc    = require("ShapeKeySystem_Core.Procedural")
 local Mocap   = require("ShapeKeySystem_Core.Mocap")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
@@ -158,8 +159,10 @@ local live = {
 SKS.state, SKS.live = state, live
 state.playback = Playback.state
 state.native_signals = NativeSignals.state
+state.scene.additional = ActorInstances.state
 NativeSignals.on_export = function() Playback.refresh() end
 state.mocap = Mocap.view
+
 
 -- ---------------------------------------------------------------- internal
 local C = {
@@ -235,6 +238,7 @@ local MENU_SCAN_FRAMES = 180
 local QUICK_RESCAN = 2
 
 local function drop_rigs(reason, rescan_after)
+    ActorInstances.release(reason)
     Playback.stop(false, "角色或场景变化，录制播放已停止：" .. tostring(reason))
     if #C.rigs > 0 or #C.pending_zero > 0 then log("released rigs: %s", reason) end
     -- warm-up by mesh address only (numbers, no engine references); the next scan consumes it
@@ -667,18 +671,19 @@ local function resolve_bindings(parts)
     for _, p in ipairs(parts) do
         local r = C.part_bindings[p.id]
         if not r then
-            r = Presets.resolve_binding(p.id, nil, p.fingerprint)
+            r = Presets.resolve_binding(p.id, nil, p.fingerprint, parts)
             C.part_bindings[p.id] = r
             for _, e in ipairs(r.chain) do
-                local key = e.error and (p.id .. "|" .. e.path .. "|" .. e.error)
+                local detail = e.error or e.warning
+                local key = detail and (p.id .. "|" .. e.path .. "|" .. detail)
                 if key and not C.warned[key] then
                     C.warned[key] = true
-                    notice("warn", string.format("%s：%s %s", p.id, e.path, e.error))
+                    notice("warn", string.format("%s：%s %s", p.id, e.path, detail))
                 end
             end
         end
         if r.hit then
-            local rank = LEVEL_RANK[r.level] or 0
+            local rank = (LEVEL_RANK[r.level] or 0) + (SKS.adapter.scoped_bindings and r.source == "user" and 10 or 0)
             if rank > best_rank or (rank == best_rank and (p.n or 0) > best_n) then
                 best, best_rank, best_n = r, rank, p.n or 0
             end
@@ -692,13 +697,14 @@ end
 -- binding is in effect, cfg.expression / cfg.eyes hold that part's working copy (the binding's
 -- values over the settings fallback) and edits are saved into the part's user binding by
 -- save_tuning. Without a binding they are the global fallback in settings.json, as in M1.
--- Eye neutral calibration stays global (it belongs to the hunter's face rig, not to a mesh).
+-- Scoped actor bindings also carry their eye neutral pose; other adapters keep it global.
 -- gains.for_profile: channel gains were tuned for that profile; another profile ignores them.
 local EYE_TUNING = { "full_deg", "invert", "sets" }
 
 local function eyes_subset(e)
     local t = {}
     for _, k in ipairs(EYE_TUNING) do t[k] = U.copy(e[k]) end
+    if SKS.adapter.scoped_bindings then t.neutral = U.copy(e.neutral) end
     return t
 end
 
@@ -759,6 +765,11 @@ local function apply_tuning(force)
                 end
             end
         end
+        if SKS.adapter.scoped_bindings and type(be) == "table" and type(be.neutral) == "table" then
+            for side, pose in pairs(be.neutral) do
+                for axis, value in pairs(pose) do eyes.neutral[side][axis] = value end
+            end
+        end
         t.source = "binding"
     else
         t.source = "settings"
@@ -767,6 +778,7 @@ local function apply_tuning(force)
     e.channel_gains = e.channel_gains or {}
     cfg.expression = e
     for _, k in ipairs(EYE_TUNING) do cfg.eyes[k] = eyes[k] end
+    if SKS.adapter.scoped_bindings then cfg.eyes.neutral = eyes.neutral end
     recompute_gains()
     build_expression_state(); build_eyes_state(); build_tuning_state()
     if path then log("tuning from %s", path) end
@@ -806,7 +818,7 @@ end
 local function sculpt_presets_of(part_id)
     local r = C.part_bindings[part_id]
     local active = r and r.data and r.data.sculpt and Presets.find_sculpt(r.data.sculpt, r.folder) or nil
-    local m = Presets.resolve_binding(part_id, "mods", fingerprint_of(part_id))
+    local m = Presets.resolve_binding(part_id, "mods", fingerprint_of(part_id), C.parts)
     local mod = m.data and m.data.sculpt and Presets.find_sculpt(m.data.sculpt, m.folder, "mods") or nil
     return active, mod
 end
@@ -1304,6 +1316,7 @@ local function tick()
     if Mocap.tick(dt, mc) then
         Sculpt.mark_dirty()
         if Ext.rev ~= ext_rev then C.build_external_state() end
+
     end
     Sculpt.frame = f
     -- The gate pauses nothing: loading, rebuilds and cutscenes keep driving whatever rigs exist.
@@ -1342,6 +1355,11 @@ local function tick()
     -- (rigs are dropped at each segment start), so the take waits instead of ending
     local face = C.rigs[1] and C.rigs[1].face
     NativeSignals.tick(SKS.adapter, (face or not cutscene) and true or "hold", { face = face })
+    local fallback_expression, fallback_eyes = fallback_tuning()
+    ActorInstances.tick(f, { enabled = cfg.enabled, cutscene_drive = cfg.cutscene_drive,
+        profile = cfg.profile, expression = fallback_expression, eyes = fallback_eyes,
+        expression_enabled = cfg.expression_enabled,
+        inv_full = C.inv_full, clamp = cfg.clamp, epsilon = cfg.write_epsilon, known = known_names() })
     -- menu mode (player not set up: title screen, save select, loading) drives whatever hunters
     -- the scene holds; entering or leaving it lets go of everything (the player is being built)
     if menu ~= C.menu then
@@ -1730,7 +1748,8 @@ function cmds.calibrate_eye_neutral()
         local a, n = rig.angles[s], e.neutral[s]
         e.neutral[s] = { yaw = n.yaw + a[1] * iy, pitch = n.pitch + a[2] * ip }
     end
-    build_eyes_state(); save_soon()
+    build_eyes_state()
+    if SKS.adapter.scoped_bindings then tuning_changed() else save_soon() end
     return true
 end
 
@@ -2219,6 +2238,7 @@ end
 -- returns false, reason (a type it needs is missing), nothing else starts and the data folder is
 -- not touched. Returns true, or false, reason.
 function SKS.init(adapter)
+    ActorInstances.init(adapter)
     if adapter.init then
         local ok, why = adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
                                        menu = SKS.on_menu, preview = SKS.on_preview })
@@ -2305,6 +2325,7 @@ function SKS.on_segment(index)
 end
 
 function SKS.on_rebuilt()
+    ActorInstances.release("actor lifecycle changed")
     Trail.event("hook rebuilt (rigs %d)", #C.rigs)
     if #C.rigs > 0 then drop_rigs("equipment rebuilt", Guard.SETTLE_FRAMES)
     else request_rescan(Guard.SETTLE_FRAMES) end
@@ -2336,6 +2357,7 @@ function SKS.on_preview(open)
 end
 
 function SKS.shutdown()
+    ActorInstances.release("脚本重置")
     NativeSignals.finish("脚本重置")
     Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
@@ -2357,6 +2379,7 @@ end
 -- Optional pre-animation/render preparation uses the current scan only; it keeps no second
 -- target cache and never touches a mesh after a changed signature.
 function SKS.prepare_targets()
+    ActorInstances.prepare()
     local A = SKS.adapter
     if not A.prepare_mesh or not cfg.enabled or #(C.instances or {}) == 0 then return end
     if Scene.children_signature(Scene.primary_root()) ~= C.sig then
