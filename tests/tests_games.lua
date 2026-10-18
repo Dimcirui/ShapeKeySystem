@@ -106,4 +106,66 @@ Profile.adapter = keep
 Profile.load_signals()
 Profile.load_all()
 
+-- Wilds bone fallback: face joints back up fcParam channels with the larger of the two values
+do
+    local cal = json.load_file("ShapeKeySystem/builtin/mhwilds/face.json")
+    local fc, offset = {}, {}   -- fc[n] = fcParam z; offset[joint id] = degrees or millimetres along the axis
+    local function qmul(a, b)
+        return { x = a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y, y = a.w*b.y - a.x*b.z + a.y*b.w + a.z*b.x,
+                 z = a.w*b.z + a.x*b.y - a.y*b.x + a.z*b.w, w = a.w*b.w - a.x*b.x - a.y*b.y - a.z*b.z }
+    end
+    local joints = {}
+    for n = 0, 200 do
+        joints[string.format("fcParam_%03d", n)] = { get_LocalPosition = function() return { x = 0, y = 0, z = fc[n] or 0 } end }
+    end
+    local function add_bones()
+        for id, spec in pairs(cal.joints) do
+            local nt, ax = spec.neutral, spec.axis
+            joints[spec.bone] = {
+                get_LocalPosition = function()
+                    local d = (offset[id] or 0) / 1000
+                    return { x = nt[1] + ax[1] * d, y = nt[2] + ax[2] * d, z = nt[3] + ax[3] * d }
+                end,
+                get_LocalRotation = function()
+                    local h = math.rad(offset[id] or 0) / 2
+                    local s = math.sin(h)
+                    return qmul({ x = nt[4], y = nt[5], z = nt[6], w = nt[7] },
+                        { x = ax[1] * s, y = ax[2] * s, z = ax[3] * s, w = math.cos(h) })
+                end,
+            }
+        end
+    end
+    local face = { getJointByName = function(_, name) return joints[name] end, get_address = function() return 0xFACE end }
+    local function read(keys)
+        local h = Wilds.bind(face, keys)
+        local P = {}
+        Wilds.read(h, P, 100)
+        return P, h
+    end
+    local near = function(a, b) return math.abs(a - b) < 1e-3 end
+
+    local P, h = read({ 1, 2, 33, 34, 52 })
+    check(h.bones == nil and P[52] == 0, "wilds bones: a face without the calibrated joints reads fcParam only")
+    add_bones()
+    P, h = read({ 1, 2, 33, 34, 52 })
+    check(h.bones ~= nil and #h == 10 and P[1] == 0 and P[2] == 0 and P[33] == 0 and P[52] == 0,
+        "wilds bones: neutral joints add nothing and the handle still counts fcParam pairs")
+    offset["jaw.open"] = 12; offset["L_UpEyeLid.close"] = 37; offset["L_cornerLip.smile"] = 10
+    P = read({ 1, 2, 33, 34, 52 })
+    check(near(P[52], 0.75) and near(P[1], 1) and P[2] == 0 and near(P[33], 1) and P[34] == 0,
+        "wilds bones: jaw, eyelid and lip corner fill silent fcParam channels per side")
+    offset["jaw.open"] = 6.5; fc[52] = 0.008
+    P = read({ 52 })
+    check(near(P[52], 0.8), "wilds bones: a larger fcParam value wins over the bone value")
+    fc[52] = 0.002
+    P = read({ 52 })
+    check(near(P[52], 0.375), "wilds bones: a larger bone value wins over a small fcParam value")
+    offset["L_UpEyeLid.close"] = 10
+    P = read({ 1 })
+    check(P[1] == 0, "wilds bones: an eyelid lowered by a downward gaze is not a blink")
+    P, h = read({ 52 })
+    check(#h.bones.calibration.rules == 1 and P[1] == nil and P[33] == nil,
+        "wilds bones: only rules for bound fcParam channels are evaluated")
+end
+
 print("GAMES FAILS:", gf)
