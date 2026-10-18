@@ -157,6 +157,12 @@ local function key_name(c)
     return c.label and ("形态键名：" .. c.name .. "\n") or ""
 end
 
+-- on the name line, so it reads as being about the shape key, not the source formula below
+local function missing_note(c, nx, right, y)
+    if c.present then return end
+    D.text("未找到此形态键", nx + 8, y + 6, C.faint, W.small(), right - nx - 12)
+end
+
 local function channel_row(ctx, c, x, y, w)
     local h = 40
     if not visible(y, h) then return h end
@@ -170,8 +176,9 @@ local function channel_row(ctx, c, x, y, w)
         if ctx.state.mapping_draft and ctx.state.mapping_draft.original_name == c.canonical then ctx.state.mapping_draft = nil
         else Mapping.open(ctx, c.canonical) end
     end
-    if c.guessed then W.chip("推测", nx + 6, y + 4, C.warn, 16) end
-    D.text((c.source_text or "") .. (c.present and "" or "  · 网格里没有"), x + 8, y + 22, C.faint, W.small(), nw - 12)
+    if c.guessed then nx = nx + 6 + W.chip("推测", nx + 6, y + 4, C.warn, 16) end
+    missing_note(c, nx, x + nw, y)
+    D.text(c.source_text or "", x + 8, y + 22, C.faint, W.small(), nw - 12)
     W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, nw, h)
     local mx = x + nw
     local mw = max(60, (w - nw) * 0.36)
@@ -198,9 +205,10 @@ local function preview_row(ctx, c, x, y, w)
     local nw = max(170, w * 0.3)
     local fg = c.present and C.text or C.faint
     local nx = x + 8 + D.text(c.label or c.name, x + 8, y + 3, fg, W.body(), nw - 60)
-    if c.guessed then W.chip("推测", nx + 6, y + 4, C.warn, 16) end
-    if c.extension then W.chip("扩展", nx + 6 + (c.guessed and 44 or 0), y + 4, C.faint, 16) end
-    D.text(c.present and ("网格：" .. c.name) or "网格里没有", x + 8, y + 22, C.faint, W.small(), nw - 12)
+    if c.guessed then nx = nx + 6 + W.chip("推测", nx + 6, y + 4, C.warn, 16) end
+    if c.extension then nx = nx + 6 + W.chip("扩展", nx + 6, y + 4, C.faint, 16) end
+    missing_note(c, nx, x + nw, y)
+    if c.present then D.text("形态键：" .. c.name, x + 8, y + 22, C.faint, W.small(), nw - 12) end
     D.text(c.source_text or "", x + nw, y + 12, C.muted, W.small(), w - nw - 12)
     W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, w, h)
     return h
