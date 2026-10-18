@@ -41,9 +41,17 @@ local function has_image(p) for _, x in ipairs(DRAWN_IMAGES) do if x == p or x:s
 check(CB.d2d_draw ~= nil, "panel registered with d2d")
 frame()
 check(#DRAWS == 0, "closed: nothing drawn")
-hotkey()
-check(Panel.open, "Delete opens the panel")
-check(st.settings.hotkey == "Delete", "default hotkey Delete (Home = AVM, End = game pause)")
+KEYS[0x11] = false; hotkey()
+check(not Panel.open, "Delete alone does not open the panel (combo on by default)")
+KEYS[0x11] = true; hotkey()
+check(Panel.open, "Ctrl + Delete opens the panel")
+check(st.settings.hotkey == "Delete" and st.settings.hotkey_combo == true and st.settings.hotkey_mod == "Ctrl",
+    "default hotkey Ctrl + Delete (Home = AVM, End = game pause)")
+SKS.call("set_setting", { key = "hotkey_combo", value = false }); KEYS[0x11] = false
+hotkey(); check(not Panel.open, "combo off: Delete alone closes the panel")
+hotkey(); check(Panel.open, "combo off: Delete alone opens it again")
+check(not SKS.call("set_setting", { key = "hotkey_mod", value = "Win" }), "hotkey_mod accepts only Ctrl / Shift / Alt")
+SKS.call("set_setting", { key = "hotkey_combo", value = true }); KEYS[0x11] = true
 check(find("SHAPEKEYSYSTEM", true) ~= nil, "title drawn")
 check(find("表情", true) and find("捏脸", true), "basic rail entries")
 check(not find("表情详情", true), "advanced entries hidden")
@@ -62,6 +70,22 @@ MOUSE.x, MOUSE.y = 500, 520; frame()
 check(Blocker.pinned, "pinned is sticky: one off-centre sample between the game's pulls is not free")
 frames(35)
 check(not Blocker.pinned and I.mx == 500 and Blocker.cursor.x == 500, "free OS cursor (after the sticky window) -> used and synced")
+
+-- 打开菜单时屏蔽游戏操控: off lets the game keep its controls while the panel stays open
+SKS.call("set_setting", { key = "block_input", value = false }); frame()
+check(Panel.open and not Blocker.enabled, "block_input off: panel open, game controls not blocked")
+SKS.call("set_setting", { key = "block_input", value = true }); frame()
+check(Blocker.enabled, "block_input on again: blocked")
+
+-- 字体大小 scales text only, on top of the ui scale
+local D = require("ShapeKeySystem_UI.Draw")
+local fw0 = D.measure(D.font(), "字体测试")
+SKS.call("set_setting", { key = "font_scale", value = 1.5 }); frame()
+local fw1 = D.measure(D.font(), "字体测试")
+check(D.FS == 1.5 and fw1 > fw0 * 1.3, string.format("font_scale 1.5 enlarges text (%.1f -> %.1f)", fw0, fw1))
+SKS.call("set_setting", { key = "font_scale", value = 9 })
+check(st.settings.font_scale == 1.6, "font_scale is clamped to 0.8..1.6")
+SKS.call("set_setting", { key = "font_scale", value = 1.0 }); frame()
 
 -- advanced toggle
 click_text("进阶", true, -30)
@@ -111,7 +135,7 @@ Panel.ui.win.h = h_before; frame()
 -- debug page
 click_text("设置与调试", true)
 check(Panel.ui.page == "debug", "rail: 设置与调试")
-check(find("设置", true) and find("性能", true), "debug page cards drawn")
+check(find("界面设置", true) and find("SKS 设置", true) and find("性能", true), "debug page cards drawn")
 check(Panel.ui.page_state.debug.perf_details ~= true, "performance details are collapsed by default")
 Panel.ui.page_state.debug.perf_details = true
 local previous_height = Panel.ui.win.h

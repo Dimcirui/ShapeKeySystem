@@ -25,5 +25,5 @@ milestones) and `docs/plans/shape-key-system-api.md` (UI ↔ backend contract, c
 - Blendshape writes only in `LateUpdateBehavior`, only after the mesh weight buffer exists, and
   never hold engine object references across part rebuilds / cutscene teardown (`Guard.lua`).
 - Shipped features stay pure Lua; C#/.NET plugins are for exploration probes only.
-- Never conflict with ArmorVariantManager: default hotkey Delete (Home = AVM, End = game pause),
+- Never conflict with ArmorVariantManager: default hotkey Ctrl + Delete (Home = AVM, End = game pause),
   share AVM's input-blocker globals, do not replace the d2d global.

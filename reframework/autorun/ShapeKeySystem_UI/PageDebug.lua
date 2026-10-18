@@ -3,7 +3,6 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
-local Files = require("ShapeKeySystem_UI.PagePresets")   -- binding lookup + config files, shown here
 local Faces = require("ShapeKeySystem_UI.Faces")
 local Version = require("ShapeKeySystem_Core.Version")
 
@@ -17,38 +16,66 @@ local HOTKEYS = { "Delete", "NumPad0", "NumPad1", "NumPad2", "NumPad3", "NumPad4
                   "NumPad7", "NumPad8", "NumPad9", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9",
                   "F10", "F11", "F12", "PageUp", "PageDown", "Home", "End" }
 
+local MODS = { "Ctrl", "Shift", "Alt" }
+
 local function setting(ctx, k, v) ctx.call("set_setting", { key = k, value = v }) end
 
-local function settings_card(ctx, x, y, w)
-    local se = ctx.st.settings
-    local no_img = not D.images()
-    local scene_search = se.scene_search_available ~= false
-    local h = 364 - (no_img and 32 or 0) - (scene_search and 0 or 34)
+-- a settings card: title, rows of label + control (32 px each), then toggles (34 px each).
+-- Returns the row helper and the card's height for `rows` rows, `toggles` toggle lines and `extra` px.
+local function card(x, y, w, title, rows, toggles, extra)
+    local h = 50 + rows * 32 + toggles * 34 + (extra or 0)
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
-    local cy = y + 10
-    W.h2("设置", rx, cy); cy = cy + 30
+    local c = { x = rx, w = rw, y = y + 40 }
+    W.h2(title, rx, y + 10)
     local lw = 150
-    local function row(label, fn)
-        D.text_mid(label, rx, cy, 28, C.text, W.small(), lw - 8)
+    function c.row(label, fn)
+        D.text_mid(label, rx, c.y, 28, C.text, W.small(), lw - 8)
         fn(rx + lw, rw - lw)
-        cy = cy + 32
+        c.y = c.y + 32
     end
-    row("打开面板的按键", function(sx, sw)
+    return c, h
+end
+
+-- a slider whose value is applied on release: the layout under the mouse changes with it
+local function release_slider(ctx, id, key, sx, cy, sw, value, lo, hi, step)
+    local pend = ctx.state.pending or {}
+    ctx.state.pending = pend
+    local ch, v = W.slider(id, sx, cy, min(320, sw), 28, pend[key] or value, lo, hi, { step = step, fmt = "%.2f" })
+    if ch then pend[key] = v end
+    if pend[key] and not require("ShapeKeySystem_UI.Input").down then
+        setting(ctx, key, pend[key]); pend[key] = nil
+    end
+end
+
+local function ui_settings_card(ctx, x, y, w)
+    local se = ctx.st.settings
+    local img = D.images()
+    local combo = se.hotkey_combo ~= false
+    local unblocked = se.block_input == false
+    local c, h = card(x, y, w, "界面设置", (img and 5 or 4) + (combo and 1 or 0), 2, unblocked and 22 or 0)
+    local cc, vc = W.toggle("启用组合快捷键", c.x, c.y, combo)
+    if cc then setting(ctx, "hotkey_combo", vc) end
+    c.y = c.y + 34
+    if combo then c.row("组合键", function(sx, sw)
+        local cur = 1
+        for i, k in ipairs(MODS) do if k == (se.hotkey_mod or "Ctrl") then cur = i end end
+        local ch, i = W.select("hotkey_mod", sx, c.y, min(160, sw), 28, MODS, cur)
+        if ch then setting(ctx, "hotkey_mod", MODS[i]) end
+    end) end
+    c.row("打开面板的按键", function(sx, sw)
         local cur
         for i, k in ipairs(HOTKEYS) do if k == se.hotkey then cur = i end end
-        local ch, i = W.select("hotkey", sx, cy, min(160, sw), 28, HOTKEYS, cur)
+        local ch, i = W.select("hotkey", sx, c.y, min(160, sw), 28, HOTKEYS, cur)
         if ch then setting(ctx, "hotkey", HOTKEYS[i]) end
     end)
-    row("界面缩放", function(sx, sw)
-        local ch, v = W.slider("ui_scale", sx, cy, min(320, sw), 28, ctx.state.pending_scale or se.ui_scale or 1, 0.75, 2, { step = 0.05, fmt = "%.2f" })
-        if ch then ctx.state.pending_scale = v end
-        -- apply on release: the layout under the mouse changes with the scale
-        if ctx.state.pending_scale and not require("ShapeKeySystem_UI.Input").down then
-            setting(ctx, "ui_scale", ctx.state.pending_scale); ctx.state.pending_scale = nil
-        end
+    c.row("界面缩放", function(sx, sw)
+        release_slider(ctx, "ui_scale", "ui_scale", sx, c.y, sw, se.ui_scale or 1, 0.75, 2, 0.05)
     end)
-    row("绘制方式", function(sx, sw)
+    c.row("字体大小", function(sx, sw)
+        release_slider(ctx, "font_scale", "font_scale", sx, c.y, sw, se.font_scale or 1, 0.8, 1.6, 0.05)
+    end)
+    c.row("绘制方式", function(sx, sw)
         local labels = { "自动", "reframework-d2d", "ImGui（REFramework 自带）" }
         local cur = 1
         for i, k in ipairs(D.BACKENDS) do if k == se.ui_backend then cur = i end end
@@ -56,43 +83,60 @@ local function settings_card(ctx, x, y, w)
         local now = D.backend == "imgui" and "ImGui" or "d2d"
         if cur == 1 then labels[1] = "自动：" .. now
         elseif D.BACKENDS[cur] ~= D.backend then labels[cur] = labels[cur] .. "（缺失，用 " .. now .. "）" end
-        local ch, i = W.select("ui_backend", sx, cy, min(260, sw), 28, labels, cur)
+        local ch, i = W.select("ui_backend", sx, c.y, min(260, sw), 28, labels, cur)
         if ch then setting(ctx, "ui_backend", D.BACKENDS[i]) end
     end)
-    if not no_img then row("面部图样式", function(sx, sw)
+    if img then c.row("立绘风格", function(sx, sw)
         local list, labels, cur = Faces.list(), {}, nil
         local active = Faces.get(se.face_style)
         for i, f in ipairs(list) do
             labels[i] = f.name
             if active and f.id == active.id then cur = i end
         end
-        local ch, i = W.select("face_style", sx, cy, min(200, sw), 28, labels, cur, { placeholder = "（无）" })
+        local ch, i = W.select("face_style", sx, c.y, min(200, sw), 28, labels, cur, { placeholder = "（无）" })
         if ch and list[i] then setting(ctx, "face_style", list[i].id) end
     end) end
-    row("捏脸滑块上限", function(sx, sw)
-        local ch, v = W.slider("sculpt_max", sx, cy, min(320, sw), 28, se.sculpt_max or 1, 1, 5, { step = 0.1, fmt = "%.1f" })
+    local cb, vb = W.toggle("打开菜单时屏蔽游戏操控", c.x, c.y, not unblocked)
+    if cb then setting(ctx, "block_input", vb) end
+    if unblocked then
+        D.text("可在打开游戏菜单、地图、REF菜单等状态下解锁光标，并启用此选项", c.x, c.y + 32, C.warn, W.small(), c.w)
+    end
+    return h
+end
+
+local function sks_settings_card(ctx, x, y, w)
+    local se = ctx.st.settings
+    local scene_search = se.scene_search_available ~= false
+    local c, h = card(x, y, w, "SKS 设置", 3, scene_search and 2 or 1)
+    c.row("捏脸滑块上限", function(sx, sw)
+        local ch, v = W.slider("sculpt_max", sx, c.y, min(320, sw), 28, se.sculpt_max or 1, 1, 5, { step = 0.1, fmt = "%.1f" })
         if ch then setting(ctx, "sculpt_max", v) end
     end)
-    row("定期重扫（秒，0=关）", function(sx, sw)
-        local ch, v = W.slider("periodic", sx, cy, min(320, sw), 28, se.periodic_scan_sec or 10, 0, 60, { step = 1, fmt = "%.0f" })
+    c.row("扫描间隔（秒，0=关）", function(sx, sw)
+        local ch, v = W.slider("periodic", sx, c.y, min(320, sw), 28, se.periodic_scan_sec or 10, 0, 60, { step = 1, fmt = "%.0f" })
         if ch then setting(ctx, "periodic_scan_sec", v) end
     end)
-    row("写入阈值", function(sx, sw)
-        local ch, v = W.slider("eps", sx, cy, min(320, sw), 28, se.write_epsilon or 0.001, 0, 0.01, { step = 0.0005, fmt = "%.4f", value_w = 56 })
+    c.row("写入阈值", function(sx, sw)
+        local ch, v = W.slider("eps", sx, c.y, min(320, sw), 28, se.write_epsilon or 0.001, 0, 0.01, { step = 0.0005, fmt = "%.4f", value_w = 56 })
         if ch then setting(ctx, "write_epsilon", v) end
     end)
-    local bx = rx
-    local c1, v1, w1 = W.toggle("权重截断到 0..1", bx, cy, se.clamp ~= false)
+    local bx = c.x
+    local c1, v1, w1 = W.toggle("权重截断到 0..1", bx, c.y, se.clamp ~= false)
     if c1 then setting(ctx, "clamp", v1) end
     bx = bx + w1 + 24
-    local c2, v2, w2 = W.toggle("过场动画中驱动", bx, cy, se.cutscene_drive == true)
+    local c2, v2 = W.toggle("过场动画中驱动", bx, c.y, se.cutscene_drive == true)
     if c2 then setting(ctx, "cutscene_drive", v2) end
     if scene_search then
-        cy = cy + 34
-        local c3, v3 = W.toggle("始终搜索整个场景（其他猎人；名片和菜单自动）", rx, cy, se.scene_search_always == true)
+        c.y = c.y + 34
+        local c3, v3 = W.toggle("始终搜索整个场景（其他猎人；名片和菜单自动）", c.x, c.y, se.scene_search_always == true)
         if c3 then setting(ctx, "scene_search_always", v3) end
     end
     return h
+end
+
+local function settings_card(ctx, x, y, w)
+    local h1 = ui_settings_card(ctx, x, y, w)
+    return h1 + 12 + sks_settings_card(ctx, x, y + h1 + 12, w)
 end
 
 local function perf_card(ctx, x, y, w)
@@ -287,12 +331,6 @@ function Page.draw(ctx, x, y, w)
     cy = cy + scene_card(ctx, x, cy, w) + 12
     local nh = native_card(ctx, x, cy, w)
     if nh > 0 then cy = cy + nh + 12 end
-    -- binding lookup chain and the config files (was the 预设 page): for troubleshooting
-    local fopen = ctx.state.files_open == true
-    local clicked, hh = W.header("绑定与配置文件", x, cy, w, fopen)
-    if clicked then ctx.state.files_open = not fopen end
-    cy = cy + hh + 6
-    if fopen then cy = cy + Files.draw(ctx, x, cy, w) + 12 end
     cy = cy + log_card(ctx, x, cy, w)
     return cy - y
 end

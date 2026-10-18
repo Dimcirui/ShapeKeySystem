@@ -88,8 +88,8 @@ for _, e in ipairs(st.presets.sculpt) do if e.name == "Other" then n_other = n_o
 check(folder ~= nil and n_other == 1 and src_other == "user", "same-name mod sculpt preset hidden behind the user one")
 U.save_json(U.path("mods", folder or "x", "sculpt", "Other.json"), {})
 
--- 设置与调试 holds the old presets page
-Panel.ui.page = "debug"; Panel.ui.page_state.debug.files_open = true; Panel.ui.win.h = 1060; frame()
-check(not find("页面出错"), "debug page with the binding / files section draws")
+-- 总体绑定与配置: the binding lookup and the config files
+Panel.ui.page = "files"; Panel.ui.win.h = 1060; frame()
+check(not find("页面出错"), "总体绑定与配置 page draws")
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 print("BIND FAILS:", bf)

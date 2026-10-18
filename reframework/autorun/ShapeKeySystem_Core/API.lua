@@ -40,6 +40,12 @@ local DEFAULTS = {
     -- Delete: Home opens ArmorVariantManager's panel (same audience), End is the game's pause key,
     -- Insert is REFramework's menu. hotkey_rev 2 = the End -> Delete move has been applied.
     hotkey = "Delete", hotkey_migrated = false, hotkey_rev = 2, ui_scale = 1.0, language = "zh",
+    -- the panel key needs a modifier held (Ctrl + Delete by default)
+    hotkey_combo = true, hotkey_mod = "Ctrl",
+    -- panel text size on top of ui_scale (ImGui draws small by default)
+    font_scale = 1.0,
+    -- block the game's controls while the panel is open
+    block_input = true,
     -- show shape key labels (builtin/labels.json) instead of mesh names; Chinese only for now
     translate_keys = false,
     scene_search_always = false, periodic_scan_sec = 10, write_epsilon = 0.001, clamp = true,
@@ -311,9 +317,9 @@ end
 
 local function build_settings_state()
     local st = state.settings
-    for _, k in ipairs({ "hotkey", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
+    for _, k in ipairs({ "hotkey", "hotkey_combo", "hotkey_mod", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
                          "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend",
-                         "translate_keys", "expression_enabled", "hold_face_bones" }) do st[k] = cfg[k] end
+                         "translate_keys", "expression_enabled", "hold_face_bones", "font_scale", "block_input" }) do st[k] = cfg[k] end
     st.hold_available = SKS.adapter.expression_joints ~= nil and SKS.adapter.face_layers ~= nil
     st.hold_status = FaceHold.status
     st.scene_search_available = SKS.adapter.scene_search ~= false
@@ -1507,7 +1513,10 @@ local SETTING_TYPES = {
     cutscene_drive = "boolean", sculpt_max = { 1, Sculpt.MAX_LIMIT }, face_style = "string",
     ui_backend = "string", translate_keys = "boolean",
     expression_enabled = "boolean", hold_face_bones = "boolean",
+    font_scale = { 0.8, 1.6 }, block_input = "boolean",
+    hotkey_combo = "boolean", hotkey_mod = "string",
 }
+local HOTKEY_MODS = { Ctrl = true, Shift = true, Alt = true }
 local UI_BACKENDS = { auto = true, d2d = true, imgui = true }
 function cmds.set_setting(a)
     local t = SETTING_TYPES[a.key]
@@ -1518,6 +1527,7 @@ function cmds.set_setting(a)
     elseif type(v) ~= t then
         return false, "E_BAD_ARGS", t .. " expected"
     end
+    if a.key == "hotkey_mod" and not HOTKEY_MODS[v] then return false, "E_BAD_ARGS", "hotkey_mod: Ctrl / Shift / Alt" end
     if a.key == "ui_backend" and not UI_BACKENDS[v] then return false, "E_BAD_ARGS", "ui_backend: auto / d2d / imgui" end
     if a.key == "window" then v = { x = tonumber(v.x) or 0, y = tonumber(v.y) or 0, w = tonumber(v.w) or 900, h = tonumber(v.h) or 640 } end
     cfg[a.key] = v

@@ -23,6 +23,7 @@ local PAGES = {
     { key = "expr",    name = "表情详情", mod = "ShapeKeySystem_UI.PageExpression", adv = true },
     { key = "cond",    name = "条件规则", mod = "ShapeKeySystem_UI.PageConditions", adv = true },
     { key = "mocap",   name = "面捕",     mod = "ShapeKeySystem_UI.PageMocap",      adv = true },
+    { key = "files",   name = "总体绑定与配置", mod = "ShapeKeySystem_UI.PagePresets", adv = true },
     { key = "debug",   name = "设置与调试", mod = "ShapeKeySystem_UI.PageDebug",    adv = true },
 }
 local page_impl = {}
@@ -153,7 +154,7 @@ local function draw_rail(st, x, y, h)
             local hover = I.hit(x, cy, w - 1, ih)
             if cur or hover then D.rect(x, cy, w - 1, ih, C.panel2) end
             if cur then D.rect(x, cy, 2, ih, C.brass) end
-            D.text_mid(p.name, x + 14, cy, ih, (cur or hover) and C.text or C.muted, W.body())
+            D.text_mid(p.name, x + 14, cy, ih, (cur or hover) and C.text or C.muted, W.body(), w - 22)
             if p.key == "sculpt" and st.sculpt.dirty then D.fill_circle(x + w - 16, cy + ih / 2, 3, C.warn) end
             if I.click(x, cy, w - 1, ih) then goto_page(p.key) end
             cy = cy + ih + 2
@@ -228,6 +229,9 @@ local others_were = false
 function Panel.frame()
     local st = SKS.state
     pcall(Blocker.frame)
+    -- 「打开菜单时屏蔽游戏操控」 changed while the panel is open
+    local block = Panel.open and st.settings.block_input ~= false
+    if block ~= Blocker.enabled then pcall(Blocker.set_enabled, block) end
     -- ArmorVariantManager opened its panel while ours is open: the newer one wins
     local others, who = Blocker.others_active()
     if Panel.open and others and not others_were then
@@ -240,7 +244,9 @@ function Panel.frame()
         if Panel.open then Panel.set_open(false) end
         return
     end
-    if I.key_pressed(st.settings.hotkey or "Delete") and not TextInput.active then
+    local se = st.settings
+    local mod = se.hotkey_combo ~= false and (se.hotkey_mod or "Ctrl") or nil
+    if I.key_pressed(se.hotkey or "Delete", mod) and not TextInput.active then
         Panel.set_open(not Panel.open)
         if Panel.open and others then toast("warn", "ArmorVariantManager 的面板也开着：点击会同时传给两个面板") end
     end
@@ -263,7 +269,8 @@ local function draw()
     TextInput.begin_layout()
     if not Panel.open then return end
     local st, live = SKS.state, SKS.live
-    if not D.reset_frame(max(0.5, min(3, tonumber(st.settings.ui_scale) or 1))) then return end
+    if not D.reset_frame(max(0.5, min(3, tonumber(st.settings.ui_scale) or 1)),
+                         max(0.5, min(2, tonumber(st.settings.font_scale) or 1))) then return end
     I.begin_frame()
     local win = window()
     clamp_window(win)
