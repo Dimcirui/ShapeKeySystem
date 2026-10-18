@@ -30,14 +30,14 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 - **面部动画测试**：回放录制的面部动画，检查映射效果；荒野支持原版输入与最终信号，RE4R 支持诊断录制中的表情信号和视线。
 - **公开 API**：其他插件可以通过 `ShapeKeySystemAPI` 临时接管形态键的值，优先级高于表情和捏脸。
 
-面板默认用 Ctrl + Delete 打开（设置里可关闭组合键或换成 Shift / Alt）。操作说明见 [docs/guide.md](docs/guide.md)。
+面板默认用 Delete 打开；和其他插件冲突时，可在设置里启用组合键（Ctrl / Shift / Alt + Delete）。操作说明见 [docs/guide.md](docs/guide.md)。
 
 ## 依赖
 
 - REFramework。
 - [REF-IME](https://github.com/Monkeysama/REF-IME/releases/latest)：中文输入，通用 REF 插件，支持各 RE 游戏。没有安装时也能用普通输入和剪贴板快捷键。
 - reframework-d2d（可选）：没有安装时，面板改用 REFramework 自带的 ImGui 绘制（需要 2025-07 之后的 REFramework），这时基础页不显示面部图。设置页的「绘制方式」可以强制使用 ImGui，适用于 d2d 掉帧、Linux / Proton 等情况。
-- 和 ArmorVariantManager 共存：SKS 的默认热键是 Ctrl + Delete（AVM 用 Home，游戏暂停用 End），和 AVM 共用输入屏蔽表，也不替换 d2d 的全局对象。
+- 和 ArmorVariantManager 共存：SKS 的默认热键是 Delete（AVM 用 Home，游戏暂停用 End），和 AVM 共用输入屏蔽表，也不替换 d2d 的全局对象。
 
 ## 目录
 

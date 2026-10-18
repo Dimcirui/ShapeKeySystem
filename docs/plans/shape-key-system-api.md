@@ -169,7 +169,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 
 `scene_search_available` 由适配器的 `scene_search` 提供；适配器设为 `false` 时，两个面板均隐藏全场景搜索开关。该字段属于运行能力，不写入设置文件。
 
-`hotkey`、`hotkey_combo`（bool，默认 true：需同时按住 `hotkey_mod`）、`hotkey_mod`（`Ctrl` / `Shift` / `Alt`，默认 `Ctrl`）、`ui_scale`、`font_scale`（0.8–1.6，默认 1：只放大文字，不改布局；ImGui 后端需要支持动态字号的 REFramework）、`block_input`（bool，默认 true：面板打开时屏蔽游戏操控；关闭后游戏照常操控）、`language`、`scene_search_always`（bool，默认 true：每次扫描都搜索整个场景）、`periodic_scan_sec`（0–120 秒，默认 5，0 = 不定期重扫）、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
+`hotkey`、`hotkey_combo`（bool，默认 false：开启后需同时按住 `hotkey_mod`）、`hotkey_mod`（`Ctrl` / `Shift` / `Alt`，默认 `Ctrl`）、`ui_scale`、`font_scale`（0.8–1.6，默认 1：只放大文字，不改布局；ImGui 后端需要支持动态字号的 REFramework）、`block_input`（bool，默认 true：面板打开时屏蔽游戏操控；关闭后游戏照常操控）、`language`、`scene_search_always`（bool，默认 true：每次扫描都搜索整个场景）、`periodic_scan_sec`（0–120 秒，默认 5，0 = 不定期重扫）、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
 
 `hold_available` 表示当前适配器提供 `expression_joints` 与 `face_layers`；`hold_status` 是禁用骨骼表情的当前状态文字。二者属于运行能力，不写入设置文件。
 

@@ -245,7 +245,7 @@ function Panel.frame()
         return
     end
     local se = st.settings
-    local mod = se.hotkey_combo ~= false and (se.hotkey_mod or "Ctrl") or nil
+    local mod = se.hotkey_combo == true and (se.hotkey_mod or "Ctrl") or nil
     if I.key_pressed(se.hotkey or "Delete", mod) and not TextInput.active then
         Panel.set_open(not Panel.open)
         if Panel.open and others then toast("warn", "ArmorVariantManager 的面板也开着：点击会同时传给两个面板") end

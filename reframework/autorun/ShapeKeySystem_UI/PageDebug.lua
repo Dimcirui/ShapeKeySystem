@@ -51,7 +51,7 @@ end
 local function ui_settings_card(ctx, x, y, w)
     local se = ctx.st.settings
     local img = D.images()
-    local combo = se.hotkey_combo ~= false
+    local combo = se.hotkey_combo == true
     local unblocked = se.block_input == false
     local c, h = card(x, y, w, "界面设置", (img and 5 or 4) + (combo and 1 or 0), 2, unblocked and 22 or 0)
     local cc, vc = W.toggle("启用组合快捷键", c.x, c.y, combo)

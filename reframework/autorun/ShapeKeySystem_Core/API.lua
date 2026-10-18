@@ -40,8 +40,8 @@ local DEFAULTS = {
     -- Delete: Home opens ArmorVariantManager's panel (same audience), End is the game's pause key,
     -- Insert is REFramework's menu. hotkey_rev 2 = the End -> Delete move has been applied.
     hotkey = "Delete", hotkey_migrated = false, hotkey_rev = 2, ui_scale = 1.0, language = "zh",
-    -- the panel key needs a modifier held (Ctrl + Delete by default)
-    hotkey_combo = true, hotkey_mod = "Ctrl",
+    -- Delete alone by default; with hotkey_combo the modifier must be held too
+    hotkey_combo = false, hotkey_mod = "Ctrl",
     -- panel text size on top of ui_scale (ImGui draws small by default)
     font_scale = 1.0,
     -- block the game's controls while the panel is open

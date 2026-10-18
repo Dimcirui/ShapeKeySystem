@@ -156,7 +156,7 @@ imgui = {
 
 -- ---------------------------------------------------------------- UI mocks (d2d panel, M3)
 MOUSE = { x = -1, y = -1, down = false }
--- Ctrl stays held: the panel opens with Ctrl + Delete by default (tests_ui checks the combo itself)
+-- Ctrl stays held so tests that turn the combo key on still open the panel (tests_ui checks the combo itself)
 KEYS = { [0x11] = true }
 DRAWS = {}          -- text draws of the last d2d frame: { s, x, y }
 DRAWN_IMAGES = {}

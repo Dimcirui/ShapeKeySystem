@@ -26,5 +26,5 @@ milestones) and `docs/plans/shape-key-system-api.md` (UI ↔ backend contract, c
   never hold engine object references across part rebuilds / cutscene teardown (`Guard.lua`).
 - Shipped features must not depend on REFramework.NET (C#); C# plugins are for exploration probes
   only. Native C plugins (reframework/plugins/*.dll) are fine where Lua cannot do the job (sockets).
-- Never conflict with ArmorVariantManager: default hotkey Ctrl + Delete (Home = AVM, End = game pause),
+- Never conflict with ArmorVariantManager: default hotkey Delete (Home = AVM, End = game pause),
   share AVM's input-blocker globals, do not replace the d2d global.
