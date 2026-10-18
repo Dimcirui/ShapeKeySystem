@@ -130,11 +130,18 @@ check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 1.0) < 1e-6, "cutscene: the
 DEMO.busy = false; ticks(110)
 check(math.abs(WEIGHTS[idx("blendShape1.JawOpen")] - 1.0) < 1e-6, "after cutscene: writing again")
 
+-- stop hook in gameplay (MH Wilds calls requestStop on hits): no cutscene, the face keeps being driven
+SKS.on_release("requestStop")
+local n4 = #writes; FC[52] = 0.004; ticks(2)
+check(#writes > n4, "stop hook with no cutscene: ignored, writing goes on")
+
 -- skip request / equipment rebuild / mesh not ready
+DEMO.busy = true; ticks(1)
 SKS.on_release("requestSkip")
 check(#st.scene.rigs == 1, "state.scene keeps last scan info")
 local n5 = #writes; FC[52] = 0.002; ticks(5)
 check(#writes == n5, "skip request: all rigs released immediately")
+DEMO.busy = false
 ticks(200)
 check(#writes > n5, "skip request: rescans on its own after settle + warm-up")
 SKS.on_rebuilt(); local n6 = #writes; ticks(10)
@@ -191,6 +198,11 @@ SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.7 }); ticks(1)
 check(math.abs(WEIGHTS[i_waist] - 0.7) < 1e-6, "set_sculpt_key writes on the next tick")
 local w1 = #writes; ticks(10)
 check(#writes == w1, "lazy: no rewrite while the value stays")
+-- rigs dropped and found again (parts change mid-combat): sculpt-only keys resume without a warm-up
+SKS.on_rebuilt(); ticks(20)
+SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.4 }); ticks(1)
+check(math.abs(WEIGHTS[i_waist] - 0.4) < 1e-6, "sculpt key after a rig drop: written on the next tick")
+SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.7 }); ticks(1)
 check(st.settings.sculpt_max == 1, "sculpt slider cap defaults to 1")
 SKS.call("set_sculpt_key", { name = "Waist_thin", value = 3 }); ticks(1)
 check(math.abs(WEIGHTS[i_waist] - 1.0) < 1e-6, "default cap: clamped to 0..1")

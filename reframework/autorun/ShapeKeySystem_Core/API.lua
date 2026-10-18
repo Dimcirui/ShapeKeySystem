@@ -2270,6 +2270,16 @@ end
 -- skip / stop / unload (pre-hook): let go before the game destroys the cutscene actors
 function SKS.on_release(reason)
     Trail.event("hook %s (cs active %s, released %s, rigs %d)", tostring(reason), tostring(CS.active), tostring(CS.released), #C.rigs)
+    -- MH Wilds calls requestStop on every monster hit, cutscene or not (HP loss from equipment
+    -- skills does not); releasing there blanked the face for a full rescan delay. With no
+    -- cutscene and only the master hunter driven nothing is torn down, so stop / skip are ignored.
+    -- unload still releases: it follows a cutscene while the gate already reads stable, with the
+    -- cutscene copy still driven.
+    if reason ~= "unload" and C.last_gate == "stable" then
+        local all_primary = true
+        for _, r in ipairs(C.rigs) do if not r.primary then all_primary = false end end
+        if all_primary then Trail.event("hook %s ignored: no cutscene", tostring(reason)); return end
+    end
     zero_ready_targets(reason)   -- the meshes are still valid in the pre-hook
     CS.released, CS.released_at = true, C.frame
     CS.status = tostring(reason) .. ": released until the next segment"
