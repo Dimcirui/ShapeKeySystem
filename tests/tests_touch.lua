@@ -70,6 +70,9 @@ check(math.abs(WEIGHTS[si] - base_s) < 1e-6, "spring back finished")
 local Panel = require("ShapeKeySystem_UI.Panel")
 local Faces = require("ShapeKeySystem_UI.Faces")
 local function frame() CB.tick(); CB.frame(); DRAWS, DRAWN_IMAGES, CMDS = {}, {}, {}; CB.d2d_draw() end
+-- d2d loads images in its init callback, which may run before the first frame picks the backend
+require("ShapeKeySystem_UI.Draw").set_backend(nil)
+if CB.d2d_init then CB.d2d_init() end
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 Panel.ui.page = "basic"; frame()
 local img

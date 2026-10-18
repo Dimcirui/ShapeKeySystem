@@ -140,11 +140,13 @@ local function bind_api()
     if src == "imgui" then bind_imgui() elseif type(src) == "table" then bind_d2d(src) end
 end
 
--- switch backends (fonts, text sizes and images belong to one backend)
+-- switch backends (fonts and text sizes belong to one backend). Images stay: d2d loads them once in
+-- its init callback, which can run before the first frame picks the backend; `D.images` limits
+-- their use to the d2d backend.
 function D.set_backend(name)
     if name == D.backend then return end
     D.backend = name
-    fonts, measure_cache, measure_count, images = {}, {}, 0, {}
+    fonts, measure_cache, measure_count = {}, {}, 0
     A_src = nil
     DL = nil
 end
