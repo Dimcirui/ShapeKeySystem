@@ -81,7 +81,7 @@ static size_t bundle_of(unsigned char *out, unsigned char **el, size_t *len, int
     return o;
 }
 
-/* one VMC frame: two expressions, an unknown one, the Head bone (yaw 30 deg), Apply */
+/* one VMC frame: two ARKit expressions, a non-ARKit one (Joy), the Head bone (yaw 30 deg), Apply */
 static size_t vmc_frame(unsigned char *out, float blink)
 {
     static unsigned char a[128], b[128], c[128], d[128], e[64];
@@ -161,11 +161,26 @@ int main(void)
     size_t vn = vmc_frame(vf, 0.7f);
     CHECK(sks_parse_vmc(vf, vn, &vs, w, head, &has_head) == 1, "vmc: frame committed by Blend/Apply");
     CHECK(fabsf(w[8] - 0.7f) < 1e-6f && fabsf(w[24] - 0.3f) < 1e-6f, "vmc: Perfect Sync names in any case");
+    CHECK(vs.ncx == 1 && !strcmp(vs.cx[0].name, "Joy") && vs.cx[0].v == 1.0f, "vmc: other names kept as extra under their spelling");
     CHECK(has_head && fabsf(head[1] - 30.0f) < 0.01f && fabsf(head[0]) < 0.01f && fabsf(head[2]) < 0.01f,
           "vmc: Head quaternion -> yaw 30 deg");
+    float w2_dummy[52] = { 0 };
     unsigned char only[128];
     size_t on2 = vmc_val(only, "eyeBlinkRight", 0.5f);
     CHECK(sks_parse_vmc(only, on2, &vs, w, head, &has_head) == 0 && w[9] == 0.0f, "vmc: values wait for the next Apply");
+    unsigned char joy[128];
+    size_t jn = vmc_val(joy, "Joy", 0.25f);
+    CHECK(sks_parse_vmc(joy, jn, &vs, w, head, &has_head) == 0 && vs.cx[0].v == 1.0f && vs.nx == 1 && vs.x[0].v == 0.25f,
+          "vmc: an extra updates in place and waits for Apply too");
+    VmcState full;
+    memset(&full, 0, sizeof(full));
+    for (int i = 0; i < VMC_MAX_EXTRA + 5; ++i) {
+        char nm[16];
+        snprintf(nm, sizeof(nm), "X%d", i);
+        size_t xn = vmc_val(joy, nm, 0.5f);
+        sks_parse_vmc(joy, xn, &full, w2_dummy, head, &has_head);
+    }
+    CHECK(full.ncx == VMC_MAX_EXTRA, "vmc: extras are capped");
     VmcState nv2;
     memset(&nv2, 0, sizeof(nv2));
     float w2[52] = { 0 };
@@ -205,7 +220,8 @@ int main(void)
     send_udp(49997, vf, (int)vn);
     Sleep(50);
     lua_check(L, "local t = sks_mocap_native.poll(); return t.scheme == 'vmc' and t.seq == 1 "
-                 "and math.abs(t.w[9] - 0.4) < 1e-6 and t.head and math.abs(t.head[2] - 30) < 0.01", "lua: VMC frame and head reach poll()");
+                 "and math.abs(t.w[9] - 0.4) < 1e-6 and t.head and math.abs(t.head[2] - 30) < 0.01 "
+                 "and t.extra and t.extra.Joy == 1 and t.extra.jawopen == nil", "lua: VMC frame, head and extras reach poll()");
     lua_check(L, "sks_mocap_native.stop(); return sks_mocap_native.poll().running == false", "lua: stop");
     lua_check(L, "local ips = sks_mocap_native.local_ips(); for _, ip in ipairs(ips) do "
                  "if not ip:match('^%d+%.%d+%.%d+%.%d+$') or ip:match('^127%.') then return false end end "

@@ -39,7 +39,7 @@ local function set_channels(list)
     SKS.call("rescan"); ticks(80)
 end
 set_channels({ "blendShape1.eyeBlinkLeft", "blendShape1.eyeBlinkRight", "blendShape1.jawOpen",
-               "blendShape1.mouthSmileLeft", "blendShape1.browInnerUp" })
+               "blendShape1.mouthSmileLeft", "blendShape1.browInnerUp", "blendShape1.Other" })
 check(st.mocap and #st.mocap.names == 52, "state.mocap exposes the 52 ARKit channels")
 check(st.mocap.cfg.enabled == false and held_by_mocap() == 0, "off by default, holds nothing")
 check(CB.motion ~= nil, "UpdateMotion hook registered")
@@ -120,7 +120,7 @@ sks_mocap_native = {
     poll = function(t)
         t = t or {}
         t.running, t.scheme, t.port, t.seq, t.sender = true, "ifacialmocap", 49983, NAT.seq, "192.168.1.165"
-        t.packets, t.rejected, t.error, t.w, t.head = NAT.seq, 0, 0, NAT.w, NAT.head
+        t.packets, t.rejected, t.error, t.w, t.head, t.extra = NAT.seq, 0, 0, NAT.w, NAT.head, NAT.extra
         return t
     end,
 }
@@ -175,6 +175,23 @@ DRAWS = {}; CB.d2d_draw()
 Panel.ui.win.h = h_x
 check(NAT.starts[#NAT.starts][1] == "vmc" and seen("支持 VMC 协议") and seen("127.0.0.1、端口")
     and not seen("本机 IP") and seen("头部转动") and not seen("页面出错"), "VMC through the receiver, head card kept")
+-- VMC: expression names outside the ARKit 52 are held on the shape key of that name
+SKS.call("mocap", { patch = { gain = 1, smoothing = 0, fade_sec = 0, timeout = 5 } })
+NAT.extra = { Other = 0.7, Eye_Blink_Left = 0.1 }
+nat_frame({ eyeBlinkLeft = 0.6 })
+for _ = 1, 20 do wait(0.002); ticks(1) end
+local oi = mesh_idx("Other")
+check(math.abs((WEIGHTS[oi] or -1) - 0.7) < 1e-3 and st.mocap.extra_n == 1,
+    "VMC: a non-ARKit name drives the shape key of the same name")
+local shadow = false
+for _, h in ipairs(st.external.held) do if h.name == "Eye_Blink_Left" then shadow = true end end
+check(not shadow, "VMC: a name that normalises to an ARKit name does not take over that key")
+DRAWS = {}; CB.d2d_draw()
+check(seen("其他表情名：正在写入 1 个"), "VMC page counts the extra names being written")
+NAT.extra = nil
+nat_frame({ eyeBlinkLeft = 0.6 })
+for _ = 1, 5 do wait(0.002); ticks(1) end
+check(st.mocap.extra_n == 0, "extras stop when the sender no longer sends them")
 SKS.call("mocap", { patch = { scheme = "ifacialmocap" } }); ticks(1)
 Panel.set_open(false)
 local stops = NAT.stops

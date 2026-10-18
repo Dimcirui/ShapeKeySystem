@@ -41,8 +41,9 @@ local AXES = { "pitch", "yaw", "roll" }
 M.SCHEMES = {
     { id = "ifacialmocap", name = "iFacialMocap", bridge = "ifm_bridge.py", head = true },
     { id = "rhylive", name = "RhyLive", bridge = "rhylive_bridge.py", head = false },
-    -- any VMC protocol sender that names expressions after ARKit (Perfect Sync)
-    { id = "vmc", name = "VMC（通用）", head = true },
+    -- any VMC protocol sender: ARKit (Perfect Sync) names drive the profile like the phone apps,
+    -- other expression names are held on the shape key of the same name (extra = true)
+    { id = "vmc", name = "VMC（通用）", head = true, extra = true },
 }
 local SCHEME_BY_ID = {}
 for _, sc in ipairs(M.SCHEMES) do SCHEME_BY_ID[sc.id] = sc end
@@ -91,6 +92,11 @@ local view = {
 }
 M.view = view
 for i = 1, N do view.raw[i], view.out[i], view.pre[i] = 0, 0, 0 end
+-- VMC expressions outside the ARKit 52, by the sender's name; held like ShapeKeySystemAPI.set
+-- on the key of that name (case-insensitive). A name that normalises to an ARKit name is skipped.
+view.extra_raw, view.extra_out, view.extra_n = {}, {}, 0
+local ARKIT_NORM = {}
+for _, n in ipairs(ARKIT) do ARKIT_NORM[Ext.norm(n)] = true end
 
 
 local function fill(dst, src, defaults)
@@ -167,6 +173,7 @@ local function read_native(n)
     local vn = view.native
     if nat.key ~= key then
         nat.key, nat.seq = key, 0
+        view.extra_raw, view.extra_out = {}, {}
         local port = cfg.port > 0 and math.floor(cfg.port) or nil
         local ip = cfg.phone_ip ~= "" and cfg.phone_ip or nil
         local ok, res, err = pcall(n.start, cfg.scheme, port, ip)
@@ -182,6 +189,13 @@ local function read_native(n)
     for i = 1, N do raw[i] = w[i] or 0 end
     if type(t.head) == "table" then
         for i = 1, 3 do view.head_raw[i] = t.head[i] or 0 end
+    end
+    local xr = view.extra_raw
+    for k in pairs(xr) do xr[k] = nil end
+    if M.scheme().extra and type(t.extra) == "table" then
+        for name, v in pairs(t.extra) do
+            if type(name) == "string" and not ARKIT_NORM[Ext.norm(name)] then xr[name] = tonumber(v) or 0 end
+        end
     end
     st.last_rx = clock()
     st.rx_n = st.rx_n + 1
@@ -204,6 +218,13 @@ local function compute(dt)
         pre[i] = pre[i] + (U.clamp(v, 0, 1) - pre[i]) * alpha
         v = U.clamp(v * g * (tonumber(cg[ARKIT[i]]) or 1), 0, 1)
         out[i] = out[i] + (v - out[i]) * alpha
+    end
+    -- extra expressions: master gain and smoothing only (no neutral, per-channel gain or mirror)
+    local xo = view.extra_out
+    for name in pairs(xo) do if view.extra_raw[name] == nil then xo[name] = nil end end
+    for name, r in pairs(view.extra_raw) do
+        local v = U.clamp(r * g, 0, 1)
+        xo[name] = (xo[name] or 0) + (v - (xo[name] or 0)) * alpha
     end
     -- head input arrives in ~25 Hz steps, which shows far more on a turning head than on the
     -- face: its own time-based smoothing, 0..1 -> time constant 0..0.2 s
@@ -240,7 +261,7 @@ local function slots_for(ctx)
 end
 
 local function release()
-    view.held, view.derived = 0, 0
+    view.held, view.derived, view.extra_n = 0, 0, 0
     if not st.holding then return false end
     st.holding = false
     Derived.reset()
@@ -290,7 +311,15 @@ function M.tick(dt, ctx)
     end
     -- profile channels made from ARKit refs (combination correctives) follow the phone too
     view.derived = Derived.hold(M.OWNER, ctx.prog, st.slots_for, slots, view.pre, cfg.gain, f, expr)
-    view.held = held + view.derived
+    local xn = 0
+    for name, v in pairs(view.extra_out) do
+        local s = ctx.prog and ctx.resolve(name)
+        local e = s and expr[s] or 0
+        Ext.set(M.OWNER, name, (v * f + e * (1 - f)) + 0.0, Ext.DEFAULT_TTL)
+        xn = xn + 1
+    end
+    view.extra_n = xn
+    view.held = held + view.derived + xn
     st.holding = true
     return true
 end

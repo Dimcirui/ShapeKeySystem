@@ -7,8 +7,9 @@
  *   rhylive       OSC message (or #bundle) "/Face" with 52 big-endian float32 in ARKit order, UDP 9000;
  *                 the phone is told the PC's address, which local_ips() lists for the page
  *   vmc           VMC protocol (OSC) from any sender, on UDP 39539: /VMC/Ext/Blend/Val name
- *                 value per expression (ARKit / Perfect Sync names, any case), committed by
- *                 /VMC/Ext/Blend/Apply; the Head bone's rotation from /VMC/Ext/Bone/Pos becomes the head turn
+ *                 value per expression, committed by /VMC/Ext/Blend/Apply. ARKit / Perfect Sync
+ *                 names (any case) fill w; other names go to `extra` under their own spelling.
+ *                 The Head bone's rotation from /VMC/Ext/Bone/Pos becomes the head turn
  *
  * Constraints:
  * - No thread: poll() drains the nonblocking socket on the caller's (game) thread, so nothing here
@@ -233,9 +234,23 @@ static void quat_euler(float x, float y, float z, float w, float *out)
     out[2] = (float)(atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (x * x + z * z)) * R2D);
 }
 
+/* a non-ARKit expression: updated in place, appended while there is room; longer names are dropped */
+static void vmc_extra(VmcState *v, const char *name, float x)
+{
+    if (strlen(name) >= VMC_NAME || !name[0]) return;
+    for (int i = 0; i < v->nx; ++i) {
+        if (!strcmp(v->x[i].name, name)) { v->x[i].v = x; return; }
+    }
+    if (v->nx >= VMC_MAX_EXTRA) return;
+    strcpy(v->x[v->nx].name, name);
+    v->x[v->nx++].v = x;
+}
+
 static void vmc_commit(VmcState *v, float *out, float *head, int *has_head)
 {
     memcpy(out, v->w, sizeof(v->w));
+    memcpy(v->cx, v->x, sizeof(VmcExtra) * (size_t)v->nx);
+    v->ncx = v->nx;
     if (v->head_new) { memcpy(head, v->head, sizeof(v->head)); *has_head = 1; v->head_new = 0; }
     v->dirty = 0;
 }
@@ -280,8 +295,11 @@ static int vmc_elem(const unsigned char *p, size_t n, VmcState *v, float *out, f
     if (val) {
         if (strcmp(tags, ",sf") || n - off < 4) return -1;
         float x = be_float(p + off);
+        if (!isfinite(x)) return 0;
         int idx = arkit_index_ci(name);
-        if (idx >= 0 && isfinite(x)) { v->w[idx] = clamp01(x); v->dirty = 1; }
+        if (idx >= 0) v->w[idx] = clamp01(x);
+        else vmc_extra(v, name, clamp01(x));
+        v->dirty = 1;
         return 0;
     }
     if (_stricmp(name, "Head")) return 0;
@@ -488,6 +506,17 @@ static int l_poll(lua_State *L)
         lua_pushnil(L);
         lua_setfield(L, -2, "head");
     }
+    /* VMC expressions outside the ARKit 52, { name = value }; nil when there are none */
+    if (R.scheme == SCHEME_VMC && R.vmc.ncx > 0) {
+        lua_createtable(L, 0, R.vmc.ncx);
+        for (int i = 0; i < R.vmc.ncx; ++i) {
+            lua_pushnumber(L, (lua_Number)R.vmc.cx[i].v);
+            lua_setfield(L, -2, R.vmc.cx[i].name);
+        }
+    } else {
+        lua_pushnil(L);
+    }
+    lua_setfield(L, -2, "extra");
     return 1;
 }
 

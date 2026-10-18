@@ -43,7 +43,8 @@ local function setup_lines(m, sc)
         if not nv.available then return { "VMC 需要游戏内接收插件 ShapeKeySystem_Mocap.dll。" } end
         local port = nv.port > 0 and nv.port or 39539
         return { "让支持 VMC 协议的软件发到 127.0.0.1、端口 " .. port .. "，游戏内直接接收。",
-                 "表情名要用 ARKit 52 个名字（Perfect Sync），其他名字会被忽略。" }
+                 "ARKit 52 个名字（Perfect Sync）按表情配置驱动；其他表情名直接写入同名形态键。",
+                 "其他表情名：正在写入 " .. (m.extra_n or 0) .. " 个" }
     end
     if not nv.available then return { "手机打开 " .. sc.name .. "，并启用相应的收发程序。" } end
     local d = DEST[sc.id] or { "发送地址", 0 }
