@@ -80,6 +80,12 @@ check(Cx.status[1] == "off" and Cx.playing == "fight", "clip \"\" switches the s
 data.states[1].clip = "hurt"; SKS.call("cond_edit", { data = data })
 HSTATE.get_IsCombat = false; HEALTH.hp = 150; run_for(0.4)
 
+-- rigs dropped on the update of a hit (parts change mid-combat) keep the HP baseline
+local Cnd = require("ShapeKeySystem_Core.Conditions")
+HEALTH.hp = 130; Cnd.reset(); ticks(1)
+check(Cnd.V.hp_decreased == true and Cx.playing == "hurt", "a reset on the hit's update still sees the hit")
+HEALTH.hp = 150; run_for(0.4)
+
 -- auto off pauses rules; preview forces a clip
 data.auto = false; SKS.call("cond_edit", { data = data }); HSTATE.get_IsCombat = true; ticks(2)
 check(Cx.playing == nil, "auto off: rules paused")
@@ -102,7 +108,13 @@ SETUP = false; ticks(12)
 check(Cx.playing == nil, "menu / not set up: no clip is picked")
 run_for(0.6)
 check(not Cx.any(), "menu / not set up: clips fade out")
-SETUP = true; ticks(130); HSTATE.get_IsCombat = false; run_for(0.4)
+-- HP lost while not sampled is no hit once sampling resumes
+HEALTH.hp = 100
+SETUP = true
+local fake = false
+for _ = 1, 40 do ticks(1); if Cnd.V.hp_decreased then fake = true end end
+check(not fake and math.abs((Cnd.V.hp_pct or 0) - 100 / 1.5) < 1e-3, "sampling resumes after a gap without a fake hit")
+ticks(90); HSTATE.get_IsCombat = false; HEALTH.hp = 150; run_for(0.4)
 
 -- save, select, bind
 local ok, _, _, res = SKS.call("cond_save", {})

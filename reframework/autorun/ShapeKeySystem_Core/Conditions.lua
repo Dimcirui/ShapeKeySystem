@@ -39,18 +39,22 @@ C.NUM_OPS = { "<=", "<", ">=", ">", "==" }
 C.ENUM_OPS = { "==", "~=" }
 
 -- ---------------------------------------------------------------- sampling
-local last_hp, last_max = nil, nil
+local last_hp, last_max, last_frame = nil, nil, nil
 
--- forget the cached game objects (scene change, equipment rebuild): re-fetched on the next sample
+-- forget the cached game objects (scene change, equipment rebuild): re-fetched on the next sample.
+-- The HP baseline stays: rigs are dropped in the middle of combat (parts change on hits, weapon
+-- draw), and clearing it there loses the hit of that update. A gap in sampling clears it instead.
 function C.reset()
     if game and game.reset then game.reset() end
-    last_hp, last_max = nil, nil
     for k in pairs(V) do V[k] = nil end
 end
 
 -- one read of every condition. frame: the update counter
 function C.sample(frame)
     for k in pairs(V) do V[k] = nil end
+    -- not sampled on the previous update (menu, loading): the old HP belongs to another moment
+    if last_frame ~= frame - 1 then last_hp, last_max = nil, nil end
+    last_frame = frame
     if not (game and game.sample and game.sample(V, frame)) then last_hp, last_max = nil, nil; return false end
     local hp, maxhp = V.hp, V.hp_max
     V.hp, V.hp_max = nil, nil
