@@ -174,6 +174,8 @@ check(near(Pr.time - t0, 0.132), "one long frame advances at most 0.1 s")
 -- the Wilds mock: blink.L has a game signal, so fallback leaves it alone and add blinks on top
 Pr.configure(api_cfg)
 local function ticks(n) for _ = 1, n or 1 do CB.tick(); CB.frame() end end
+-- scans never switch profiles: drive the mesh the earlier groups left with the best match
+SKS.call("auto_match_profile", {}); ticks(3)
 local function run_for(sec)
     local m, stop = 0, os.clock() + sec
     while os.clock() < stop do

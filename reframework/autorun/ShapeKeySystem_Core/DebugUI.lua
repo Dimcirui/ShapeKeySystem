@@ -267,11 +267,8 @@ function D.draw()
     if #labels > 0 then
         changed, v = imgui.combo("表情配置", cur, labels)
         if changed then call("set_profile", { id = plist[v].id }) end
-    end
-    local cov = ex.coverage
-    if cov then
-        imgui.text(string.format("ARKit 覆盖 %d/%d  扩展 %d  推荐: %s", cov.arkit_hit, cov.arkit_total, cov.extra,
-            tostring(cov.recommended)))
+        imgui.same_line()
+        if imgui.button("自动匹配") then call("auto_match_profile", {}) end
     end
 
     changed, v = imgui.slider_float("整体表情强度", ex.master_gain, 0, 2); if changed then call("set_master_gain", { value = v }) end

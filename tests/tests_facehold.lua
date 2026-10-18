@@ -90,6 +90,7 @@ local function same(a, b) for i = 1, #a do if not near(a[i], b[i]) then return f
 local saved_fc = {}
 for k, v in pairs(FC) do saved_fc[k] = v; FC[k] = nil end
 SKS.call("rescan"); ticks(80)
+SKS.call("auto_match_profile", {}); ticks(3)
 local base = snap()
 FC[1], FC[2], FC[52], FC[33] = 0.008, 0.008, 0.005, 0.004; ticks(3)
 local on = snap()

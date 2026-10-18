@@ -183,9 +183,14 @@ local function draw_controls(ctx, x, y, w)
         if ex.profile and p.id == ex.profile.id then cur = i end
     end
     D.text_mid("表情配置", x, cy, 28, C.muted, W.small())
-    local ch, idx = W.select("basic_profile", x + 70, cy, min(260, w - 70), 28, labels, cur, { placeholder = "（无）" })
+    local sw = min(260, w - 160)
+    local ch, idx = W.select("basic_profile", x + 70, cy, sw, 28, labels, cur, { placeholder = "（无）" })
     if ch and plist[idx] then call("set_profile", { id = plist[idx].id }) end
-    if ex.binding_source then W.chip("来自绑定", x + 70 + min(260, w - 70) + 10, cy + 5, C.brass) end
+    local mx = x + 70 + sw + 8
+    local matched, match_w = W.button("自动匹配", mx, cy, nil, 28)
+    W.tooltip("切换到与当前部件匹配度最高的表情配置", mx, cy, match_w, 28)
+    if matched then call("auto_match_profile", {}) end
+    if ex.binding_source then W.chip("来自绑定", mx + match_w + 10, cy + 5, C.brass) end
     cy = cy + 40
 
     -- selected region

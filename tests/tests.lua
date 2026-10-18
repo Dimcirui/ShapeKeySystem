@@ -360,17 +360,41 @@ check(true, "debug UI drew sculpt + preset sections")
 WEIGHTS[i_waist], WEIGHTS[i_other] = nil, nil
 end
 
--- Shinano-native mesh: current profile drives nothing -> switch to shinano
+-- Shinano-native mesh: the current profile drives nothing; scans keep it, 自动匹配 picks shinano
 SKS.call("set_profile", { id = "arkit" }); ticks(2)
 for i = 1, #CHANNELS do CHANNELS[i] = nil end
 for i, n in ipairs({ "blendShape1.eye_close_L", "blendShape1.eye_close_R", "blendShape1.mouth_a1",
                      "blendShape1.mouth_smile_L", "blendShape1.option_jaw_narrow", "blendShape1.eye_look_up" }) do CHANNELS[i] = n end
 SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == "arkit" and st.expression.coverage.recommended == "shinano",
+    "a scan keeps the chosen profile and only recommends shinano")
+local okm, _, _, rm = SKS.call("auto_match_profile", {}); ticks(5)
 print("profile now:", st.expression.profile.id, st.runtime.notices[#st.runtime.notices].text)
-check(st.expression.profile.id == "shinano", "auto-switched to shinano profile")
+check(okm and rm.changed and st.expression.profile.id == "shinano", "自动匹配 switches to shinano")
+local okm2, _, _, rm2 = SKS.call("auto_match_profile", {})
+check(okm2 and not rm2.changed, "自动匹配 on the best profile changes nothing")
 ticks(70)
 check(math.abs(WEIGHTS[idx("blendShape1.eye_close_L")] - 1.0) < 1e-6, "shinano eye_close_L driven by blink.L")
 check(WEIGHTS[idx("blendShape1.option_jaw_narrow")] == nil, "sculpt key untouched")
+
+-- a manual pick outlives a scan that finds no binding (loading, menus): only another binding replaces it
+local BIND = "ShapeKeySystem\\user\\ch03_012_001\\ch03_012_0012.json"
+json.dump_file(BIND, { schema = "sks.binding/1", profile = "arkit" })
+SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == "arkit" and st.expression.binding_source ~= nil, "the binding picks arkit")
+SKS.call("set_profile", { id = "shinano" }); ticks(2)
+local part_name = ARMOR._name
+ARMOR._name = "xx_not_a_part"; ticks(130)
+ARMOR._name = part_name; ticks(130)
+check(st.expression.profile.id == "shinano", "the manual pick survives a scan without the binding")
+json.dump_file(BIND, { deleted = true })
+SKS.call("rescan"); ticks(5)
+
+-- a new profile starts empty and drives nothing; scans keep it until the user picks another
+local okc, _, _, rc = SKS.call("create_profile", { name = "Blank Test" })
+SKS.call("rescan"); ticks(5)
+check(okc and st.expression.profile.id == rc.id, "a new empty profile stays in effect through rescans")
+SKS.call("set_profile", { id = "shinano" }); ticks(5)
 
 -- experimental cutscene mode (segments from DemoMediator hooks)
 local s_close = idx("blendShape1.eye_close_L")

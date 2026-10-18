@@ -991,7 +991,9 @@ local function do_scan()
     local b = C.binding
     local want = b and b.data and b.data.profile
     local man = C.profile_manual
-    if man and man.hit ~= (b and b.hit or nil) then C.profile_manual, man = nil, nil end   -- other parts / preset
+    -- other parts / preset. A scan that finds no binding (loading, menus, an equipment rebuild in
+    -- progress) keeps the user's choice: only a different binding replaces it.
+    if man and b and man.hit ~= b.hit then C.profile_manual, man = nil, nil end
     if man and want and Profile.registry[man.id] then want = nil end                     -- the user's choice stands
     if want and not Profile.registry[want] then
         if C.missing_profile ~= want then
@@ -1028,17 +1030,6 @@ local function do_scan()
     C.select_conditions()
     rebuild_sculpt()
     build_presets_state()
-    -- the current profile drives nothing on these parts but another one would: switch. Only
-    -- without a parent preset that names a profile.
-    local cov = state.expression.coverage
-    if not want and C.prog.n > 0 and not state.mapping.dirty and #res.rigs == 0 and cov and cov.recommended and cov.recommended ~= C.prog.id and (cov.recommended_hits or 0) >= 3 then
-        local from = C.prog.name
-        if apply_profile(cov.recommended, false) then
-            cfg.profile = cov.recommended; save_soon()
-            notice("info", string.format("当前部件没有 %s 的通道，已切换到 %s", from, C.prog.name))
-            return
-        end
-    end
     bump("scene")
     build_expression_state()
     local tn = {}
@@ -1560,6 +1551,19 @@ function cmds.preview_profile(a)
     C.preview_profile = a.id
     build_preview_state()
     return true
+end
+
+-- 「自动匹配」: the profile with the most channels on the worn parts (coverage.recommended); scans
+-- never switch on their own
+function cmds.auto_match_profile()
+    local cov = state.expression.coverage
+    local id = cov and cov.recommended
+    if not id or (cov.recommended_hits or 0) <= 0 then return false, "E_NOT_FOUND", "当前部件没有能匹配的表情配置" end
+    if C.prog and id == C.prog.id then return true, nil, nil, { id = id, changed = false } end
+    local ok, code, msg = cmds.set_profile({ id = id })
+    if not ok then return false, code, msg end
+    notice("info", string.format("已切换到匹配度最高的表情配置：%s", C.prog.name))
+    return true, nil, nil, { id = id, changed = true }
 end
 
 function cmds.set_profile(a)

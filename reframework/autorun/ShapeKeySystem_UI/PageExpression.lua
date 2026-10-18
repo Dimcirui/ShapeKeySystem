@@ -74,6 +74,15 @@ local function top_bars(ctx, x, y, w)
         end
     end
     bx = bx + create_w + 6
+    if not pick then
+        local matched, match_w = W.button("自动匹配", bx, by, nil, 28)
+        W.tooltip("切换到与当前部件匹配度最高的表情配置", bx, by, match_w, 28)
+        if matched then
+            if st.mapping.dirty then ctx.toast("warn", "请先保存或恢复映射，再自动匹配")
+            else call("auto_match_profile", {}) end
+        end
+        bx = bx + match_w + 6
+    end
     local tu = ex.tuning
     -- gains / gaze follow the outfit: with a binding they are saved into it, otherwise they are
     -- the global settings (saved automatically)
@@ -98,11 +107,9 @@ local function top_bars(ctx, x, y, w)
         D.text("本游戏目前暂不支持表情", x + 2, cy, C.warn, W.body(), w)
         cy = cy + 26
     end
-    -- one info line: coverage, gains tuned for another profile
+    -- one info line: gains tuned for another profile, unsaved tuning
     if not pv then
     local info = {}
-    local cov = ex.coverage
-    if cov then info[#info + 1] = string.format("ARKit 覆盖 %d/%d · 扩展 %d", cov.arkit_hit or 0, cov.arkit_total or 0, cov.extra or 0) end
     if tu and tu.profile_mismatch then info[#info + 1] = "单通道增益属于 " .. tostring(tu.for_profile) .. "，切回它时生效" end
     if tu and tu.source == "binding" and tu.dirty then info[#info + 1] = "调整未保存" end
     if #info > 0 then

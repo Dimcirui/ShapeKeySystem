@@ -66,7 +66,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 |---|---|---|
 | `rev` | int | |
 | `profile` | `{id, name, source, extends}` | 当前表情配置。`source`：`builtin` / `mod` / `user` |
-| `coverage` | `{arkit_hit, arkit_total, extra, recommended}` | 覆盖率和自动推荐结果 |
+| `coverage` | `{arkit_hit, arkit_total, extra, recommended}` | 覆盖率；`recommended` 是匹配通道最多的配置，供「自动匹配」使用 |
 | `binding_source` | string? | 配置是由哪个父预设指定的 |
 | `no_signals` | bool | 适配器没有原始通道（`A.raw`），表情不读游戏信号；捏脸、预设和外部 API 照常 |
 | `master_gain` | number | 整体表情强度，0~2 |
@@ -353,7 +353,7 @@ reframework/data/ShapeKeySystem/
 - 装备构建完成（`app.HunterCharacter.onEquipBuildEnd`）后，或部件名单发生变化时（每 5 帧检查一次），立即放掉引用，30 帧后重新扫描。
 - 每个网格要连续 60 帧处于就绪状态（MeshReady、BlendShapeEnable、缓冲区没有被释放、权重缓冲已分配）才开始写入；之后每帧再做两项快速检查。定期重扫时，同一个网格（按地址识别）保留之前的就绪计数和上次写入的值，所以不会停写，也不会重写。
 - 每帧只读网格上实际存在的通道要用到的 fcParam（引用也会追踪）。测试网格每帧的读取次数从 51 降到 10。`scene.rigs[i].reads` 显示这个数。
-- 如果当前表情配置在这些部件上一个通道都驱动不了，而另一个配置能匹配到至少 3 个，就自动切换过去并给出提示。这是 M2 父预设出来之前的临时办法。
+- 扫描不会自行切换表情配置。命令 `auto_match_profile`（面板「自动匹配」按钮）切换到 `coverage.recommended`，效果等同手动 `set_profile`；已是最佳配置时返回 `{changed = false}`。
 - 新增内置配置 `shinano.json`，对应 Shinano 原生的形态键名。
 - 开关 `cutscene_drive`（2026-10-09 起默认开启；跳过后仍在播放 90 帧会自动重新驱动，加载结束进入播放也视为新的一段）：过场播放中（IsBusy 为真、IsBusyLoad 为假）照常驱动猎人。分段靠 `app.DemoMediator` 的钩子，都是前置钩子，在游戏执行之前先放掉引用：
   - `onPlayStartTimeline(i)`：每一段开始时触发（Lua Bone System 也挂在这里）。触发后放掉所有引用，等 30 帧，然后**搜索整个场景**重新扫描（过场里显示的猎人通常是副本 `Pl000_00`，不是主角色），再经过 60 帧预热后写入。
@@ -408,7 +408,7 @@ reframework/data/ShapeKeySystem/
 每一级都先 `user/` 后 `mods/`。同系列下不同建模的模型不同，所以不按系列回退。
 
 - **过期预设**：`mods/` 下的父预设可以带 `"fingerprints": {"<部件ID>": "<通道指纹>"}`。指纹和实际穿着的 mesh 不一致时，说明这是被后装 mod 覆盖了 mesh、但没覆盖预设而留下的旧文件，跳过并提示一次。`user/` 下的文件不做这个检查。
-- **生效的父预设**：在身上所有部件命中的父预设里，按 global、部位自己、建模代表、`default.json` 的顺序取最具体的一个；同级时选通道多的部件。它的 `profile` 在部件穿戴期间代替全局配置，部件脱下后恢复全局配置。只有在没有父预设指定配置时，才会按覆盖率自动切换配置。
+- **生效的父预设**：在身上所有部件命中的父预设里，按 global、部位自己、建模代表、`default.json` 的顺序取最具体的一个；同级时选通道多的部件。它的 `profile` 在部件穿戴期间代替全局配置，部件脱下后恢复全局配置。手动选择的配置优先于父预设，直到出现另一个父预设为止；扫描暂时找不到父预设（加载、菜单、换装途中）不会清除手动选择。
 - **父预设里的捏脸预设名**：先在这个父预设所在的建模文件夹里找，再到通用预设里找。不会跨到别的建模文件夹。
 - **没有形态键的部件**：不需要任何 json。
 - **删除 = 写删除标记**：REFramework 的 Lua 不能可靠地删除文件，所以删除和"恢复 mod 父预设"都是往 `user/` 下写 `{"deleted": true}`，读取时当作不存在。
