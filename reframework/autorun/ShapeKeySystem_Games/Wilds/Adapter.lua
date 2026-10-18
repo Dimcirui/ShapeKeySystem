@@ -12,6 +12,7 @@ local Input = require("ShapeKeySystem_Games.Wilds.Input")
 local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 
 local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
+local Recorder = require("ShapeKeySystem_Games.Wilds.Recorder")
 local B = require("ShapeKeySystem_Core.BoneSignals")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
@@ -21,6 +22,10 @@ local A = {
     conditions = Cond,
     input = Input,
     playback = Playback,
+    -- in-game recordings are saved straight into the face animation test format
+    native_snapshot = Recorder.snapshot,
+    native_sample = Recorder.sample,
+    native_export = Recorder.export,
 }
 
 local M_JBN, M_DEMO_BUSY, M_DEMO_LOAD

@@ -628,6 +628,23 @@ UI 通过 `SKS.call("playback", args)` 提交命令，`args.action` 为 `refresh
 
 录制格式为 `sks.native-signals/1`，包含 `game`、`label`、`rate_hz`、`duration`、`calibration`、`summary`、`reason` 和 `samples`。目标采样率为 20 Hz，每个样本以 `t` 保存实际经过秒数，`values` 保存快照；标定表只在文件顶层保存一次。录制最长 90 秒，来源消失或身份变化时自动结束。文件保存在 `ShapeKeySystem/native_signals_<game>_*.json`，保存失败时保留数据用于重试。
 
+适配器提供 `native_export` 时不保存诊断文件，录制停止后转换为该适配器的回放格式，保存在它返回的目录，
+并刷新面部动画测试的录制列表；转换失败的录制不能重试保存。这类录制只在手动停止或达到上限时结束：
+过场片段切换、角色不可用、采样失败和来源身份变化都按采样率记为空档样本（不含 `values`），录制继续。
+
+### 荒野游戏内录制
+
+荒野的录制保存为 `fcparam.recording/2`，路径为 `user/recordings/mhwilds_<时间>_<序号>.json`，同时含 raw 和 final 两条轨道：
+
+- raw 在面部动画钩子里、`FacialController.updateAfterMotion` 之前读取 `TreeLayer.getExtraValue`，与内置录制的读取时机相同；
+  录制器每次采样都重新登记，超过 1 秒未登记时钩子停止读取。
+- final 为 fcParam 骨骼局部 z 除以 `final_unit`，在同一帧的权重写入前读取。
+- 每次采样只读参数索引和骨骼都存在的 fcParam；导出的列为整段录制中出现过的全部 fcParam。
+  空档样本、尚未取得 raw 的样本，以及当时面部没有的参数都记为 0，时间从第一个样本起算。
+  raw 超过 0.5 秒未更新的采样按失败处理，记为空档。
+- 录制名称写入 `label`，作为面部动画测试列表中的显示名称；没有名称时显示文件名。
+- 诊断卡片的骨骼变化列出 fcParam 位移和两侧眼球旋转。
+
 独立快照格式为 `sks.native-snapshot/1`，包含 `game` 和 `snapshot`，文件保存在 `ShapeKeySystem/native_snapshot_<game>_*.json`。诊断数据供信号分析和标定使用，与面部动画测试的 `fcparam.recording` 格式分别处理。
 
 ### 命名信号回放

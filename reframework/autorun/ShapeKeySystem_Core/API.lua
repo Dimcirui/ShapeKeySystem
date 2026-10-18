@@ -158,6 +158,7 @@ local live = {
 SKS.state, SKS.live = state, live
 state.playback = Playback.state
 state.native_signals = NativeSignals.state
+NativeSignals.on_export = function() Playback.refresh() end
 state.mocap = Mocap.view
 
 -- ---------------------------------------------------------------- internal
@@ -1297,7 +1298,8 @@ local function tick()
     end
     Sculpt.frame = f
     local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
-    NativeSignals.tick(SKS.adapter, stable)
+    -- in a driven cutscene the recorder follows the driven face (see the cutscene branch below)
+    if stable or kind ~= "playing" or not cfg.cutscene_drive then NativeSignals.tick(SKS.adapter, stable) end
     if SKS.adapter.strict_bounds and #(C.instances or {}) > 0 and
         (not stable or Scene.children_signature(Scene.primary_root()) ~= C.sig) then
         drop_rigs(why or "part signature changed", Guard.SETTLE_FRAMES)
@@ -1324,6 +1326,9 @@ local function tick()
             C.scan_at = {}
         end
         local go = cutscene_gate(f)
+        -- rigs are dropped at each segment start and rescanned once it settles; until then the take waits
+        local face = go and C.rigs[1] and C.rigs[1].face
+        NativeSignals.tick(SKS.adapter, face and true or "hold", { face = face })
         state.debug.status = "cutscene: " .. CS.status
         if not go then
             return

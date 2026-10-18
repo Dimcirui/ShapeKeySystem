@@ -38,7 +38,9 @@ ShapeKeySystem_Games/Wilds/*.lua   荒野适配器
 
 RE4R 的角色扫描、通道保护、网格准备与持续写入接口见 [re4r-adapter.md](re4r-adapter.md)。崛起（没有表情信号、只做捏脸）见 [rise-adapter.md](rise-adapter.md)。
 
-可选接口 `native_snapshot()` 返回纯数据快照，包含 `source`、`joints`、`measurements`、`taps`、`outputs` 和 `status`。Core 在权重写入前采样，负责诊断状态与录制保存；游戏对象查找和单位换算由适配器完成。当前由 RE4R 提供此接口。
+可选接口 `native_snapshot()` 返回纯数据快照，包含 `source`、`joints`、`measurements`、`taps`、`outputs` 和 `status`。Core 在权重写入前采样，负责诊断状态与录制保存；游戏对象查找和单位换算由适配器完成。RE4R、崛起和荒野提供此接口。
+可选的 `native_sample(snapshot)` 精简每个录制样本，`native_export(recording)` 返回转换后的录制和保存目录；
+荒野用这两项把游戏内录制直接存成面部动画测试格式（`ShapeKeySystem_Games/Wilds/Recorder.lua`）。
 
 下面每一节都写了：接口、荒野怎么实现、现在的代码在哪里、搬到哪里。行号以 `f067d8c` 为准。
 
