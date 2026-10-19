@@ -302,8 +302,15 @@ end
 -- the items of a version's notes ("；"-separated), one line each so a narrow card does not cut them
 local function note_lines(notes)
     local out = {}
-    for part in tostring(notes or ""):gmatch("[^；]+") do out[#out + 1] = part end
-    return out
+    -- 「；」是三个字节，不能放进 [^...] 字符类，否则会切开含这些字节的汉字
+    local s, start = tostring(notes or ""), 1
+    while true do
+        local i, j = s:find("；", start, true)
+        local part = s:sub(start, (i or 0) - 1)
+        if part ~= "" then out[#out + 1] = part end
+        if not i then return out end
+        start = j + 1
+    end
 end
 
 -- author, version and the latest two release notes; h = the space it may use (fills the gap under

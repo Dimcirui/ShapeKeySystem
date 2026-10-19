@@ -238,6 +238,8 @@ function D.text(s, x, y, color, f, max_w)
     f = f or D.font()
     if not f or s == nil then return 0 end
     s = tostring(s)
+    -- 不合法的 UTF-8 会让 d2d 丢掉整帧，切出窗口时还会卡死游戏
+    if not utf8.len(s) then return 0 end
     if max_w then s = D.fit(f, s, max_w) end
     local w, h = D.measure(f, s)
     if not inside_y(y, h) then return w end
