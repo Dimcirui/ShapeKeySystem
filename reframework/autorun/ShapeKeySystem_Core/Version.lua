@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.6.0"
+V.number = "1.6.1"
 V.author = "谛听, MK, Funnyguyz"
 
 V.history = {
+    { version = "1.6.1", notes = "修复设置与调试页导致卡死" },
     { version = "1.6.0", notes = "RE4R 支持多角色；修复崛起过场中失效问题" },
     { version = "1.5.0", notes = "新增面捕；荒野新增表情录制；其他优化与问题修复" },
     { version = "1.4.1", notes = "条件表情更名为条件规则" },

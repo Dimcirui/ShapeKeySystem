@@ -65,7 +65,15 @@ Panel.ui.page = "debug"; frame(); frame()
 local Version = require("ShapeKeySystem_Core.Version")
 -- every "；"-separated item of the notes is a line of its own
 local notes_shown = true
-for part in Version.history[1].notes:gmatch("[^；]+") do if not find(part) then notes_shown = false end end
+do -- 按完整的「；」拆分；[^；] 是字节类，会切开汉字
+    local notes, start = Version.history[1].notes, 1
+    repeat
+        local i, j = notes:find("；", start, true)
+        local part = notes:sub(start, (i or 0) - 1)
+        if part ~= "" and not find(part) then notes_shown = false end
+        start = (j or #notes) + 1
+    until not i
+end
 check(find("关于") and find("v" .. Version.number) and find(Version.author) and notes_shown,
     "about card: v" .. Version.number .. " · " .. Version.author .. " · " .. Version.history[1].notes)
 check(SKS.version == Version.number and _G.ShapeKeySystemAPI.plugin_version == Version.number, "SKS.version / API plugin_version follow Version.lua")
