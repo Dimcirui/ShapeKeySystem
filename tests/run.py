@@ -78,6 +78,12 @@ def boot(data):
     G.lua_files = lua_files
     return L, G, to_lua
 
+if "--instances-only" in sys.argv:
+    L, G, _ = boot(data)
+    L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+    L.execute(open(os.path.join(HERE, "tests_actor_instances.lua"), encoding="utf-8").read())
+    sys.exit(0)
+
 if "--re4r-only" in sys.argv:
     L, G, _ = boot(data)
     L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
@@ -142,6 +148,10 @@ shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path
 L4, G4, _ = boot(data4)
 L4.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 L4.execute(open(os.path.join(HERE, "tests_re4r.lua"), encoding="utf-8").read())
+data6 = tempfile.mkdtemp(prefix="sks_instances_")
+L6, G6, _ = boot(data6)
+L6.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+L6.execute(open(os.path.join(HERE, "tests_actor_instances.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))
