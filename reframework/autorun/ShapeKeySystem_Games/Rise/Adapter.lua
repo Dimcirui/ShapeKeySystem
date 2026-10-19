@@ -2,6 +2,8 @@
 -- The game has no shape key driver joints. Expression signals come from face_base's face joints
 -- (Core BoneSignals with builtin/mhrise/face.json): face_base keeps animating while a mod head in an
 -- armor part hides it, and mod parts carry no face joints of their own.
+-- The primary character is the cutscene's hunter copy while one plays, else the master player, else
+-- the first player slot with a face.
 --
 -- Constraints:
 -- - Channel names come from get_ChannelNameHash through get_Item (`hash_item_only`).
@@ -27,28 +29,26 @@ local A = {
 }
 
 local M_JBN, T_MOTION
-local FACE = "face_base"
 local calibration
+local EVENT_OK, LIST_OK = false, false
+local disabled = {}   -- optional sources that init turned off, with the missing type or method
 
-local function master()
-    local pm = sdk.get_managed_singleton("snow.player.PlayerManager")
-    return pm, pm and pm:call("findMasterPlayer")
+-- A face is any transform carrying these joints, not only face_base: cutscene actors name theirs
+-- DummyFace, and mod armor heads stop at Head_00.
+local FACE_SIG = { "Head_00", "L_Up_Eyelib", "L_Lo_Eyelib", "Jaw_00", "L_Cheek_00", "L_Eye" }
+local FACE_NAMES = { "face_base", "DummyFace" }
+
+local function q(obj, method, ...)
+    if obj == nil then return nil end
+    local ok, v = pcall(obj.call, obj, method, ...)
+    if ok then return v end
+    return nil
 end
 
-function A.primary_root()
-    local ok, tr = pcall(function()
-        local _, pl = master()
-        return pl:call("get_GameObject"):call("get_Transform")
-    end)
-    return ok and tr or nil
-end
-
-function A.primary_ready()
-    local ok, ready = pcall(function()
-        local pm, pl = master()
-        return pl ~= nil and pm:call("isReadyPlayerLoad") == true
-    end)
-    return ok and ready == true
+local function array_len(arr)
+    local n = q(arr, "get_Length")
+    if type(n) ~= "number" then n = q(arr, "get_Count") end
+    return type(n) == "number" and n or 0
 end
 
 local function go_name(tr)
@@ -57,12 +57,103 @@ local function go_name(tr)
 end
 
 function A.is_face(tr)
-    if go_name(tr) ~= FACE or not M_JBN then return false end
-    local ok, joint = pcall(M_JBN.call, M_JBN, tr, "Head_00")
-    return ok and joint ~= nil
+    if not tr or not M_JBN then return false end
+    for _, bone in ipairs(FACE_SIG) do
+        local ok, joint = pcall(M_JBN.call, M_JBN, tr, bone)
+        if not ok or joint == nil then return false end
+    end
+    return true
 end
 
-function A.face_rank(tr) return go_name(tr) == FACE and 1 or 0 end
+function A.face_rank(tr) return A.is_face(tr) and 1 or 0 end
+
+local function face_of(root)
+    if not root then return nil end
+    local ok, face = pcall(function()
+        local c, n = root:call("get_Child"), 0
+        while c and n < 64 do
+            if A.is_face(c) then return c end
+            c, n = c:call("get_Next"), n + 1
+        end
+    end)
+    return ok and face or nil
+end
+
+local function root_of(player)
+    return q(q(player, "get_GameObject"), "get_Transform")
+end
+
+-- Sources, first hit wins. Each returns { kind, root, ready, face? } and is resolved again on every
+-- call, so no transform outlives a cutscene teardown here (Guard rules).
+-- 1. A cutscene plays its own copy of the hunter (snow.eventcut.EventPlayer); the master player
+--    stays loaded but off screen.
+local function from_event()
+    if not EVENT_OK then return nil end
+    local em = sdk.get_managed_singleton("snow.eventcut.EventManager")
+    if not em or not (q(em, "get_Playing") == true or q(em, "get_PlayingOrCheckScene") == true
+        or q(em, "get_HoldingHandler") == true) then return nil end
+    local handlers = q(em, "get_LoadHandlerStack")
+    for i = 0, math.min(array_len(handlers), 8) - 1 do
+        local players = q(q(q(handlers, "get_Item", i), "get_Manager"), "get_EventPlayerList")
+        for j = 0, math.min(array_len(players), 8) - 1 do
+            local ep = q(players, "get_Item", j)
+            if ep and q(ep, "get_Valid") == true then
+                local face
+                for _, name in ipairs(FACE_NAMES) do
+                    local tr = q(q(ep, "findGameObjectChild", name), "get_Transform")
+                    if A.is_face(tr) then face = tr; break end
+                end
+                local root = q(ep, "getTransform")
+                face = face or face_of(root)
+                if root and face then return { kind = "event", root = root, face = face, ready = true } end
+            end
+        end
+    end
+    return nil
+end
+
+-- 2. The master player.
+local function from_master()
+    local pm = sdk.get_managed_singleton("snow.player.PlayerManager")
+    local root = root_of(q(pm, "findMasterPlayer"))
+    if not root then return nil end
+    return { kind = "master", root = root, ready = q(pm, "isReadyPlayerLoad") == true }
+end
+
+-- 3. Any player slot with a face, for scenes where findMasterPlayer answers nil (title, character
+--    edit).
+local function from_player_list()
+    if not LIST_OK then return nil end
+    local pm = sdk.get_managed_singleton("snow.player.PlayerManager")
+    if not pm then return nil end
+    local list
+    for _, name in ipairs({ "PlayerList", "PlayerListPrivate" }) do
+        local ok, v = pcall(pm.get_field, pm, name)
+        if ok and v then list = v; break end
+    end
+    for i = 0, math.min(array_len(list), 16) - 1 do
+        local root = root_of(q(list, "get_Item", i))
+        local face = face_of(root)
+        if face then return { kind = "list", root = root, face = face, ready = true } end
+    end
+    return nil
+end
+
+local function source()
+    local src = from_event() or from_master() or from_player_list()
+    A.primary_source = src and src.kind or nil
+    return src
+end
+
+function A.primary_root()
+    local src = source()
+    return src and src.root or nil
+end
+
+function A.primary_ready()
+    local src = source()
+    return src ~= nil and src.ready == true
+end
 
 -- armor slots: f_ / m_ (sex) + slot + equipment number, e.g. f_body279
 local SLOTS = { arm = "腕甲", body = "铠甲", helm = "头盔", leg = "腿甲", wst = "腰甲" }
@@ -92,17 +183,6 @@ function A.eye_joints() return {} end
 
 function A.bind(face, keys) return B.bind(face, keys, calibration) end
 
-local function face_of(root)
-    local ok, face = pcall(function()
-        local c, n = root:call("get_Child"), 0
-        while c and n < 64 do
-            if A.is_face(c) then return c end
-            c, n = c:call("get_Next"), n + 1
-        end
-    end)
-    return ok and face or nil
-end
-
 -- every face_base joint, so recordings can recalibrate any rule (tools/rise_calibrate.py)
 local FACE_JOINTS = {
     "L_Up_Eyelib", "L_Lo_Eyelib", "L_Corner_Eyelib", "L_Eye", "R_Up_Eyelib", "R_Lo_Eyelib", "R_Corner_Eyelib", "R_Eye",
@@ -124,19 +204,20 @@ local function motion_of(face)
 end
 
 function A.native_snapshot()
-    if not A.primary_ready() then return nil, "猎人尚未就绪" end
-    local face = face_of(A.primary_root())
-    if not face then return nil, "找不到 face_base" end
+    local src = source()
+    if not src or not src.ready then return nil, "猎人尚未就绪" end
+    local face = src.face or face_of(src.root)
+    if not face then return nil, "找不到面部骨架" end
     local h = A.bind(face, {})
     local outputs, measured = B.read(h, {}, 1)
     local result = { outputs = outputs, measurements = {}, taps = {}, calibration = calibration,
-        motion = motion_of(face) }
+        motion = motion_of(face), driver = src.kind, disabled = disabled }
     result.joints, result.status = B.snapshot_joints(face, calibration, FACE_JOINTS)
     for name, value in pairs(measured) do
         if B.finite(value) then result.measurements[name] = value end
     end
     local ok, addr = pcall(face.get_address, face)
-    result.source = FACE .. "@" .. tostring(ok and addr or "-")
+    result.source = tostring(go_name(face)) .. "@" .. tostring(ok and addr or "-")
     return result
 end
 
@@ -185,6 +266,35 @@ function A.init()
     local valid, why = B.validate(data, { label = "崛起" })
     if not valid then return false, why end
     calibration = data
+
+    -- optional sources: a missing type or method turns that source off, not the adapter
+    -- (findGameObjectChild and getTransform are declared on snow.BehaviorRoot, get_Valid on via.Component)
+    local function has(specs)
+        for _, spec in ipairs(specs) do
+            local t = sdk.find_type_definition(spec[1])
+            if not t then return false, spec[1] end
+            for i = 2, #spec do
+                if not t:get_method(spec[i]) then return false, spec[1] .. "." .. spec[i] end
+            end
+        end
+        return true
+    end
+    local missing
+    EVENT_OK, missing = has({
+        { "snow.eventcut.EventManager", "get_LoadHandlerStack()", "get_Playing()", "get_PlayingOrCheckScene()",
+            "get_HoldingHandler()" },
+        { "snow.eventcut.EventcutHandler", "get_Manager()" },
+        { "snow.eventcut.UniqueEventManager", "get_EventPlayerList()" },
+        { "snow.BehaviorRoot", "getTransform()", "findGameObjectChild(System.String)" },
+        { "via.Component", "get_Valid()" },
+    })
+    if not EVENT_OK then disabled.event = missing end
+    local pmt = sdk.find_type_definition("snow.player.PlayerManager")
+    for _, name in ipairs({ "PlayerList", "PlayerListPrivate" }) do
+        local ok, f = pcall(pmt.get_field, pmt, name)
+        LIST_OK = LIST_OK or (ok and f ~= nil)
+    end
+    if not LIST_OK then disabled.list = "snow.player.PlayerManager.PlayerList" end
     return true
 end
 
