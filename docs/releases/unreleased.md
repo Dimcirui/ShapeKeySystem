@@ -1,4 +1,4 @@
-# ShapeKeySystem X.Y.Z
+# ShapeKeySystem 1.6.2
 
 ## 新增
 
