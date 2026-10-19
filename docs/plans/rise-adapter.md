@@ -194,10 +194,10 @@ tests/tests_rise.lua                                            -- 离线检查
 | `hash_names`, `hash_item_only` | true：通道名只从 `get_ChannelNameHash` 的 `get_Item` 取（1.6） |
 | `scene_search` | false：第一阶段只驱动自己 |
 | `init(events)` | 查 `snow.player.PlayerManager`、`via.Transform.getJointByName` 和 `via.render.Mesh` 的权重数读写、`get_ChannelWeightList`、`get_MeshReady`，缺了返回 `false, 原因`；还没挂钩子 |
-| `primary_root` | `PlayerManager:findMasterPlayer():get_GameObject():get_Transform()`，全程 pcall |
-| `primary_ready` | `findMasterPlayer()` 不为空且 `isReadyPlayerLoad()` 为 true |
+| `primary_root` | 依次取：过场中 `EventManager` 处理栈里有脸的 `EventPlayer`（`getTransform()`）；`findMasterPlayer()` 的 Transform；`PlayerManager.PlayerList` 里第一个有脸的玩家。每次调用重新解析，全程 pcall。过场和玩家列表来源缺类型时只停用该来源，原因记在 `native_snapshot().disabled` |
+| `primary_ready` | 过场和玩家列表来源总是就绪；主玩家要 `isReadyPlayerLoad()` 为 true |
 | `gate(frame)` | 只看 `primary_ready`，不给 kind。**暂停不关门**：门一关 Core 就把部件清零、放掉 rig，每次打开菜单都会这样 |
-| `is_face(tr)` | GameObject 名是 `face_base` 且有 `Head_00`；`face_rank` 同样只给它 1。程序化层不需要脸，见 5.3 |
+| `is_face(tr)` | 有 `Head_00`、`L_Up_Eyelib`、`L_Lo_Eyelib`、`Jaw_00`、`L_Cheek_00`、`L_Eye` 六根骨（`getJointByName`），不看名字：过场里的脸叫 `DummyFace`；mod 头只到 `Head_00`，不算脸。`face_rank` 同样给 1。程序化层不需要脸，见 5.3 |
 | `is_part(name)` | `^[fm]_(arm|body|helm|leg|wst)%d+$`。`face_base` 和头发**不算部件**：Core 放手时把部件清零，会抹掉角色的捏脸值和戴头盔时的头发贴合 |
 | `prepare_parts(parts)` | 权重数小于通道数、`get_MeshReady` 为 true、`get_ChannelWeightList` 长度够时，把权重数设成通道数（D11，同 RE4R）。每次扫描都检查，部件重建后自动再补 |
 | `model_of` / `representative_of` | `f_arm279` → 模型 `f_279`、槽位 `arm`；整套由 `f_body279` 代表。男女同编号是两个模型（9.3） |

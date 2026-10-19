@@ -14,7 +14,10 @@ CHANNELS = { "eye_close", "jawOpen", "Waist_thin", "Mystery_key", "eye_nagomi_1"
 
 local face = ROOT:get_Child()
 face._name = "face_base"
-face._joints.Head_00 = {}
+-- a face is recognised by its joints, not its name
+for _, bone in ipairs({ "Head_00", "L_Up_Eyelib", "L_Lo_Eyelib", "Jaw_00", "L_Cheek_00", "L_Eye" }) do
+    face._joints[bone] = {}
+end
 ARMOR._name = "f_body279"
 ARMOR._mesh.get_ChannelNameHash = function()
     -- boxed get_elements values are garbage in this engine; get_Item returns the numbers
@@ -60,6 +63,8 @@ check(A.id == GAME_NAME and next(HOOKS) == nil, "selected, no hooks")
 check(A.primary_root() == ROOT and A.primary_ready(), "master player resolved")
 check(A.is_face(face) and A.face_rank(face) == 1 and not A.is_part("face_base"),
     "face_base anchors the rig and is not a part")
+check(not A.is_face(ARMOR) and A.face_rank(ARMOR) == 0, "a mod head with only Head_00 is not a face")
+check(A.primary_source == "master", "no cutscene: the master player drives")
 check(A.is_part("f_body279") and A.is_part("m_helm001") and not A.is_part("f_hair033")
     and not A.is_part("B_Bow014") and not A.is_part("PlHeadMessage"), "armor slots are parts, hair and weapons are not")
 local model, slot = A.model_of("f_arm279")
@@ -192,5 +197,38 @@ check(Pr.time > t_closed, "player ready again: the generator still runs")
 SKS.call("set_procedural", { patch = { mode = "game" } })
 ticks(60)
 check(run_for(0.6) == 0, "Rise, game only: no blink")
+
+-- Cutscenes play a copy of the hunter (snow.eventcut.EventPlayer) whose face is DummyFace.
+local function obj(t)
+    t.call = function(self, m, ...) return self[m](self, ...) end
+    return t
+end
+local dummy = obj({ _joints = face._joints })
+dummy.getJointByName = function(self, n) return self._joints[n] end
+dummy.get_GameObject = function() return obj({ get_Name = function() return "DummyFace" end }) end
+local event_root = obj({ get_Child = function() return nil end })
+local ep = obj({ get_Valid = function() return true end, getTransform = function() return event_root end,
+    findGameObjectChild = function(_, name)
+        if name == "DummyFace" then return obj({ get_Transform = function() return dummy end }) end
+    end })
+local players = obj({ get_Count = function() return 1 end, get_Item = function() return ep end })
+local handler = obj({ get_Manager = function() return obj({ get_EventPlayerList = function() return players end }) end })
+local event = { playing = true }
+local em = obj({ get_Playing = function() return event.playing end,
+    get_PlayingOrCheckScene = function() return false end, get_HoldingHandler = function() return false end,
+    get_LoadHandlerStack = function() return obj({ get_Length = function() return 1 end,
+        get_Item = function() return handler end }) end })
+local singleton = sdk.get_managed_singleton
+sdk.get_managed_singleton = function(name)
+    if name == "snow.eventcut.EventManager" then return em end
+    return singleton(name)
+end
+check(A.primary_root() == event_root and A.primary_ready() and A.primary_source == "event",
+    "cutscene: the event player drives")
+local esnap = A.native_snapshot()
+check(esnap and esnap.driver == "event" and esnap.source:find("^DummyFace@"), "cutscene snapshot reads DummyFace")
+event.playing = false
+check(A.primary_root() == ROOT and A.primary_source == "master", "cutscene over: back to the master player")
+sdk.get_managed_singleton = singleton
 
 print("RISE FAILS:", failures)
