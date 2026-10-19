@@ -5,6 +5,9 @@
 -- Handles belong to a rig and are discarded with it; this module retains no engine objects.
 local Hash = require("ShapeKeySystem_Core.NameHash")
 local B = require("ShapeKeySystem_Core.BoneSignals")
+local Deform = require("ShapeKeySystem_Games.RE4R.NativeDeform")
+local NativeFace = require("ShapeKeySystem_Games.RE4R.NativeFace")
+local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 local S = {}
 local data = { joints = {}, rules = {} }
 local by_key, protected = B.by_key, {}
@@ -54,16 +57,24 @@ end
 
 S.raw = B.raw
 
-function S.bind(face, keys, calibration)
+function S.bind(face, keys, calibration, read_only)
     local data = calibration or data
     local mesh = call(call(face, "get_GameObject"), "getComponent(System.Type)", sdk.typeof("via.render.Mesh"))
     local h = { mesh = mesh, keys = keys, joints = {}, taps = {}, status = {}, calibration = data,
         count = call(mesh, "get_BlendShapeChannelNum") }
     local hashes = S.hashes(mesh)
     h.joints = B.bind_joints(face, data)
+    h.face_address = face:get_address()
+    local watched = {}
+    for name, spec in pairs(data.joints) do watched[#watched + 1] = spec.bone or name end
+    FaceHold.watch(watched)
+    h.animation = NativeFace.bind(face, data, h.joints, read_only)
     for _, rule in ipairs(data.rules) do
-        for _, name in ipairs(rule.taps or {}) do h.taps[name] = hashes[Hash.hash(PREFIX .. name)] end
+        for _, name in ipairs(rule.taps or {}) do
+            h.taps[name] = hashes[Hash.hash(PREFIX .. name)]
+        end
     end
+    h.read_only = read_only
     return h, #keys
 end
 
@@ -72,6 +83,8 @@ S.measure = B.measure
 function S.read(h, P, inv_full)
     local data = h.calibration or data
     local taps = {}
+    local motion_values = NativeFace.read(h.animation, not h.read_only)
+    h.motion_values = motion_values
     local mesh = h.mesh
     local cn, wc = call(mesh, "get_BlendShapeChannelNum"), call(mesh, "get_BlendShapeChannelWeightCount")
     local length = call(call(mesh, "get_ChannelWeightList"), "get_Length")
@@ -88,6 +101,9 @@ function S.read(h, P, inv_full)
                     elseif idx >= limit then state = "out_of_bounds"
                     else v = call(mesh, "getBlendShapeChannelWeightParam", idx); state = finite(v) and "ok" or "read_failed" end
                 end
+                if not finite(v) and finite(motion_values[name]) then
+                    v, state = motion_values[name], "motion"
+                end
                 h.status[name], taps[name] = state, finite(v) and v or false
             end
             local v = taps[name]
@@ -95,7 +111,24 @@ function S.read(h, P, inv_full)
         end
         return value
     end
-    local values, measured = B.evaluate(data, B.sampler(h.joints), source)
+    local sample_bone = B.sampler(h.joints)
+    local actual = {}
+    local function real_sample(name)
+        if not h.joints[name] then return end
+        if actual[name] == nil then
+            local spec = data.joints[name]
+            local p, q = FaceHold.pose(h.face_address, spec.bone or name)
+            if not p then p, q = sample_bone(name) end
+            actual[name] = {position = p, rotation = q}
+        end
+        return actual[name].position, actual[name].rotation
+    end
+    local function sample(name)
+        if h.joints[name] then return real_sample(name) end
+        return NativeFace.sample(h.animation, name)
+    end
+    local values, measured = B.evaluate(data, sample, source)
+    NativeFace.apply(h.animation, values)
     for _, key in ipairs(h.keys) do P[key] = (values[by_key[key]] or 0) * inv_full end
     return values, measured, taps
 end
@@ -113,7 +146,7 @@ local DIAGNOSTIC_JOINTS = {
 -- Snapshots contain numbers and names only; every sample resolves fresh engine references.
 function S.snapshot(face, calibration)
     local data = calibration or data
-    local h = S.bind(face, {}, data)
+    local h = S.bind(face, {}, data, true)
     local outputs, measured = S.read(h, {}, 1)
     local result = { joints = {}, measurements = {}, taps = {}, outputs = outputs,
         status = {}, calibration = data }
@@ -125,14 +158,19 @@ function S.snapshot(face, calibration)
     local cn, wc = call(h.mesh, "get_BlendShapeChannelNum"), call(h.mesh, "get_BlendShapeChannelWeightCount")
     local length = call(call(h.mesh, "get_ChannelWeightList"), "get_Length")
     result.buffers = {channels = cn, count = wc, length = length}
+    result.animation = NativeFace.snapshot(h.animation)
+    result.bone_hold = {status = FaceHold.status, active = FaceHold.active(), capturing = FaceHold.capturing()}
     local limit = finite(cn) and finite(wc) and finite(length) and cn == h.count and math.min(cn, wc, length) or 0
     for _, name in ipairs(data.native_names or {}) do
         local idx = hashes[Hash.hash(name)]
         local value = idx ~= nil and idx < limit and call(h.mesh, "getBlendShapeChannelWeightParam", idx) or nil
+        local short = name:sub(1, #PREFIX) == PREFIX and name:sub(#PREFIX + 1) or name
+        if not finite(value) then value = h.motion_values and h.motion_values[short] end
         if finite(value) then result.taps[name] = value
         else result.status["tap:" .. name] = idx == nil and "unbound" or "unreadable" end
     end
     return result
 end
 
+S.release_deforms = Deform.release
 return S

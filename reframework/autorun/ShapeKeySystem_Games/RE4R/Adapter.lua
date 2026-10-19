@@ -3,6 +3,8 @@
 -- The current player's head selects its calibration. Objects are resolved per call;
 -- rig handles are released when the topology changes.
 local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
+local NativeFace = require("ShapeKeySystem_Games.RE4R.NativeFace")
+local BoneHold = require("ShapeKeySystem_Games.RE4R.BoneHold")
 local Conditions = require("ShapeKeySystem_Games.RE4R.Conditions")
 local Playback = require("ShapeKeySystem_Games.RE4R.Playback")
 local Cutscene = require("ShapeKeySystem_Games.RE4R.Cutscene")
@@ -52,8 +54,8 @@ function A.primary_root()
 end
 function A.is_face(tr)
     local p = path(tr)
+    -- Head identity follows its actor and mesh slot; replacement rigs may omit individual face joints.
     return actor_of_path(p) ~= nil and p:match("/cha%d%d%d_1[01]%.mesh") ~= nil
-        and call(tr, "getJointByName(System.String)", "C_Chin") ~= nil
 end
 function A.primary_ready()
     local h = head()
@@ -148,9 +150,16 @@ function A.model_of(part)
 end
 function A.representative_of(part) return (A.model_of(part)) end
 function A.eye_joints(face)
-    return {L = call(face, "getJointByName(System.String)", "L_Eye"),
-            R = call(face, "getJointByName(System.String)", "R_Eye")}
+    return {L = call(face, "getJointByName(System.String)", "L_Eye") or NativeFace.eye(face, "L_Eye"),
+            R = call(face, "getJointByName(System.String)", "R_Eye") or NativeFace.eye(face, "R_Eye")}
 end
+function A.eye_angles(eye)
+    local q = type(eye) == "table" and eye.animation_eye and NativeFace.eye_rotation(eye)
+        or type(eye) ~= "table" and call(eye, "get_LocalRotation()") or nil
+    if q then return require("ShapeKeySystem_Core.Expression").quat_to_yaw_pitch(q) end
+end
+A.expression_joints = BoneHold.joints
+A.face_layers = BoneHold.layers
 function A.signature(root)
     local out = {}
     for _, tr in ipairs(A.parts(root)) do
@@ -227,7 +236,10 @@ function A.init(events)
         local work = sdk.find_type_definition("chainsaw.TimelineEventWork")
         for _, name in ipairs({"play", "skip", "unload", "changeEventPhase"}) do
             local method = work and work:get_method(name)
-            if method then sdk.hook(method, function() events.rebuilt() end, nil) end
+            if method then sdk.hook(method, function()
+                Signals.release_deforms()
+                events.rebuilt()
+            end, nil) end
         end
     end
     Conditions.init()
