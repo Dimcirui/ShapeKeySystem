@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "rig": "Onimusha Head with face_joint bones (head mods that reuse the body skeleton have no bsControl)",
+  "note": "signals: bone signals read as raw bone.<name> (Core/BoneReads.lua); position in the Head joint's frame (+x = the face's left, +y up, +z forward), rest_mm = idle median, full_mm = travel to the 1st / 99th percentile of idle, talking and combat recordings.",
+  "signals": {
+    "eyeClose.L": {"bone": "face_joint343", "axis": "y", "sign": -1, "full_mm": 8.0, "rest_mm": -0.8, "deadzone": 0.05},
+    "eyeClose.R": {"bone": "face_joint342", "axis": "y", "sign": -1, "full_mm": 7.0, "rest_mm": -1.2, "deadzone": 0.05},
+    "eyeWiden.L": {"bone": "face_joint343", "axis": "y", "sign": 1, "full_mm": 2.5, "rest_mm": -0.8, "deadzone": 0.2},
+    "eyeWiden.R": {"bone": "face_joint342", "axis": "y", "sign": 1, "full_mm": 2.5, "rest_mm": -1.2, "deadzone": 0.2},
+    "lowerLidRaise.L": {"bone": "face_joint278", "axis": "y", "sign": 1, "full_mm": 3.5, "rest_mm": 1.2, "deadzone": 0.2},
+    "lowerLidRaise.R": {"bone": "face_joint179", "axis": "y", "sign": 1, "full_mm": 3.5, "rest_mm": 1.2, "deadzone": 0.2},
+    "cheekRaise.L": {"bone": "face_joint64", "axis": "y", "sign": 1, "full_mm": 5.0, "rest_mm": 1.7, "deadzone": 0.2},
+    "cheekRaise.R": {"bone": "face_joint196", "axis": "y", "sign": 1, "full_mm": 5.0, "rest_mm": 0.9, "deadzone": 0.2},
+    "browRaise.L": {"bone": "face_joint276", "axis": "y", "sign": 1, "full_mm": 6.0, "rest_mm": -1.2, "deadzone": 0.2},
+    "browRaise.R": {"bone": "face_joint324", "axis": "y", "sign": 1, "full_mm": 6.0, "rest_mm": -2.4, "deadzone": 0.2},
+    "browLower.L": {"bone": "face_joint276", "axis": "y", "sign": -1, "full_mm": 4.0, "rest_mm": -1.2, "deadzone": 0.25},
+    "browLower.R": {"bone": "face_joint324", "axis": "y", "sign": -1, "full_mm": 4.0, "rest_mm": -2.4, "deadzone": 0.25},
+    "browInnerDown.L": {"bone": "face_joint7", "axis": "y", "sign": -1, "full_mm": 4.5, "rest_mm": -3.3, "deadzone": 0.2},
+    "browInnerDown.R": {"bone": "face_joint160", "axis": "y", "sign": -1, "full_mm": 4.5, "rest_mm": -3.3, "deadzone": 0.2},
+    "jawDrop": {"bone": "face_joint80", "axis": "y", "sign": -1, "full_mm": 13.0, "rest_mm": -1.9, "deadzone": 0.25},
+    "lowerLipDrop": {"bone": "face_joint101", "axis": "y", "sign": -1, "full_mm": 20.0, "rest_mm": -0.8, "deadzone": 0.2},
+    "mouthCornerUp.L": {"bone": "face_joint82", "axis": "y", "sign": 1, "full_mm": 5.0, "rest_mm": -2.3, "deadzone": 0.2},
+    "mouthCornerUp.R": {"bone": "face_joint232", "axis": "y", "sign": 1, "full_mm": 5.0, "rest_mm": -2.1, "deadzone": 0.2},
+    "mouthCornerDown.L": {"bone": "face_joint82", "axis": "y", "sign": -1, "full_mm": 5.5, "rest_mm": -2.3, "deadzone": 0.35},
+    "mouthCornerDown.R": {"bone": "face_joint232", "axis": "y", "sign": -1, "full_mm": 5.5, "rest_mm": -2.1, "deadzone": 0.35},
+    "mouthCornerOut.L": {"bone": "face_joint82", "axis": "x", "sign": 1, "full_mm": 5.5, "rest_mm": 1.7, "deadzone": 0.35},
+    "mouthCornerOut.R": {"bone": "face_joint232", "axis": "x", "sign": -1, "full_mm": 5.5, "rest_mm": -1.4, "deadzone": 0.35}
+  }
+}
