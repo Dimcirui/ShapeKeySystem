@@ -23,7 +23,7 @@ local fixed_key_count=#labels
 local protected, taps, calibration = {}, {}, {}
 local input_mode='legacy'
 local extension_enabled=false
-local modes={legacy=true,bones_first=true}
+local modes={legacy=true,bones_first=true,native_first=true}
 local function finite(value) return type(value) == "number" and value == value and math.abs(value) < math.huge end
 S.raw = {term = "原生表情", parse = function(value)
     if keys[value]and(taps[value]and #taps[value]>0 or(calibration.bone_fallbacks or{})[value]
@@ -172,64 +172,68 @@ function S.read(h, P, inv_full, diagnostic)
     h.sources, h.measurements, h.bone_status, h.bone_joints = {}, {}, {}, {}
     for _, key in ipairs(h.keys) do
         local label, value, available = labels[key], 0, false
-        for _, tap in ipairs((h.mode=='legacy'or diagnostic)and taps[label]or{}) do
+        for _, tap in ipairs(taps[label] or {}) do
             local index = h.indices[tap.name]
             local state, v = "head_unavailable"
             if valid then
-                if type(index) ~= "number" then state = "unbound"
-                elseif index >= head.count then state = "out_of_bounds"
-                elseif Hash.hash_at(hashes, index, true) ~= tap.hash then state = "hash_changed"
-                else
+                -- 1. Try reading directly from mesh channel (e.g. vanilla Leon head)
+                if type(index) == "number" and index < head.count and Hash.hash_at(hashes, index, true) == tap.hash then
                     v = R.call(head.mesh, "getBlendShapeChannelWeightParam(System.UInt64)", index)
-                    state = finite(v) and "ok" or "read_failed"
                 end
+                -- 2. If mesh didn't have it (mod mesh!), read directly from Motion FACS deforms!
+                if not finite(v) and open_motion() then
+                    v = Motion.deform_value(motion_context, tap.hash)
+                end
+                state = finite(v) and "ok" or "read_failed"
             end
             h.status[tap.name] = state
             if finite(v) then
                 available = true
-                observed[tap.name] = v; value = math.max(value, math.max(0, math.min(1, v)))
+                observed[tap.name] = v
+                value = math.max(value, math.max(0, math.min(1, v)))
             end
         end
         h.sources[label] = available and "native" or "unavailable"
-        if valid and (h.mode=='bones_first'or not available) then
-            local bone, measured, state, joints,source
+        
+        -- Fallback to driver vowels or bones only if native tap wasn't available
+        if valid and not available then
+            local bone, measured, state, joints, source
             local extension_rule=(calibration.expression_fallbacks or{})[label]or(calibration.native_output_rules or{})[label]
             if vowel_keys[label]then
                 if extension_enabled then
                     local values
-                    values,state,joints,source=Vowels.read(head,diagnostic,h.mode=='bones_first'and fallback or nil,h.omitted,frame)
+                    values,state,joints,source=Vowels.read(head,diagnostic,fallback,h.omitted,frame,open_motion())
                     bone=values and values[vowel_keys[label]]
                 else state='extension_disabled'end
             else
                 bone,measured,state,joints,source=Bones.read(head,label,diagnostic,
-                    h.mode=='bones_first'and fallback or nil,h.omitted,frame)
+                    fallback,h.omitted,frame)
             end
             if not extension_enabled and extension_rule
                 and not(calibration.bone_fallbacks or{})[label]then state='extension_disabled'end
             local rule=(calibration.bone_fallbacks or{})[label]
-            if not finite(bone)and h.mode=='bones_first'and rule and rule.native_parameters and open_motion()then
-                local total,complete=0,true
-                for _,name in ipairs(rule.native_parameters)do
-                    local entry=scalars[name]
-                    if entry==nil then
-                        h.motion_requests=h.motion_requests+1
-                        local v,why=Motion.scalar(motion_context,name)
-                        entry={value=v,state=why};scalars[name]=entry
+            if not finite(bone) and rule and rule.native_parameters and open_motion() then
+                local total, complete = 0, true
+                for _, name in ipairs(rule.native_parameters) do
+                    local entry = scalars[name]
+                    if entry == nil then
+                        h.motion_requests = h.motion_requests + 1
+                        local v, why = Motion.scalar(motion_context, name)
+                        entry = {value = v, state = why}
+                        scalars[name] = entry
                     end
-                    if not finite(entry.value)then complete=false;state=entry.state;break end
-                    total=total+entry.value
+                    if not finite(entry.value) then complete = false; state = entry.state; break end
+                    total = total + entry.value
                 end
                 if complete then
-                    bone=math.max(0,math.min(1,total/#rule.native_parameters))
-                    state,source='native_parameter_fallback','motion_native'
+                    bone = math.max(0, math.min(1, total / #rule.native_parameters))
+                    state, source = 'native_parameter_fallback', 'motion_native'
                 end
             end
             h.bone_status[label], h.measurements[label] = state, measured
             if finite(bone) then
                 value, h.sources[label] = bone, source
                 for name, pose in pairs(joints or {}) do h.bone_joints[name] = pose end
-            elseif h.mode=='bones_first'then
-                value,h.sources[label]=0,'unavailable'
             end
         end
         values[label] = value
@@ -257,7 +261,6 @@ function S.snapshot(context)
         end
     end
     local h = S.bind(head.face, requested,mode)
-    -- Omissions are confined to read-only diagnostics; normal adapter bindings never set them.
     h.omitted=type(context)=='table'and context.omit_bones or nil
     local values, observed = S.read(h, {}, 1, true)
     local joints,joint_status={},{}

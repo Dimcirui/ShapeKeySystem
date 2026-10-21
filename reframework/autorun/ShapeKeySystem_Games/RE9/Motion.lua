@@ -38,7 +38,10 @@ end
 function M.open(head,cache)
     local c,why=resolve(head)
     if not c then return nil,why end
-    if cache.identity~=c.identity then cache.identity,cache.indices=c.identity,{}end
+    if cache.identity~=c.identity then 
+        cache.identity,cache.indices=c.identity,{}
+        cache.deform_indices=nil
+    end
     c.cache,c.head=cache,head
     return c
 end
@@ -51,9 +54,41 @@ local function index_of(c,name)
     end
     if R.integer(index,c.count-1)then return index end
 end
+
+-- Read native RE9 FACS Deform track evaluated on via.motion.Motion
+function M.deform_value(c, hash)
+    if not c or not c.motion then return nil end
+    local cache = c.cache
+    if not cache.deform_indices then
+        cache.deform_indices = {}
+        local dhashes = R.call(c.motion, "get_DeformNameHashes")
+        local len = dhashes and (R.call(dhashes, "get_Length") or R.call(dhashes, "get_Count")) or 0
+        for i = 0, len - 1 do
+            local h = Hash.hash_at(dhashes, i, true)
+            if h then cache.deform_indices[h] = i end
+        end
+    end
+    local idx = cache.deform_indices[hash]
+    if not idx then return nil end
+    if not c.deform_values then
+        c.deform_values = R.call(c.motion, "get_DeformValues")
+    end
+    if not c.deform_values then return nil end
+    local val = R.call(c.deform_values, "get_Item", idx)
+    if type(val) == "number" and val == val and math.abs(val) < math.huge then
+        return val
+    end
+    return nil
+end
+
 function M.scalar(c,name)
+    -- 1. Try deform track first (in RE9, native FACS blendshapes are evaluated as deforms!)
+    local dv = M.deform_value(c, Hash.hash(name))
+    if dv ~= nil then return dv, 'ok' end
+    
+    -- 2. Fall back to joint position if it was an actual bone
     local index=index_of(c,name)
-    if index==nil then return nil,'motion_joint_unavailable:'..name end
+    if index==nil then return nil,'motion_target_unavailable:'..name end
     local p=vector(R.call(c.motion,'getCalculatedLocalPosition(System.Int32)',index),3)
     return p and p[1]or nil,p and'ok'or('motion_position_unavailable:'..name)
 end

@@ -491,6 +491,58 @@
     "jawOpen": [
       "HeadSkinned_blendShape.JwOpn_00_L",
       "HeadSkinned_blendShape.JwOpn_00_R"
+    ],
+    "mouthSmileLeft": [
+      "HeadSkinned_blendShape.CrnPl_01_L",
+      "HeadSkinned_blendShape.CrnPl_04_L"
+    ],
+    "mouthSmileRight": [
+      "HeadSkinned_blendShape.CrnPl_01_R",
+      "HeadSkinned_blendShape.CrnPl_04_R"
+    ],
+    "browDownLeft": [
+      "HeadSkinned_blendShape.BrInDn_00_L"
+    ],
+    "browDownRight": [
+      "HeadSkinned_blendShape.BrInDn_00_R"
+    ],
+    "browInnerUp": [
+      "HeadSkinned_blendShape.BrInRs_00_L",
+      "HeadSkinned_blendShape.BrInRs_00_R"
+    ],
+    "browOuterUpLeft": [
+      "HeadSkinned_blendShape.BrOutRs_00_L"
+    ],
+    "browOuterUpRight": [
+      "HeadSkinned_blendShape.BrOutRs_00_R"
+    ],
+    "eyeSquintLeft": [
+      "HeadSkinned_blendShape.Sqnt_03_L",
+      "HeadSkinned_blendShape.Sqnt_06_L"
+    ],
+    "eyeSquintRight": [
+      "HeadSkinned_blendShape.Sqnt_03_R",
+      "HeadSkinned_blendShape.Sqnt_06_R"
+    ],
+    "mouthPucker": [
+      "HeadSkinned_blendShape.Pkr_01_L",
+      "HeadSkinned_blendShape.Pkr_01_R"
+    ],
+    "mouthFunnel": [
+      "HeadSkinned_blendShape.Fnl_04_L",
+      "HeadSkinned_blendShape.Fnl_04_R"
+    ],
+    "mouthFrownLeft": [
+      "HeadSkinned_blendShape.CrnDprs_00_L"
+    ],
+    "mouthFrownRight": [
+      "HeadSkinned_blendShape.CrnDprs_00_R"
+    ],
+    "re9BrowInLeft": [
+      "HeadSkinned_blendShape.BrInDn_00_L"
+    ],
+    "re9BrowInRight": [
+      "HeadSkinned_blendShape.BrInDn_00_R"
     ]
   },
   "expression_fallbacks": {

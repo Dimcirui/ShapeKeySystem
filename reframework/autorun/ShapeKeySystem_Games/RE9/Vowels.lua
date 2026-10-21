@@ -1,5 +1,7 @@
--- RE9 native A/I/U/E/O pose basis, projected from the current facial bones.
--- These are mouth-shape estimates, not an audio phoneme recognizer.
+-- RE9 native A/I/U/E/O pose basis, projected from the current facial bones or native facial driver.
+local R=require('ShapeKeySystem_Games.RE9.Runtime')
+local Hash=require('ShapeKeySystem_Core.NameHash')
+local Motion=require('ShapeKeySystem_Games.RE9.Motion')
 local Bones=require('ShapeKeySystem_Games.RE9.Bones')
 local M={}
 local config
@@ -40,9 +42,58 @@ function M.configure(data)
     config=data;return true
 end
 function M.configured()return config~=nil end
-function M.read(head,diagnostic,fallback,omitted,frame)
+
+-- Native PlayerFacialAnimationDriver + FACS mouth deforms reader
+function M.read_driver(head, motion_context)
+    if not head or not head.root then return nil end
+    local root_go = R.call(head.root, 'get_GameObject')
+    if not root_go then return nil end
+    local driver = R.component(root_go, sdk.typeof('app.PlayerFacialAnimationDriver'))
+    if not driver then return nil end
+    
+    local cur_vowel = driver:get_field('_CurrentVowel')
+    local cur_vol = driver:get_field('_CurrentVolume') or 0.0
+    
+    local jw = motion_context and Motion.deform_value(motion_context, Hash.hash('HeadSkinned_blendShape.JwOpn_00_L')) or 0.0
+    local crn = motion_context and Motion.deform_value(motion_context, Hash.hash('HeadSkinned_blendShape.CrnPl_01_L')) or 0.0
+    local pkr = motion_context and Motion.deform_value(motion_context, Hash.hash('HeadSkinned_blendShape.Pkr_01_L')) or 0.0
+    local fnl = motion_context and Motion.deform_value(motion_context, Hash.hash('HeadSkinned_blendShape.Fnl_04_L')) or 0.0
+    local upr = motion_context and Motion.deform_value(motion_context, Hash.hash('HeadSkinned_blendShape.UprLpRs_01_L')) or 0.0
+    
+    local weights = {0, 0, 0, 0, 0}
+    local vstr = tostring(cur_vowel or '')
+    local vnum = tonumber(cur_vowel) or 0
+    
+    local vol = math.max(cur_vol or 0, jw or 0)
+    if vstr:find('A') or vnum == 1 then
+        weights[1] = math.max(0.15, vol)
+    elseif vstr:find('I') or vnum == 2 then
+        weights[2] = math.max(0.15, math.max(vol, crn or 0))
+    elseif vstr:find('U') or vnum == 3 then
+        weights[3] = math.max(0.15, math.max(vol, pkr or 0))
+    elseif vstr:find('E') or vnum == 4 then
+        weights[4] = math.max(0.15, math.max(vol, upr or 0))
+    elseif vstr:find('O') or vnum == 5 then
+        weights[5] = math.max(0.15, math.max(vol, fnl or 0))
+    else
+        if jw and jw > 0.05 then
+            weights[1] = jw
+        end
+    end
+    return weights, 'ok', {}, 'driver'
+end
+
+function M.read(head,diagnostic,fallback,omitted,frame,motion_context)
     frame=frame or{}
     if frame.__vowels then return table.unpack(frame.__vowels,1,4)end
+    
+    -- Try native driver first
+    local dweights, dstate, djoints, dsource = M.read_driver(head, motion_context)
+    if dweights then
+        frame.__vowels = {dweights, dstate, djoints, dsource}
+        return dweights, dstate, djoints, dsource
+    end
+    
     if not config then return nil,'not_configured'end
     local y,joints,source={},{},'bones'
     for i,terms in ipairs(config.features)do
