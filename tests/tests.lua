@@ -453,6 +453,56 @@ DEMO.busy = true; ticks(1)
 check(st.debug.status:find("paused") == nil and #st.scene.rigs > 0, "switch off: cutscenes keep the master hunter")
 DEMO.busy = false; ticks(130)
 
+-- Objects the game hangs on the hunter for a moment (emote props, effects) are not a change of
+-- parts: the face keeps being driven through them.
+do
+    local Scene = require("ShapeKeySystem_Core.Scene")
+    local Trail = require("ShapeKeySystem_Core.Trail")
+    local trail, event = {}, Trail.event
+    Trail.event = function(fmt, ...) trail[#trail + 1] = select("#", ...) > 0 and string.format(fmt, ...) or fmt end
+    local npc = ARMOR.get_Next()
+    local prop = { _name = "Ef_Gesture_000" }
+    prop.get_GameObject = function(self) return { call = function(_, m)
+        if m == "get_Name" then return self._name end
+        if m == "get_Transform" then return self end
+    end } end
+    prop.get_Next = function() return npc end
+    prop.call = function(self, m, ...)
+        if m == "get_GameObject" then return self:get_GameObject() end
+        return self[m](self, ...)
+    end
+    local followed = 0
+    for i = 1, 9 do
+        ARMOR.get_Next = (i % 2 == 1) and function() return prop end or function() return npc end
+        FC[1] = 0.001 * i
+        ticks(10)
+        if math.abs((WEIGHTS[s_close] or 0) - 0.1 * i) < 1e-6 then followed = followed + 1 end
+    end
+    check(followed == 9, "a child that comes and goes (emote prop): the face follows the signal at every step (" .. followed .. "/9)")
+    local drops = 0
+    for _, l in ipairs(trail) do if l:find("released rigs", 1, true) then drops = drops + 1 end end
+    check(drops == 0, "a child that comes and goes (emote prop) does not drop the rigs (" .. drops .. " drops)")
+    ARMOR.get_Next = function() return npc end
+    ticks(10)
+    check(Scene.signature_diff("Player_Face|ch03_024_0012", "Player_Face|ch03_024_0013") == "+ch03_024_0013 -ch03_024_0012",
+          "the trail names the parts that came and went")
+    local found = false
+    ARMOR._name = "ch03_024_0013"; ticks(130)
+    for _, l in ipairs(trail) do
+        if l:find("hunter parts changed (+ch03_024_0013 -ch03_012_0012)", 1, true) then found = true end
+    end
+    check(found, "a real part change drops the rigs and the trail names the parts")
+    found = false
+    for _, l in ipairs(trail) do if l == "primary parts: Player_Face ch03_024_0013" then found = true end end
+    check(found, "a scan after a part change trails the primary parts")
+    ARMOR._name = "ch03_012_0012"; ticks(130)
+    trail = {}
+    SKS.call("set_master_gain", { value = 0.5 }); ticks(70)
+    check(trail[1] == "gains saved: master 1.00 -> 0.50", "a saved gain change is trailed: " .. tostring(trail[1]))
+    SKS.call("set_master_gain", { value = 1.0 }); ticks(70)
+    Trail.event = event
+end
+
 -- signal layer: dictionary raw / param / lo / hi / no_signal, p through the adapter, game tags
 local Profile = require("ShapeKeySystem_Core.Profile")
 local U = require("ShapeKeySystem_Core.Util")

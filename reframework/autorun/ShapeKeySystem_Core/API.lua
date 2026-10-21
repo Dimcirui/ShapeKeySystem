@@ -209,6 +209,13 @@ local function notice(level, text)
 end
 
 local function save_soon() C.save_at = C.frame + 60 end
+-- gains as last saved: each save trails the gains that changed (a slider drag saves once, ~1 s
+-- after it stops)
+local function gains_of(e)
+    local g = { master = e.master_gain, gaze = e.gaze_gain }
+    for k, v in pairs(e.region_gains or {}) do g[k] = v end
+    return g
+end
 local function save_now()
     C.save_at = nil
     local out = cfg
@@ -222,6 +229,15 @@ local function save_now()
         for k, v in pairs(t.stash_eyes) do out.eyes[k] = v end
     end
     if not U.save_json(SETTINGS_PATH, out) then log("settings save failed") end
+    local now, was, diff = gains_of(out.expression), C.saved_gains, {}
+    if was then
+        for k, v in pairs(now) do
+            if was[k] and math.abs(was[k] - v) > 1e-6 then diff[#diff + 1] = string.format("%s %.2f -> %.2f", k, was[k], v) end
+        end
+    end
+    table.sort(diff)
+    if #diff > 0 then Trail.event("gains saved: %s", table.concat(diff, ", ")) end
+    C.saved_gains = now
 end
 
 local function request_rescan(...)
@@ -1069,6 +1085,12 @@ local function do_scan()
     state.debug.status = string.format("faces=%d (cached-skip %d)%s%s driven=%s  chars=%s  scan %.2f ms", res.faces, res.skipped,
         C.preview_open and " [preview]" or "", C.menu and " [menu]" or "", #tn > 0 and table.concat(tn, "  ") or "none",
         (res.parents and #res.parents > 0) and table.concat(res.parents, " ") or "none", res.ms)
+    -- the primary character's parts whenever they change, so a part that later vanishes can be
+    -- told apart from one that was never there
+    if res.sig ~= C.parts_logged then
+        C.parts_logged = res.sig
+        Trail.event("primary parts: %s", res.sig ~= "" and (res.sig:gsub("|", " ")) or "none")
+    end
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
     Perf.record("scan", clock() - scan_start)
@@ -1387,8 +1409,9 @@ local function tick()
         C.pending_zero = {}
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
-    if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
-        drop_rigs("hunter parts changed", QUICK_RESCAN)
+    local now_sig = (f % 5 == 0 and #C.rigs > 0) and Scene.children_signature(Scene.primary_root()) or nil
+    if now_sig and now_sig ~= C.sig then
+        drop_rigs("hunter parts changed (" .. Scene.signature_diff(C.sig, now_sig) .. ")", QUICK_RESCAN)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
         drop_rigs("preview hunter changed", QUICK_RESCAN)
     elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
@@ -2289,6 +2312,7 @@ function SKS.init(adapter)
         notice("error", "没有可用的表情配置：" .. tostring(code) .. " " .. tostring(msg))
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
+    C.saved_gains = gains_of(cfg.expression)
     C.publish_api()
     return true
 end

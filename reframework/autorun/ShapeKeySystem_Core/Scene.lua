@@ -39,6 +39,20 @@ function S.children_signature(root)
     return table.concat(parts, "|")
 end
 
+-- "+added -removed" between two children signatures, for the trail.
+function S.signature_diff(old, new)
+    local function count(sig)
+        local t = {}
+        for n in (sig or ""):gmatch("[^|]+") do t[n] = (t[n] or 0) + 1 end
+        return t
+    end
+    local a, b, out = count(old), count(new), {}
+    for n, k in pairs(b) do if (a[n] or 0) < k then out[#out + 1] = "+" .. n end end
+    for n, k in pairs(a) do if (b[n] or 0) < k then out[#out + 1] = "-" .. n end end
+    table.sort(out)
+    return table.concat(out, " ")
+end
+
 local function find_faces(root, scene_search)
     local A = S.adapter
     local faces, seen = {}, {}

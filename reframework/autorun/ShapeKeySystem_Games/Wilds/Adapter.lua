@@ -73,6 +73,18 @@ function A.face_rank(tr) return go_name(tr):find("Player_Face", 1, true) == 1 an
 -- NPC faces carry fcParam too: only hunter armour (ch02 / ch03) is driven
 function A.is_part(name) return (name:find("ch02", 1, true) or name:find("ch03", 1, true)) ~= nil end
 
+-- Only faces and armour parts count: the game hangs props and effects on the hunter during
+-- emotes, and a signature that changed with them dropped and re-armed the rigs every few frames.
+function A.signature(root)
+    local parts, c = {}, root:call("get_Child")
+    while c do
+        local name = go_name(c)
+        if name:find("Player_Face", 1, true) == 1 or A.is_part(name) then parts[#parts + 1] = name end
+        c = c:call("get_Next")
+    end
+    return table.concat(parts, "|")
+end
+
 function A.eye_joints(face)
     return { L = jbn(face, "L_EyeJ_LOD02"), R = jbn(face, "R_EyeJ_LOD02") }
 end
