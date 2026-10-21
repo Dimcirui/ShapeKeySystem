@@ -1,7 +1,6 @@
--- ShapeKeySystem: MH Wilds bone signals, face joint motion read as named dictionary signals.
+-- ShapeKeySystem: bone signals, face joint motion read as named dictionary signals.
 --
--- Gestures move the face joints while every fcParam stays 0. The `signals` table of
--- builtin/mhwilds/face.json lists one signal per name, read as raw channel `bone.<name>`:
+-- An adapter's calibration table lists one signal per name, read as raw channel `bone.<name>`:
 --   pos: the joint's position in the Head joint's frame against its rest pose (the base local pose
 --        composed up to Head), along `axis` (+x = the face's left, +y = up, +z = forward), over
 --        full_mm;
@@ -10,8 +9,8 @@
 -- sign * (offset - rest) / full, past the deadzone, within 0..1.
 --
 -- Constraints:
--- - Raw keys are BASE + index in the table, above the fcParam range, so P and the profile's raw
---   key list hold both kinds.
+-- - Raw keys are BASE + index in the table, above every adapter's own raw keys, so P and the
+--   profile's raw key list hold both kinds.
 -- - While FaceHold holds the face the joints read neutral; positions are then composed from the
 --   held animated local poses (`FaceHold.pose`) instead of the world pose.
 -- - Handles hold joint references and belong to a rig; they are dropped with it.
@@ -40,12 +39,13 @@ end
 
 local function finite(v) return type(v) == "number" and v == v and math.abs(v) < math.huge end
 
--- Returns { list, by_name } from face.json's `signals`, or nil and a reason; an absent table is an
--- empty list.
-function R.load(data)
+-- Returns { list, by_name } from a calibration table (name -> entry), or nil and a reason; an absent
+-- table is an empty list. label prefixes the messages.
+function R.load(data, label)
+    label = label or ""
     local out = { list = {}, by_name = {} }
     if data == nil then return out end
-    if type(data) ~= "table" then return nil, "荒野骨骼信号表无效" end
+    if type(data) ~= "table" then return nil, label .. "骨骼信号表无效" end
     local names = {}
     for name in pairs(data) do names[#names + 1] = name end
     table.sort(names)
@@ -53,7 +53,7 @@ function R.load(data)
         local e = data[name]
         local pos = type(e) == "table" and AXES[e.axis] and finite(e.full_mm) and e.full_mm ~= 0
         local rot = type(e) == "table" and AXES[e.rot_axis] and finite(e.full_deg) and e.full_deg ~= 0
-        if type(e.bone) ~= "string" or not (pos or rot) then return nil, "荒野骨骼信号无效：" .. tostring(name) end
+        if type(e.bone) ~= "string" or not (pos or rot) then return nil, label .. "骨骼信号无效：" .. tostring(name) end
         local sig = { name = name, bone = e.bone, kind = pos and "pos" or "rot",
                       axis = pos and AXES[e.axis] or AXES[e.rot_axis],
                       full = pos and e.full_mm / 1000 or e.full_deg,
@@ -65,6 +65,21 @@ function R.load(data)
         out.by_name[name] = sig
     end
     return out
+end
+
+-- `bone.<name>` -> raw key; nil and a reason for an unknown name. Not a `bone.` string: nil, nil.
+function R.parse(sigs, v)
+    if type(v) ~= "string" or v:find("bone.", 1, true) ~= 1 then return nil, nil end
+    local sig = sigs and sigs.by_name[v:sub(6)]
+    if not sig then return nil, "未知骨骼信号：" .. v end
+    return sig.key
+end
+
+-- Raw key -> "bone.<name>"; nil below BASE.
+function R.label(sigs, key)
+    if key <= R.BASE then return nil end
+    local sig = sigs and sigs.list[key - R.BASE]
+    return "bone." .. (sig and sig.name or "?")
 end
 
 local function qrot(q, x, y, z, inverse)
