@@ -14,7 +14,7 @@ local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
 local Recorder = require("ShapeKeySystem_Games.Wilds.Recorder")
 local B = require("ShapeKeySystem_Core.BoneSignals")
-local BoneReads = require("ShapeKeySystem_Games.Wilds.BoneReads")
+local BoneReads = require("ShapeKeySystem_Core.BoneReads")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
 local A = {
@@ -138,22 +138,15 @@ A.raw = {
     term = "fcParam",
     slider = { min = 0, max = 200, fmt = "%03d" },
     parse = function(v)
-        if type(v) == "string" and v:find("bone.", 1, true) == 1 then
-            local sig = bone_sigs and bone_sigs.by_name[v:sub(6)]
-            if not sig then return nil, "未知骨骼信号：" .. v end
-            return sig.key
-        end
+        local key, why = BoneReads.parse(bone_sigs, v)
+        if key or why then return key, why end
         local n = tonumber(v)
         if not n or n ~= n or n == math.huge or n == -math.huge then return nil, "p 必须是有限数值" end
         if n < 0 or n > 200 then return nil, "fcParam out of range: " .. tostring(v) end
         return math.floor(n)
     end,
     label = function(n)
-        if n > 200 then
-            local sig = bone_sigs and bone_sigs.list[n - BoneReads.BASE]
-            return "bone." .. (sig and sig.name or "?")
-        end
-        return string.format("fcParam_%03d", n)
+        return BoneReads.label(bone_sigs, n) or string.format("fcParam_%03d", n)
     end,
 }
 
@@ -169,7 +162,7 @@ local bones
 local function load_bones()
     local ok, data = pcall(json.load_file, "ShapeKeySystem/builtin/mhwilds/face.json")
     if not ok or type(data) ~= "table" then return nil, "荒野面部骨骼标定文件无法读取" end
-    local sigs, sig_why = BoneReads.load(data.signals)
+    local sigs, sig_why = BoneReads.load(data.signals, "荒野")
     bone_sigs = sigs
     if not sigs then return nil, sig_why end
     local valid, why = B.validate(data, { label = "荒野" })
