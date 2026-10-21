@@ -210,6 +210,17 @@ do
     local sig = Profile.load_signals()
     check(sig.by_name["eyeClose.L"] and sig.by_name["eyeClose.L"].key == kl,
         "wilds bone signals: the dictionary maps the name to the bone key")
+    -- Maya's smiling eyes: lower lid lift x mouth corner up, fading as a blink closes the eye
+    Profile.load_all()
+    local maya = Profile.compile(Profile.resolve("maya"), {})
+    local slot
+    for i, c in ipairs(maya and maya.channels or {}) do if c.name == "ウィンク" then slot = i end end
+    local key = function(name) return sig.by_name[name].key end
+    local ctx = { P = { [key("lowerLidRaise.L")] = 1, [key("mouthCornerUp.L")] = 0.75 }, A = {}, V = {} }
+    local wink = slot and maya.channels[slot].fn
+    check(wink and near(wink(ctx), 0.75), "maya: smiling eyes follow lower lid x mouth corner")
+    ctx.P[key("eyeClose.L")] = 0.5
+    check(wink and near(wink(ctx), 0.375), "maya: smiling eyes fade as the eye closes")
 end
 
 print("GAMES FAILS:", gf)
