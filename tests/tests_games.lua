@@ -168,4 +168,59 @@ do
         "wilds bones: only rules for bound fcParam channels are evaluated")
 end
 
+-- Wilds bone signals: named dictionary signals read from face joints (BoneReads)
+do
+    local near = function(a, b) return a and math.abs(a - b) < 1e-6 end
+    local ID = { w = 1, x = 0, y = 0, z = 0 }
+    local up, turn = 0, 0   -- lip corner rise (mm) on top of its rest; eyelid turn (degrees)
+    local head = { get_Name = function() return "Head" end,
+                   get_Position = function() return { x = 0, y = 1.5, z = 0 } end,
+                   get_Rotation = function() return ID end }
+    local base = { x = 0.02, y = -0.05, z = 0.08 }
+    local corner = { get_Name = function() return "L_cornerLip_LOD02" end, get_Parent = function() return head end,
+                     get_BaseLocalPosition = function() return base end, get_BaseLocalRotation = function() return ID end,
+                     get_BaseLocalScale = function() return { x = 1, y = 1, z = 1 } end,
+                     get_Position = function() return { x = base.x, y = 1.5 + base.y + up / 1000, z = base.z } end }
+    local lid = { get_Name = function() return "L_UpEyeLidJ_LOD02" end, get_Parent = function() return head end,
+                  get_BaseLocalRotation = function() return ID end,
+                  get_LocalRotation = function()
+                      local h = math.rad(turn) / 2
+                      return { x = math.sin(h), y = 0, z = 0, w = math.cos(h) }
+                  end }
+    local joints = { Head = head, L_cornerLip_LOD02 = corner, L_UpEyeLidJ_LOD02 = lid }
+    local face = { getJointByName = function(_, n) return joints[n] end, get_address = function() return 0xB0E end }
+    local kc, kl = Wilds.raw.parse("bone.mouthCornerUp.L"), Wilds.raw.parse("bone.eyeClose.L")
+    check(kc and kc > 200 and kl and kl > 200 and Wilds.raw.label(kc) == "bone.mouthCornerUp.L",
+        "wilds bone signals: bone.<name> parses above the fcParam range and labels back")
+    check(Wilds.raw.parse("bone.nope") == nil and Wilds.raw.parse(201) == nil,
+        "wilds bone signals: unknown names and fcParam numbers past 200 are rejected")
+    local h, n = Wilds.bind(face, { kc, kl, Wilds.raw.parse("bone.browRaise.L") })
+    check(h.signals and #h.signals.list == 2 and n == 2, "wilds bone signals: only signals whose joint the face has are bound")
+    local P = {}
+    -- rest -1.4 mm, deadzone 0.2 of 10 mm: -1.4 + 2 + 4 mm reads 0.6, past the deadzone 0.5
+    up = -1.4 + 6; turn = -0.8 + 30 * (0.05 + 0.95 * 0.5)
+    Wilds.read(h, P, 100)
+    check(near(P[kc], 0.5) and near(P[kl], 0.5), "wilds bone signals: pos and rot read past rest and deadzone")
+    up, turn = -5, -10
+    Wilds.read(h, P, 100)
+    check(P[kc] == 0 and P[kl] == 0, "wilds bone signals: motion against the sign reads 0")
+    up, turn = 30, 90
+    Wilds.read(h, P, 100)
+    check(P[kc] == 1 and P[kl] == 1, "wilds bone signals: past full stays at 1")
+    local sig = Profile.load_signals()
+    check(sig.by_name["eyeClose.L"] and sig.by_name["eyeClose.L"].key == kl,
+        "wilds bone signals: the dictionary maps the name to the bone key")
+    -- Maya's smiling eyes: lower lid lift x mouth corner up, fading as a blink closes the eye
+    Profile.load_all()
+    local maya = Profile.compile(Profile.resolve("maya"), {})
+    local slot
+    for i, c in ipairs(maya and maya.channels or {}) do if c.name == "ウィンク" then slot = i end end
+    local key = function(name) return sig.by_name[name].key end
+    local ctx = { P = { [key("lowerLidRaise.L")] = 1, [key("mouthCornerUp.L")] = 0.75 }, A = {}, V = {} }
+    local wink = slot and maya.channels[slot].fn
+    check(wink and near(wink(ctx), 0.75), "maya: smiling eyes follow lower lid x mouth corner")
+    ctx.P[key("eyeClose.L")] = 0.5
+    check(wink and near(wink(ctx), 0.375), "maya: smiling eyes fade as the eye closes")
+end
+
 print("GAMES FAILS:", gf)
