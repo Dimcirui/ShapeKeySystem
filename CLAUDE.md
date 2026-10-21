@@ -10,6 +10,9 @@ milestones) and `docs/plans/shape-key-system-api.md` (UI ↔ backend contract, c
 - Offline harness: `cd tests; python run.py` — every group prints `... FAILS: n`. Add checks to the
   matching `tests_*.lua` when changing behaviour. Two gaze checks in `tests.lua` were already failing
   at migration (2026-10-10, after the eye yaw/pitch sign fix).
+- Interface text is Chinese in code and the Chinese is the key of `builtin/i18n/en.json`
+  (`en_data.json` for builtin data text). New or changed text needs an English entry;
+  text built from parts must be one `I18n.f` template. `tests/i18n_check.py` enforces both.
 - Player data under `reframework/data/ShapeKeySystem` (settings.json, user/, mods/, trail.log) is
   gitignored and never deployed.
 
