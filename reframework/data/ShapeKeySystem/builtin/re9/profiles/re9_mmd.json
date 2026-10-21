@@ -1,0 +1,458 @@
+{
+  "schema": "sks.profile/1",
+  "id": "re9_mmd",
+  "name": "RE9 MMD",
+  "extends": "mmd",
+  "description": "RE9 原生面部输出整批映射；保留基础标定，按模型现有形态键匹配。",
+  "aliases": [],
+  "channels": [
+    {
+      "name": "上",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browOuterUp.L",
+          "k": 0.5
+        },
+        {
+          "s": "browOuterUp.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "眉上",
+        "眉上げ"
+      ],
+      "note": "眉上",
+      "unless": [
+        "上左",
+        "上右"
+      ]
+    },
+    {
+      "name": "下",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browDown.L",
+          "k": 0.5
+        },
+        {
+          "s": "browDown.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "眉下",
+        "眉下げ",
+        "真面目"
+      ],
+      "note": "眉下",
+      "unless": [
+        "下左",
+        "下右"
+      ]
+    },
+    {
+      "name": "上左",
+      "group": "brow",
+      "s": "browOuterUp.L",
+      "any": [
+        "眉上左",
+        "眉左上"
+      ]
+    },
+    {
+      "name": "上右",
+      "group": "brow",
+      "s": "browOuterUp.R",
+      "any": [
+        "眉上右",
+        "眉右上"
+      ]
+    },
+    {
+      "name": "下左",
+      "group": "brow",
+      "s": "browDown.L",
+      "any": [
+        "眉下左",
+        "眉左下"
+      ]
+    },
+    {
+      "name": "下右",
+      "group": "brow",
+      "s": "browDown.R",
+      "any": [
+        "眉下右",
+        "眉右下"
+      ]
+    },
+    {
+      "name": "口横広げ",
+      "group": "mouth",
+      "sum": [
+        {
+          "s": "stretch.L",
+          "k": 0.5
+        },
+        {
+          "s": "stretch.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "口横広げる",
+        "口横伸ばし",
+        "口横広"
+      ],
+      "note": "嘴横拉",
+      "unless": [
+        "口横広げ左",
+        "口横広げ右"
+      ]
+    },
+    {
+      "name": "口横広げ左",
+      "group": "mouth",
+      "any": [
+        "口横広左",
+        "左口横広げ"
+      ],
+      "mul": [
+        {
+          "s": "stretch.L"
+        },
+        {
+          "sub": [
+            {
+              "const": 1
+            },
+            {
+              "max": [
+                {
+                  "s": "re9.vowel.I"
+                },
+                {
+                  "s": "re9.vowel.E"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "口横広げ右",
+      "group": "mouth",
+      "any": [
+        "口横広右",
+        "右口横広げ"
+      ],
+      "mul": [
+        {
+          "s": "stretch.R"
+        },
+        {
+          "sub": [
+            {
+              "const": 1
+            },
+            {
+              "max": [
+                {
+                  "s": "re9.vowel.I"
+                },
+                {
+                  "s": "re9.vowel.E"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "びっくり",
+      "group": "eye",
+      "sum": [
+        {
+          "s": "eyeWide.L",
+          "k": 0.5
+        },
+        {
+          "s": "eyeWide.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "見開き",
+        "驚き",
+        "surprised"
+      ],
+      "note": "睁大眼",
+      "unless": [
+        "びっくり左",
+        "びっくり右"
+      ]
+    },
+    {
+      "name": "びっくり左",
+      "group": "eye",
+      "s": "eyeWide.L"
+    },
+    {
+      "name": "びっくり右",
+      "group": "eye",
+      "s": "eyeWide.R"
+    },
+    {
+      "name": "困る",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browInnerUp.L",
+          "k": 0.5
+        },
+        {
+          "s": "browInnerUp.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "困り",
+        "眉困り"
+      ],
+      "note": "眉心上提",
+      "unless": [
+        "困る左",
+        "困る右"
+      ]
+    },
+    {
+      "name": "困る左",
+      "group": "brow",
+      "s": "browInnerUp.L"
+    },
+    {
+      "name": "困る右",
+      "group": "brow",
+      "s": "browInnerUp.R"
+    },
+    {
+      "name": "怒り",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browBring.L",
+          "k": 0.5
+        },
+        {
+          "s": "browBring.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "眉怒り"
+      ],
+      "note": "皱眉（部分模型的 怒り 也会动眼睛）",
+      "unless": [
+        "怒り左",
+        "怒り右"
+      ]
+    },
+    {
+      "name": "怒り左",
+      "group": "brow",
+      "s": "browBring.L"
+    },
+    {
+      "name": "怒り右",
+      "group": "brow",
+      "s": "browBring.R"
+    },
+    {
+      "name": "口横狭く",
+      "group": "mouth",
+      "sum": [
+        {
+          "s": "funnelTogether.L",
+          "k": 0.5
+        },
+        {
+          "s": "funnelTogether.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "口横狭め",
+        "口横缩げ",
+        "口横縮め",
+        "口すぼめ",
+        "口横狭"
+      ],
+      "note": "嘴收窄",
+      "unless": [
+        "口横狭め左",
+        "口横狭め右"
+      ]
+    },
+    {
+      "name": "口横狭め左",
+      "group": "mouth",
+      "mul": [
+        {
+          "s": "funnelTogether.L"
+        },
+        {
+          "sub": [
+            {
+              "const": 1
+            },
+            {
+              "max": [
+                {
+                  "s": "re9.vowel.U"
+                },
+                {
+                  "s": "re9.vowel.O"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "口横狭め右",
+      "group": "mouth",
+      "mul": [
+        {
+          "s": "funnelTogether.R"
+        },
+        {
+          "sub": [
+            {
+              "const": 1
+            },
+            {
+              "max": [
+                {
+                  "s": "re9.vowel.U"
+                },
+                {
+                  "s": "re9.vowel.O"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "い",
+      "group": "mouth",
+      "s": "re9.vowel.I",
+      "any": [
+        "イ"
+      ]
+    },
+    {
+      "name": "う",
+      "group": "mouth",
+      "s": "re9.vowel.U",
+      "any": [
+        "ウ"
+      ]
+    },
+    {
+      "name": "え",
+      "group": "mouth",
+      "s": "re9.vowel.E",
+      "any": [
+        "エ"
+      ]
+    },
+    {
+      "name": "お",
+      "group": "mouth",
+      "s": "re9.vowel.O",
+      "any": [
+        "オ"
+      ]
+    },
+    {
+      "name": "目上",
+      "group": "gaze",
+      "sum": [
+        {
+          "eye": "L",
+          "axis": "pitch",
+          "sign": 1,
+          "k": 0.5
+        },
+        {
+          "eye": "R",
+          "axis": "pitch",
+          "sign": 1,
+          "k": 0.5
+        }
+      ]
+    },
+    {
+      "name": "目下",
+      "group": "gaze",
+      "sum": [
+        {
+          "eye": "L",
+          "axis": "pitch",
+          "sign": -1,
+          "k": 0.5
+        },
+        {
+          "eye": "R",
+          "axis": "pitch",
+          "sign": -1,
+          "k": 0.5
+        }
+      ]
+    },
+    {
+      "name": "あ",
+      "group": "mouth",
+      "mul": [
+        {
+          "s": "jawOpen"
+        },
+        {
+          "sub": [
+            {
+              "const": 1
+            },
+            {
+              "max": [
+                {
+                  "s": "re9.vowel.I"
+                },
+                {
+                  "s": "re9.vowel.U"
+                },
+                {
+                  "s": "re9.vowel.E"
+                },
+                {
+                  "s": "re9.vowel.O"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "any": [
+        "ア"
+      ],
+      "note": "保留原下颌标定，非 A 口型优先时减弱基础张嘴以避免重复叠加"
+    }
+  ]
+}

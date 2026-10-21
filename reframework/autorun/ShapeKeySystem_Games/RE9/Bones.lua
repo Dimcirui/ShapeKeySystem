@@ -6,18 +6,19 @@ local B = require('ShapeKeySystem_Core.BoneSignals')
 local M = {}
 local finite = B.finite
 local rules = {}
-local labels = {eyeBlinkLeft=true,eyeBlinkRight=true,jawOpen=true}
-function M.validate(data)
+local labels = B.by_name
+function M.validate(data,extra_labels)
     if data == nil then return true end
     if type(data) ~= 'table' then return false, 'RE9 面骨回退配置无效' end
     for label, rule in pairs(data) do
-        if not labels[label] or type(rule) ~= 'table' or not finite(rule.lo) or not finite(rule.hi)
-            or rule.hi <= rule.lo or type(rule.terms) ~= 'table' or #rule.terms == 0 or #rule.terms > 8 then
+        if not(labels[label]or extra_labels and extra_labels[label])or type(rule) ~= 'table' or not finite(rule.lo) or not finite(rule.hi)
+            or rule.hi <= rule.lo or type(rule.terms) ~= 'table' or #rule.terms == 0 or #rule.terms > 16 then
             return false, 'RE9 面骨回退范围无效'
         end
         for _, term in ipairs(rule.terms) do
             if type(term) ~= 'table' or type(term.bone) ~= 'string' or term.bone == ''
-                or type(term.axis) ~= 'table' or #term.axis ~= 3 or not finite(term.weight or 1) then
+                or type(term.axis) ~= 'table' or #term.axis ~= 3 or not finite(term.weight or 1)
+                or term.kind~=nil and term.kind~='rot' and term.kind~='pos' then
                 return false, 'RE9 面骨回退来源无效'
             end
             local norm = 0
@@ -35,12 +36,20 @@ function M.validate(data)
                 end
                 if math.abs(qnorm-1)>.001 then return false,'RE9 Motion 静止旋转必须归一化'end
             end
+            if term.motion_neutral_position~=nil then
+                if type(term.motion_neutral_position)~='table'or #term.motion_neutral_position~=3 then
+                    return false,'RE9 Motion 静止位置无效'
+                end
+                for _,v in ipairs(term.motion_neutral_position)do
+                    if not finite(v)then return false,'RE9 Motion 静止位置无效'end
+                end
+            end
         end
     end
     return true
 end
-function M.configure(data)
-    local ok, why = M.validate(data)
+function M.configure(data,extra_labels)
+    local ok, why = M.validate(data,extra_labels)
     if not ok then return false, why end
     rules = data or {}
     return true
@@ -61,37 +70,57 @@ local function position(value)
     local ok,p=pcall(function()return {value.x,value.y,value.z}end)
     if ok and #p==3 and finite(p[1])and finite(p[2])and finite(p[3])then return p end
 end
-function M.read(head, label, diagnostic, fallback, omitted)
-    local rule = rules[label]
-    if not rule then return nil, nil, 'not_configured' end
+function M.evaluate(head, rule, diagnostic, fallback, omitted, frame)
     local value, joints, used_motion = 0, {}, false
+    frame=frame or {}
     for _, term in ipairs(rule.terms) do
-        local pose = joints[term.bone]
+        local kind=term.kind or'rot'
+        local cache_key=term.bone..':'..kind
+        local entry=frame[cache_key]
+        local pose=entry and entry.pose
+        if entry and not pose then return nil,nil,entry.state end
         if not pose then
             local joint = not(omitted and omitted[term.bone])and R.call(head.face,'getJointByName(System.String)',term.bone)or nil
-            local base = quaternion(R.call(joint,'get_BaseLocalRotation()'))
-            local current = quaternion(R.call(joint,'get_LocalRotation()'))
             local state
             if not joint or R.call(joint,'get_Name()')~=term.bone then state='joint_unavailable:'..term.bone
-            elseif not base or not current then state='pose_unavailable:'..term.bone
             else
-                pose = {base_rotation=base,rotation=current,source='bones'}
-                if diagnostic then
+                pose = {source='bones'}
+                if kind=='rot'or diagnostic then
+                    pose.base_rotation=quaternion(R.call(joint,'get_BaseLocalRotation()'))
+                    pose.rotation=quaternion(R.call(joint,'get_LocalRotation()'))
+                end
+                if kind=='pos'or diagnostic then
                     pose.position=position(R.call(joint,'get_LocalPosition()'))
                     pose.base_position=position(R.call(joint,'get_BaseLocalPosition()'))
                 end
+                if kind=='rot'and not(pose.base_rotation and pose.rotation)
+                    or kind=='pos'and not(pose.base_position and pose.position)then
+                    pose,state=nil,'pose_unavailable:'..term.bone
+                end
             end
             if not pose and fallback then pose,state=fallback(term,diagnostic)end
+            frame[cache_key]={pose=pose,state=state}
             if not pose then return nil,nil,state or'pose_unavailable:'..term.bone end
-            used_motion=used_motion or pose.source=='motion'
-            joints[term.bone] = pose
         end
-        local q = pose.rotation
-        local v = B.measure({kind='rot',axis=term.axis,neutral={0,0,0,table.unpack(pose.base_rotation)}},
-            nil,{x=q[1],y=q[2],z=q[3],w=q[4]})
+        used_motion=used_motion or pose.source=='motion'
+        joints[term.bone] = pose
+        local q,p = pose.rotation,pose.position
+        local v
+        if kind=='pos'then
+            v=B.measure({kind='pos',axis=term.axis,neutral=pose.base_position},
+                p and {x=p[1],y=p[2],z=p[3]})
+        else
+            v=B.measure({kind='rot',axis=term.axis,neutral={0,0,0,table.unpack(pose.base_rotation)}},
+                nil,q and {x=q[1],y=q[2],z=q[3],w=q[4]})
+        end
         if not finite(v) then return nil, nil, 'measurement_failed:'..term.bone end
         value = value + v * (term.weight or 1)
     end
     return math.max(0,math.min(1,(value-rule.lo)/(rule.hi-rule.lo))), value, 'ok', joints, used_motion and'motion'or'bones'
+end
+function M.read(head,label,diagnostic,fallback,omitted,frame)
+    local rule=rules[label]
+    if not rule then return nil,nil,'not_configured'end
+    return M.evaluate(head,rule,diagnostic,fallback,omitted,frame)
 end
 return M

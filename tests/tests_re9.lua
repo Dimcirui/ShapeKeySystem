@@ -58,6 +58,7 @@ SCENE = {call = call, get_address = function() return scene_id end,
     findGameObject = function(_, name) return active and name == "cp_A000" and go(ROOT, name) end}
 GAME_NAME = "re9"
 json.dump_file("ShapeKeySystem/mods/names/re9_test.json", {schema = "sks.names/1", names = CHANNELS})
+json.dump_file('ShapeKeySystem/user/re9_input.json',{schema='sks.re9-input/1',mode='legacy',extended=false})
 dofile(ENTRY)
 local SKS = require("ShapeKeySystem_Core.API")
 local A = SKS.adapter
@@ -171,6 +172,7 @@ local function q(degrees)
     local a = math.rad(degrees) / 2
     return {x=math.sin(a),y=0,z=0,w=math.cos(a)}
 end
+local position_reads=0
 local poses = {LU={base=q(11),value=q(36)},LL={base=q(-4),value=q(-14)},
     RU={base=q(7),value=q(32)},RL={base=q(-2),value=q(-12)},Jaw={base=q(3),value=q(13)}}
 ARMOR.getJointByName = function(_, name)
@@ -178,8 +180,8 @@ ARMOR.getJointByName = function(_, name)
     if not pose then return end
     return {call=call,get_Name=function()return name end,
         get_BaseLocalRotation=function()return pose.base end,get_LocalRotation=function()return pose.value end,
-        get_LocalPosition=function()return {x=.01,y=.02,z=.03}end,
-        get_BaseLocalPosition=function()return {x=.011,y=.021,z=.031}end}
+        get_LocalPosition=function()position_reads=position_reads+1;return pose.position or{x=.01,y=.02,z=.03}end,
+        get_BaseLocalPosition=function()return pose.base_position or{x=.011,y=.021,z=.031}end}
 end
 local function rule(a,b)
     local terms={{bone=a,axis={1,0,0},weight=1}}
@@ -324,5 +326,140 @@ check(P[1]==0 and absent.bone_status.eyeBlinkLeft:find('motion_joint_unavailable
 motion.getJointIndexByNameHash=lookup;poses.LU=kept_lu
 check(not Bones.validate({jawOpen={lo=0,hi=1,terms={{bone='Jaw',axis={1,0,0},motion_neutral={0,0,0,0}}}}}),
     'invalid Motion neutral quaternions are rejected')
+local expanded=json.load_file('ShapeKeySystem/builtin/re9/leon.json')
+local brow={base=q(0),value=q(0),position={x=.01,y=.022,z=.03},base_position={x=.01,y=.02,z=.03}}
+poses.Brow=brow
+local function position_rule(axis)
+    return {lo=0,hi=4,terms={{bone='Brow',kind='pos',axis=axis,
+        motion_neutral={0,0,0,1},motion_neutral_position={.01,.02,.03}}}}
+end
+expanded.bone_fallbacks={browOuterUpLeft=position_rule({0,1,0}),mouthSmileLeft=position_rule({0,1,0}),
+    mouthFrownLeft=position_rule({0,-1,0})}
+check(Signals.configure(expanded,'bones_first'),'extended position measurements configure without changing the three original keys')
+local brow_key,smile_key,frown_key=Signals.raw.parse('browOuterUpLeft'),Signals.raw.parse('mouthSmileLeft'),Signals.raw.parse('mouthFrownLeft')
+check(brow_key and smile_key and frown_key and Signals.raw.parse('jawOpen')==3,
+    'configured semantic names get stable keys alongside the legacy three')
+check(not Signals.raw.parse('mouthRollUpper'),'unconfigured semantics remain explicitly unavailable')
+local ext=Signals.bind(ARMOR,{brow_key,smile_key,frown_key},'bones_first')
+local before_positions,before_motion=position_reads,motion_rotations
+Signals.read(ext,P,1)
+check(math.abs(P[brow_key]-.5)<1e-8 and math.abs(P[smile_key]-.5)<1e-8 and P[frown_key]==0,
+    'position inputs use their own base pose in millimetres and independent signed axes')
+check(position_reads-before_positions==1 and motion_rotations==before_motion,
+    'several semantics sharing a physical position read it once with no Motion requests')
+brow.position={x=.01,y=.02,z=.03};Signals.read(ext,P,1)
+check(P[brow_key]==0 and ext.sources.browOuterUpLeft=='bones'and ext.motion_requests==0,
+    'a valid position zero also wins over Motion')
+brow.position={x=.01,y=.024,z=.03};Signals.read(ext,P,1)
+check(math.abs(P[brow_key]-1)<1e-8,'position cache is local to the read and never preserves a previous frame')
+brow.position={x=.01,y=.022,z=.03}
+by_hash[Hash.hash('Brow')]=5;animation[6]=brow
+motion.get_JointCount=function()return 6 end
+motion.getCalculatedLocalPosition=function(_,i)return i==5 and brow.position or{x=.01,y=.02,z=.03}end
+poses.Brow=nil
+before_motion=motion_rotations
+Signals.read(ext,P,1)
+check(math.abs(P[brow_key]-.5)<1e-8 and ext.sources.browOuterUpLeft=='motion'and ext.motion_requests==1
+    and motion_rotations-before_motion==1,'a missing position is sampled once from the same-named Motion joint for every dependent semantic')
+motion.getCalculatedLocalPosition=function()return nil end;Signals.read(ext,P,1)
+check(P[brow_key]==0 and ext.bone_status.browOuterUpLeft:find('motion_position_unavailable',1,true),
+    'unreadable Motion position fails without falling back to stale or rotation-only values')
+poses.Brow=brow
+local expanded_snapshot=Signals.snapshot()
+check(#expanded_snapshot.joints.Brow==7 and expanded_snapshot.outputs.browOuterUpLeft>.49,
+    'extended signals use the same seven-number formal diagnostic contract')
+check(not Bones.validate({mouthSmileLeft={lo=0,hi=1,terms={{bone='Brow',kind='scale',axis={0,1,0}}}}}),
+    'unsupported measurement kinds are rejected')
+check(not Bones.validate({mouthSmileLeft={lo=0,hi=1,terms={{bone='Brow',kind='pos',axis={0,1,0},motion_neutral_position={0,0}}}}}),
+    'Motion position neutrals require three finite coordinates')
+expanded.expression_fallbacks={browDownLeft=position_rule({0,1,0})}
+check(Signals.configure(expanded,'bones_first',true)and Signals.expanded()and Signals.raw.parse('browDownLeft'),
+    'extension rules are available only after explicit opt-in')
+check(Signals.configure(expanded,'bones_first',false)and not Signals.expanded(),
+    'disabling the extension restores the previous configured input set')
+local disabled_key=Signals.raw.parse('browDownLeft')
+local disabled=Signals.bind(ARMOR,{disabled_key},'bones_first');Signals.read(disabled,P,1)
+check(P[disabled_key]==0 and disabled.bone_status.browDownLeft=='extension_disabled'and disabled.motion_requests==0,
+    'disabled extension entries remain profile-compatible but read no poses and produce zero')
+local previous_extension=expanded.expression_fallbacks
+expanded.expression_fallbacks={mouthSmileLeft=position_rule({0,1,0})}
+check(not Signals.configure(expanded,'bones_first',true),'an extension cannot override an existing calibrated input')
+expanded.expression_fallbacks=previous_extension;Signals.configure(expanded,'bones_first',true)
+CHANNELS[16],CHANNELS[17],CHANNELS[18],CHANNELS[19]='上左','上左','下左','口角上げ左'
+wc,length,mesh_id=#CHANNELS,#CHANNELS,mesh_id+1
+json.dump_file('ShapeKeySystem/mods/names/re9_test.json',{schema='sks.names/1',names=CHANNELS})
+SKS.call('rescan',{});ticks(100)
+local re9_profile,profile_code,profile_why=SKS.call('set_profile',{id='re9_mmd'});ticks(100)
+check(re9_profile and SKS.state.expression.profile.id=='re9_mmd',
+    'RE9 MMD inherits the common profile and selects through the real API: '..tostring(profile_code)..' '..tostring(profile_why))
+check(math.abs((WEIGHTS[15]or-1)-.5)<1e-8 and math.abs((WEIGHTS[16]or-1)-.5)<1e-8
+    and math.abs((WEIGHTS[17]or-1)-.5)<1e-8 and math.abs((WEIGHTS[18]or-1)-.5)<1e-8,
+    'real Core drives duplicate independent brow channels and mouth corners from extension positions')
+brow.position=brow.base_position;ticks(2)
+check(WEIGHTS[15]==0 and WEIGHTS[16]==0 and WEIGHTS[17]==0 and WEIGHTS[18]==0,
+    'returning the new physical inputs to rest releases every matching extension index')
+local brow_r={base=q(0),value=q(0),position={x=.009,y=.024,z=.03},base_position={x=.01,y=.02,z=.03}}
+poses.BrowR=brow_r;brow.position={x=.012,y=.022,z=.03}
+expanded.expression_fallbacks.browInnerUp={lo=0,hi=4,terms={
+    {bone='Brow',kind='pos',axis={0,1,0},weight=.5,motion_neutral={0,0,0,1},motion_neutral_position={.01,.02,.03}},
+    {bone='BrowR',kind='pos',axis={0,1,0},weight=.5,motion_neutral={0,0,0,1},motion_neutral_position={.01,.02,.03}}}}
+expanded.expression_fallbacks.mouthStretchLeft=position_rule({1,0,0})
+expanded.expression_fallbacks.mouthStretchRight={lo=0,hi=4,terms={
+    {bone='BrowR',kind='pos',axis={-1,0,0},motion_neutral={0,0,0,1},motion_neutral_position={.01,.02,.03}}}}
+check(Signals.configure(expanded,'bones_first',true),'second-group inputs share the optional extension configuration')
+local inner_key,left_stretch,right_stretch=Signals.raw.parse('browInnerUp'),
+    Signals.raw.parse('mouthStretchLeft'),Signals.raw.parse('mouthStretchRight')
+local second=Signals.bind(ARMOR,{inner_key,left_stretch,right_stretch},'bones_first')
+before_positions=position_reads;Signals.read(second,P,1)
+check(math.abs(P[inner_key]-.75)<1e-8 and math.abs(P[left_stretch]-.5)<1e-8
+    and math.abs(P[right_stretch]-.25)<1e-8,'inner-brow averaging and mirrored lateral axes preserve independent values')
+check(position_reads-before_positions==2 and second.motion_requests==0,
+    'new axes reuse each physical position once without extra Motion poses')
+motion.getCalculatedLocalPosition=function(_,i)return i==5 and brow.position or{x=.01,y=.02,z=.03}end
+poses.Brow=nil;Signals.read(second,P,1)
+check(math.abs(P[inner_key]-.75)<1e-8 and math.abs(P[left_stretch]-.5)<1e-8
+    and second.motion_requests==1 and second.sources.browInnerUp=='motion'
+    and second.sources.mouthStretchRight=='bones','one absent physical position serves both new dependent inputs from one Motion pose')
+poses.Brow=brow
+CHANNELS[20],CHANNELS[21],CHANNELS[22],CHANNELS[23],CHANNELS[24]=
+    '口横広げ左','口横広げ左','口横広げ右','困る','口横広げ'
+wc,length,mesh_id=#CHANNELS,#CHANNELS,mesh_id+1
+json.dump_file('ShapeKeySystem/mods/names/re9_test.json',{schema='sks.names/1',names=CHANNELS})
+SKS.call('rescan',{});ticks(100)
+check(math.abs((WEIGHTS[19]or-1)-.5)<1e-8 and math.abs((WEIGHTS[20]or-1)-.5)<1e-8
+    and math.abs((WEIGHTS[21]or-1)-.25)<1e-8 and math.abs((WEIGHTS[22]or-1)-.75)<1e-8,
+    'real Core drives all duplicate lateral mouth indices and the inherited inner-brow channel')
+check((WEIGHTS[23]or 0)==0,'independent lateral keys suppress the symmetric mouth stretch channel')
+brow.position=brow.base_position;brow_r.position=brow_r.base_position;ticks(2)
+check(WEIGHTS[19]==0 and WEIGHTS[20]==0 and WEIGHTS[21]==0 and WEIGHTS[22]==0,
+    'new channels return every matched index to zero when the source returns to base')
+dofile('tests_re9_bulk.lua')({check=check,Signals=Signals,R=R,Hash=Hash,poses=poses,motion=motion,
+    SKS=SKS,ticks=ticks,refresh_channels=function()
+        wc,length,mesh_id=#CHANNELS,#CHANNELS,mesh_id+1
+        json.dump_file('ShapeKeySystem/mods/names/re9_test.json',{schema='sks.names/1',names=CHANNELS})
+    end})
+do
+    local load=json.load_file
+    local override
+    json.load_file=function(path)
+        if path=='ShapeKeySystem/user/re9_input.json'then return override end
+        return load(path)
+    end
+    check(A.init()and Signals.mode()=='bones_first'and Signals.expanded(),
+        'fresh RE9 installations default to bone priority and the head expansion')
+    override={schema='sks.re9-input/1',mode='legacy'}
+    check(A.init()and Signals.mode()=='legacy'and not Signals.expanded(),
+        'existing legacy overrides without an expansion field preserve their previous behavior')
+    override={schema='sks.re9-input/1',mode='bones_first'}
+    check(A.init()and Signals.mode()=='bones_first'and not Signals.expanded(),
+        'existing three-input bone overrides do not silently opt into the new expansion')
+    override.extended=true
+    check(A.init()and Signals.expanded(),'an explicit existing expansion opt-in is retained')
+    override.extended=false
+    check(A.init()and not Signals.expanded(),'an explicit expansion opt-out is retained')
+    override.extended='yes'
+    check(not A.init(),'invalid user overrides do not silently become fresh-install defaults')
+    json.load_file=load
+end
 print(string.format("RE9 %d assertions; FAILS: %d", assertions, failures))
 if failures > 0 then error("RE9 adapter tests failed") end

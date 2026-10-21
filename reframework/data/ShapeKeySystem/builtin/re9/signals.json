@@ -14,83 +14,83 @@
     },
     {
       "name": "eyeWide.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "eyeWideLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "eyeWide.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "eyeWideRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "eyeSquint.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "eyeSquintLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "eyeSquint.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "eyeSquintRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "browBring.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "re9BrowInLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "browBring.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "re9BrowInRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "browDown.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "browDownLeft",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "browDown.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "browDownRight",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "browInnerUp.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "browInnerUp",
+      "note": "第二组扩展候选，尚待画面验收；面骨优先，缺失才读取 Motion"
     },
     {
       "name": "browInnerUp.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "browInnerUp",
+      "note": "第二组扩展候选，尚待画面验收；面骨优先，缺失才读取 Motion"
     },
     {
       "name": "browOuterUp.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "browOuterUpLeft",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "browOuterUp.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "browOuterUpRight",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "sneer.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "noseSneerLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "sneer.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "noseSneerRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "upperLipUp.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthUpperUpLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "upperLipUp.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthUpperUpRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "smileMinor.L",
@@ -104,13 +104,13 @@
     },
     {
       "name": "smile.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthSmileLeft",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "smile.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthSmileRight",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "dimple.L",
@@ -124,43 +124,43 @@
     },
     {
       "name": "stretch.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthStretchLeft",
+      "note": "第二组扩展候选，尚待画面验收；面骨优先，缺失才读取 Motion"
     },
     {
       "name": "stretch.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthStretchRight",
+      "note": "第二组扩展候选，尚待画面验收；面骨优先，缺失才读取 Motion"
     },
     {
       "name": "frown.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthFrownLeft",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "frown.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthFrownRight",
+      "note": "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion"
     },
     {
       "name": "lowerLipDown.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthLowerDownLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "lowerLipDown.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthLowerDownRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "funnel.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthFunnel",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "funnel.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthFunnel",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "press.L",
@@ -174,13 +174,13 @@
     },
     {
       "name": "mouthMove.left",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "mouthMove.right",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "mouthMove.up",
@@ -194,8 +194,8 @@
     },
     {
       "name": "chinRaise",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthShrugLower",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "jawOpen",
@@ -289,23 +289,23 @@
     },
     {
       "name": "cheekSquint.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "cheekSquintLeft",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "cheekSquint.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "cheekSquintRight",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "funnelTogether.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthPucker",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "funnelTogether.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthPucker",
+      "note": "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion"
     },
     {
       "name": "lipsTogether.L",
@@ -316,6 +316,511 @@
       "name": "lipsTogether.R",
       "raw": null,
       "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "re9.vowel.A",
+      "raw": "re9VowelA",
+      "note": "RE9 原生口型基形投影；不是音频音素识别"
+    },
+    {
+      "name": "re9.vowel.I",
+      "raw": "re9VowelI",
+      "note": "RE9 原生口型基形投影；不是音频音素识别"
+    },
+    {
+      "name": "re9.vowel.U",
+      "raw": "re9VowelU",
+      "note": "RE9 原生口型基形投影；不是音频音素识别"
+    },
+    {
+      "name": "re9.vowel.E",
+      "raw": "re9VowelE",
+      "note": "RE9 原生口型基形投影；不是音频音素识别"
+    },
+    {
+      "name": "re9.vowel.O",
+      "raw": "re9VowelO",
+      "note": "RE9 原生口型基形投影；不是音频音素识别"
+    },
+    {
+      "name": "re9.native.BrInDn_00_L",
+      "raw": "re9.native.BrInDn_00_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.BrInDn_00_R",
+      "raw": "re9.native.BrInDn_00_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.BrInRs_00_L",
+      "raw": "re9.native.BrInRs_00_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.BrInRs_00_R",
+      "raw": "re9.native.BrInRs_00_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.BrLr_00_L",
+      "raw": "re9.native.BrLr_00_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.BrLr_00_R",
+      "raw": "re9.native.BrLr_00_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.BrOutRs_00_L",
+      "raw": "re9.native.BrOutRs_00_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.BrOutRs_00_R",
+      "raw": "re9.native.BrOutRs_00_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.ChnRs_04_L",
+      "raw": "re9.native.ChnRs_04_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.ChnRs_04_R",
+      "raw": "re9.native.ChnRs_04_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnDprs_00_L",
+      "raw": "re9.native.CrnDprs_00_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnDprs_00_R",
+      "raw": "re9.native.CrnDprs_00_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnDprs_01_L",
+      "raw": "re9.native.CrnDprs_01_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnDprs_01_R",
+      "raw": "re9.native.CrnDprs_01_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnDprs_02_L",
+      "raw": "re9.native.CrnDprs_02_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnDprs_02_R",
+      "raw": "re9.native.CrnDprs_02_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_01_L",
+      "raw": "re9.native.CrnPl_01_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_01_R",
+      "raw": "re9.native.CrnPl_01_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_04_L",
+      "raw": "re9.native.CrnPl_04_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_04_R",
+      "raw": "re9.native.CrnPl_04_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_05_L",
+      "raw": "re9.native.CrnPl_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_05_R",
+      "raw": "re9.native.CrnPl_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_09_L",
+      "raw": "re9.native.CrnPl_09_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_09_R",
+      "raw": "re9.native.CrnPl_09_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_JwOpn_L",
+      "raw": "re9.native.CrnPl_JwOpn_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_JwOpn_R",
+      "raw": "re9.native.CrnPl_JwOpn_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_LwrLpDprs_L",
+      "raw": "re9.native.CrnPl_LwrLpDprs_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.CrnPl_LwrLpDprs_R",
+      "raw": "re9.native.CrnPl_LwrLpDprs_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Fnl_04_L",
+      "raw": "re9.native.Fnl_04_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Fnl_04_R",
+      "raw": "re9.native.Fnl_04_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.JwOpn_00_L",
+      "raw": "re9.native.JwOpn_00_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.JwOpn_00_R",
+      "raw": "re9.native.JwOpn_00_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LdT_UprLdDn_L",
+      "raw": "re9.native.LdT_UprLdDn_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LdT_UprLdDn_R",
+      "raw": "re9.native.LdT_UprLdDn_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LdTight_05_L",
+      "raw": "re9.native.LdTight_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LdTight_05_R",
+      "raw": "re9.native.LdTight_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpBit_BL",
+      "raw": "re9.native.LpBit_BL",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpBit_BR",
+      "raw": "re9.native.LpBit_BR",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpBit_TL",
+      "raw": "re9.native.LpBit_TL",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpBit_TR",
+      "raw": "re9.native.LpBit_TR",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpRolIn_04_L",
+      "raw": "re9.native.LpRolIn_04_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpRolIn_04_R",
+      "raw": "re9.native.LpRolIn_04_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpRolIn_05_L",
+      "raw": "re9.native.LpRolIn_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.LpRolIn_05_R",
+      "raw": "re9.native.LpRolIn_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.MouthL_05_L",
+      "raw": "re9.native.MouthL_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.MouthL_05_R",
+      "raw": "re9.native.MouthL_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.MouthR_05_L",
+      "raw": "re9.native.MouthR_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.MouthR_05_R",
+      "raw": "re9.native.MouthR_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NekTns_L",
+      "raw": "re9.native.NekTns_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NekTns_R",
+      "raw": "re9.native.NekTns_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NosWrnkl_03_L",
+      "raw": "re9.native.NosWrnkl_03_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NosWrnkl_03_R",
+      "raw": "re9.native.NosWrnkl_03_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NosWrnkl_04_L",
+      "raw": "re9.native.NosWrnkl_04_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NosWrnkl_04_R",
+      "raw": "re9.native.NosWrnkl_04_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NosWrnkl_05_L",
+      "raw": "re9.native.NosWrnkl_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.NosWrnkl_05_R",
+      "raw": "re9.native.NosWrnkl_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_01_L",
+      "raw": "re9.native.Pkr_01_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_01_R",
+      "raw": "re9.native.Pkr_01_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_02_L",
+      "raw": "re9.native.Pkr_02_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_02_R",
+      "raw": "re9.native.Pkr_02_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_03_L",
+      "raw": "re9.native.Pkr_03_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_03_R",
+      "raw": "re9.native.Pkr_03_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_Fnl_BL",
+      "raw": "re9.native.Pkr_Fnl_BL",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_Fnl_BR",
+      "raw": "re9.native.Pkr_Fnl_BR",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_Fnl_TL",
+      "raw": "re9.native.Pkr_Fnl_TL",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Pkr_Fnl_TR",
+      "raw": "re9.native.Pkr_Fnl_TR",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Sqnt_03_L",
+      "raw": "re9.native.Sqnt_03_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Sqnt_03_R",
+      "raw": "re9.native.Sqnt_03_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Sqnt_06_L",
+      "raw": "re9.native.Sqnt_06_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Sqnt_06_R",
+      "raw": "re9.native.Sqnt_06_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Sqnt_UprLdDn_L",
+      "raw": "re9.native.Sqnt_UprLdDn_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Sqnt_UprLdDn_R",
+      "raw": "re9.native.Sqnt_UprLdDn_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_03_L",
+      "raw": "re9.native.Strtch_03_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_03_R",
+      "raw": "re9.native.Strtch_03_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_04_L",
+      "raw": "re9.native.Strtch_04_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_04_R",
+      "raw": "re9.native.Strtch_04_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_08_L",
+      "raw": "re9.native.Strtch_08_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_08_R",
+      "raw": "re9.native.Strtch_08_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_CrnPl_L",
+      "raw": "re9.native.Strtch_CrnPl_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_CrnPl_R",
+      "raw": "re9.native.Strtch_CrnPl_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_JwOpn_L",
+      "raw": "re9.native.Strtch_JwOpn_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.Strtch_JwOpn_R",
+      "raw": "re9.native.Strtch_JwOpn_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_00_L",
+      "raw": "re9.native.UprLdDn_00_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_00_R",
+      "raw": "re9.native.UprLdDn_00_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_01_L",
+      "raw": "re9.native.UprLdDn_01_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_01_R",
+      "raw": "re9.native.UprLdDn_01_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_03_L",
+      "raw": "re9.native.UprLdDn_03_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_03_R",
+      "raw": "re9.native.UprLdDn_03_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_05_L",
+      "raw": "re9.native.UprLdDn_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLdDn_05_R",
+      "raw": "re9.native.UprLdDn_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLpRs_01_L",
+      "raw": "re9.native.UprLpRs_01_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLpRs_01_R",
+      "raw": "re9.native.UprLpRs_01_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLpRs_04_L",
+      "raw": "re9.native.UprLpRs_04_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLpRs_04_R",
+      "raw": "re9.native.UprLpRs_04_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLpRs_05_L",
+      "raw": "re9.native.UprLpRs_05_L",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "re9.native.UprLpRs_05_R",
+      "raw": "re9.native.UprLpRs_05_R",
+      "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
     }
   ]
 }

@@ -1,5 +1,6 @@
 -- Missing face joints may still have calculated poses in the current Motion skeleton.
--- Cache numeric indices by full owner identity; never sample unrelated parameter tracks.
+-- Cache numeric indices by full owner identity. Native scalar tracks are requested only
+-- for a configured output whose physical pose and same-named Motion pose are missing.
 local R=require('ShapeKeySystem_Games.RE9.Runtime')
 local Hash=require('ShapeKeySystem_Core.NameHash')
 local M={}
@@ -41,19 +42,35 @@ function M.open(head,cache)
     c.cache,c.head=cache,head
     return c
 end
-function M.read(c,name,neutral,diagnostic)
-    if type(neutral)~='table'or #neutral~=4 then return nil,'motion_neutral_unavailable'end
+local function index_of(c,name)
     local cache=c.cache
     local index=cache.indices[name]
     if index==nil then
         index=R.call(c.motion,'getJointIndexByNameHash(System.UInt32)',Hash.hash(name))
         cache.indices[name]=R.integer(index,c.count-1)and index or false
     end
-    if not R.integer(index,c.count-1)then return nil,'motion_joint_unavailable:'..name end
+    if R.integer(index,c.count-1)then return index end
+end
+function M.scalar(c,name)
+    local index=index_of(c,name)
+    if index==nil then return nil,'motion_joint_unavailable:'..name end
+    local p=vector(R.call(c.motion,'getCalculatedLocalPosition(System.Int32)',index),3)
+    return p and p[1]or nil,p and'ok'or('motion_position_unavailable:'..name)
+end
+function M.read(c,name,neutral,diagnostic,neutral_position)
+    if type(neutral)~='table'or #neutral~=4 then return nil,'motion_neutral_unavailable'end
+    local index=index_of(c,name)
+    if index==nil then return nil,'motion_joint_unavailable:'..name end
     local q=vector(R.call(c.motion,'getCalculatedLocalRotation(System.Int32)',index),4)
     if not q then return nil,'motion_rotation_unavailable:'..name end
     local pose={base_rotation={table.unpack(neutral)},rotation=q,source='motion',motion_index=index}
-    if diagnostic then pose.position=vector(R.call(c.motion,'getCalculatedLocalPosition(System.Int32)',index),3)end
+    if diagnostic or neutral_position then
+        pose.position=vector(R.call(c.motion,'getCalculatedLocalPosition(System.Int32)',index),3)
+        if neutral_position then
+            if not pose.position then return nil,'motion_position_unavailable:'..name end
+            pose.base_position={table.unpack(neutral_position)}
+        end
+    end
     return pose,'ok'
 end
 function M.finish(c)
