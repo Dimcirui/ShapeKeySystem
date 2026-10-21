@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.7.0"
+V.number = "1.8.0"
 V.author = "谛听, MK, Funnyguyz"
 
 V.history = {
+    { version = "1.8.0", notes = "新增英文界面；鬼武者支持鬼化形态" },
     { version = "1.7.0", notes = "崛起支持条件规则" },
     { version = "1.6.2", notes = "RE4R 支持缺失面骨与原生修正输入补偿；支持禁用骨骼表情" },
     { version = "1.6.1", notes = "修复设置与调试页导致卡死" },
