@@ -1387,8 +1387,9 @@ local function tick()
         C.pending_zero = {}
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
-    if f % 5 == 0 and #C.rigs > 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
-        drop_rigs("hunter parts changed", QUICK_RESCAN)
+    local now_sig = (f % 5 == 0 and #C.rigs > 0) and Scene.children_signature(Scene.primary_root()) or nil
+    if now_sig and now_sig ~= C.sig then
+        drop_rigs("hunter parts changed (" .. Scene.signature_diff(C.sig, now_sig) .. ")", QUICK_RESCAN)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
         drop_rigs("preview hunter changed", QUICK_RESCAN)
     elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
