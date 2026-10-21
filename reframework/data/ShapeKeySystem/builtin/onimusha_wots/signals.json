@@ -309,6 +309,116 @@
       "raw": "bsControl_012.y",
       "note": "lipPressor（左右共用）",
       "guessed": true
+    },
+    {
+      "name": "jawDrop",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "lowerLipDrop",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthCornerUp.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthCornerUp.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthCornerDown.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthCornerDown.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthCornerOut.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "mouthCornerOut.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browInnerDown.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browInnerDown.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browRaise.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browRaise.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browLower.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "browLower.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "cheekRaise.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "cheekRaise.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "eyeClose.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "eyeClose.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "eyeWiden.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "eyeWiden.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "lowerLidRaise.L",
+      "raw": null,
+      "note": "本游戏未接入该信号"
+    },
+    {
+      "name": "lowerLidRaise.R",
+      "raw": null,
+      "note": "本游戏未接入该信号"
     }
   ]
 }
