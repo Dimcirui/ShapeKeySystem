@@ -15,7 +15,17 @@ $ErrorActionPreference = "Stop"
 $repo = Join-Path (Split-Path -Parent $PSScriptRoot) "reframework"
 $game = $env:SKS_GAME_REFRAMEWORK
 # 要根据实际安装位置修改，不过是开发用所以问题不大
-if (-not $game) { $game = "C:\Steam\steamapps\common\MonsterHunterWilds\reframework" }
+if (-not $game) {
+    $candidates = @(
+        "F:\SteamLibrary\steamapps\common\RESIDENT EVIL requiem BIOHAZARD requiem\reframework",
+        "E:\Program Files (x86)\Steam\steamapps\common\RESIDENT EVIL 4  BIOHAZARD RE4\reframework",
+        "C:\Steam\steamapps\common\MonsterHunterWilds\reframework"
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) { $game = $c; break }
+    }
+    if (-not $game) { $game = $candidates[0] }
+}
 if (-not (Test-Path $game)) { throw "game reframework folder not found: $game" }
 
 . (Join-Path $PSScriptRoot "sks-files.ps1")

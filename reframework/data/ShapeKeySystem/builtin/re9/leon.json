@@ -388,73 +388,73 @@
   ],
   "bone_fallbacks": {
     "eyeBlinkLeft": {
-      "lo": 7.0,
-      "hi": 33.5,
+      "lo": 0.5,
+      "hi": 7.0,
       "terms": [
         {
           "bone": "L_UprLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            -1,
             0
           ],
           "weight": 1,
-          "motion_neutral": [
-            8.875462287026031e-06,
-            2.7590194766115462e-05,
-            4.3959240368166916e-05,
-            0.9999999986137964
+          "motion_neutral_position": [
+            0.0346,
+            0.0778,
+            0.0921
           ]
         },
         {
           "bone": "L_LwrLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            1,
             0
           ],
-          "weight": -1,
-          "motion_neutral": [
-            0.0006197776462371023,
-            0.00032102907080568306,
-            0.00010562279089880237,
-            0.9999997508298843
+          "weight": 1,
+          "motion_neutral_position": [
+            0.0346,
+            0.0684,
+            0.092
           ]
         }
       ]
     },
     "eyeBlinkRight": {
-      "lo": 12.0,
-      "hi": 34.0,
+      "lo": 0.5,
+      "hi": 7.0,
       "terms": [
         {
           "bone": "R_UprLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            -1,
             0
           ],
           "weight": 1,
-          "motion_neutral": [
-            -1.5925011193030298e-06,
-            -2.5771259939883035e-05,
-            -4.1341925631060626e-05,
-            0.9999999988120758
+          "motion_neutral_position": [
+            -0.0299,
+            0.0783,
+            0.095
           ]
         },
         {
           "bone": "R_LwrLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            1,
             0
           ],
-          "weight": -1,
-          "motion_neutral": [
-            0.0006145792383334135,
-            -0.00032221784680661693,
-            -0.00010431334440614225,
-            0.9999997537933424
+          "weight": 1,
+          "motion_neutral_position": [
+            -0.0292,
+            0.0684,
+            0.0934
           ]
         }
       ]

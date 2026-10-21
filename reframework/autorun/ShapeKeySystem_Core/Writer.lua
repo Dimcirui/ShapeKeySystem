@@ -8,7 +8,11 @@ W.adapter = {}
 
 local T_MESH = sdk.find_type_definition("via.render.Mesh")
 W.M_SET   = T_MESH:get_method("setBlendShapeChannelWeightParam(System.UInt64, System.Single)")
+    or T_MESH:get_method("setBlendShapeChannelWeightParam(System.UInt32, System.Single)")
+    or T_MESH:get_method("setBlendShapeChannelWeightParam(System.Int32, System.Single)")
 W.M_GETW  = T_MESH:get_method("getBlendShapeChannelWeightParam(System.UInt64)")
+    or T_MESH:get_method("getBlendShapeChannelWeightParam(System.UInt32)")
+    or T_MESH:get_method("getBlendShapeChannelWeightParam(System.Int32)")
 W.M_WC    = T_MESH:get_method("get_BlendShapeChannelWeightCount")
 W.M_CN    = T_MESH:get_method("get_BlendShapeChannelNum")
 W.M_CNAME = T_MESH:get_method("getBlendShapeChannelName(System.UInt32)")
@@ -61,7 +65,14 @@ function W.write_target(t, vals, force, eps, base, mix, skip)
         return 0, t.count
     end
     if not t.ready then
-        if (M_WC:call(t.mesh) or 0) < (M_CN:call(t.mesh) or 0) then return 0, 0 end
+        local wc = (M_WC:call(t.mesh) or 0)
+        local cn = (M_CN:call(t.mesh) or 0)
+        if wc < cn then
+            pcall(t.mesh.call, t.mesh, "set_BlendShapeEnable", true)
+            pcall(t.mesh.call, t.mesh, "set_BlendShapeChannelWeightCount", cn)
+            wc = (M_WC:call(t.mesh) or 0)
+        end
+        if wc < cn then return 0, 0 end
         t.ready = true
     end
     local slots, idxs, last, mesh = t.slots, t.idxs, t.last, t.mesh
