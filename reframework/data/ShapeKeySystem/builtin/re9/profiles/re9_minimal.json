@@ -1,0 +1,24 @@
+{
+  "schema": "sks.profile/1",
+  "id": "re9_minimal",
+  "game": "re9",
+  "name": "RE9 最小表情",
+  "description": "里昂左右眨眼和张嘴，优先原生修正权重，缺失时使用眼睑与下颌面骨。面骨范围为当前场景初始映射，尚未标定完整台词和大幅张嘴。",
+  "channels": [
+    {
+      "name": "eyeBlinkLeft",
+      "group": "eye",
+      "s": "blink.L"
+    },
+    {
+      "name": "eyeBlinkRight",
+      "group": "eye",
+      "s": "blink.R"
+    },
+    {
+      "name": "jawOpen",
+      "group": "jaw",
+      "s": "jawOpen"
+    }
+  ]
+}

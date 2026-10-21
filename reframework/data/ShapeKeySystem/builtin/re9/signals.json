@@ -1,0 +1,321 @@
+{
+  "schema": "sks.signals/2",
+  "full": 1,
+  "signals": [
+    {
+      "name": "blink.L",
+      "raw": "eyeBlinkLeft",
+      "note": "三路基础输入，来源依 RE9 输入模式选择，范围仍为初始标定"
+    },
+    {
+      "name": "blink.R",
+      "raw": "eyeBlinkRight",
+      "note": "三路基础输入，来源依 RE9 输入模式选择，范围仍为初始标定"
+    },
+    {
+      "name": "eyeWide.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "eyeWide.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "eyeSquint.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "eyeSquint.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browBring.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browBring.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browDown.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browDown.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browInnerUp.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browInnerUp.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browOuterUp.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "browOuterUp.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "sneer.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "sneer.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "upperLipUp.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "upperLipUp.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "smileMinor.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "smileMinor.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "smile.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "smile.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "dimple.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "dimple.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "stretch.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "stretch.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "frown.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "frown.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "lowerLipDown.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "lowerLipDown.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "funnel.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "funnel.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "press.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "press.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "mouthMove.left",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "mouthMove.right",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "mouthMove.up",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "mouthMove.down",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "chinRaise",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "jawOpen",
+      "raw": "jawOpen",
+      "note": "三路基础输入，来源依 RE9 输入模式选择，范围仍为初始标定"
+    },
+    {
+      "name": "cheekShrink",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "upperLipRoll",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "lowerLipRoll",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "puff.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "puff.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.01",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.02",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.03",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.04",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.05",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.06",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.07",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.08",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.09",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.10",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.11",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "pose.12",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "cheekSquint.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "cheekSquint.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "funnelTogether.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "funnelTogether.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "lipsTogether.L",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    },
+    {
+      "name": "lipsTogether.R",
+      "raw": null,
+      "note": "本游戏尚未接入该信号"
+    }
+  ]
+}
