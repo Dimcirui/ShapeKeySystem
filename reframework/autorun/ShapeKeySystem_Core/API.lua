@@ -5,6 +5,7 @@
 -- 接口与文件格式见 docs/plans/shape-key-system-api.md。
 
 local U       = require("ShapeKeySystem_Core.Util")
+local I18n    = require("ShapeKeySystem_Core.I18n")
 local Names   = require("ShapeKeySystem_Core.Names")
 local Profile = require("ShapeKeySystem_Core.Profile")
 local Scene   = require("ShapeKeySystem_Core.Scene")
@@ -1562,6 +1563,7 @@ function cmds.set_setting(a)
     end
     if a.key == "hotkey_mod" and not HOTKEY_MODS[v] then return false, "E_BAD_ARGS", "hotkey_mod: Ctrl / Shift / Alt" end
     if a.key == "ui_backend" and not UI_BACKENDS[v] then return false, "E_BAD_ARGS", "ui_backend: auto / d2d / imgui" end
+    if a.key == "language" and not I18n.set(v) then return false, "E_BAD_ARGS", "language: zh / en" end
     if a.key == "window" then v = { x = tonumber(v.x) or 0, y = tonumber(v.y) or 0, w = tonumber(v.w) or 900, h = tonumber(v.h) or 640 } end
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end
@@ -2276,6 +2278,7 @@ function SKS.init(adapter)
     Cnd.install(adapter.conditions)
     Trail.open()
     load_settings()
+    if not I18n.set(cfg.language) then cfg.language = "zh"; I18n.set("zh") end
     Playback.init(adapter, log, function() return C.prog and C.prog.params or {} end, function()
         return C.prog, Profile.signals.list, state.expression.channels,
             state.mapping.rev .. ":" .. state.expression.rev .. ":" .. state.scene.rev

@@ -5,6 +5,7 @@ local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Faces = require("ShapeKeySystem_UI.Faces")
 local Version = require("ShapeKeySystem_Core.Version")
+local I18n = require("ShapeKeySystem_Core.I18n")
 
 local Page = { want_signals = true }
 local C = T.c
@@ -53,7 +54,17 @@ local function ui_settings_card(ctx, x, y, w)
     local img = D.images()
     local combo = se.hotkey_combo == true
     local unblocked = se.block_input == false
-    local c, h = card(x, y, w, "界面设置", (img and 5 or 4) + (combo and 1 or 0), 2, unblocked and 22 or 0)
+    local c, h = card(x, y, w, "界面设置", (img and 6 or 5) + (combo and 1 or 0), 2, unblocked and 22 or 0)
+    c.row("语言 / Language", function(sx, sw)
+        -- each language in its own script, whatever the interface language is
+        local labels, cur = {}, 1
+        for i, k in ipairs(I18n.LANGS) do
+            labels[i] = I18n.LANG_NAMES[k]
+            if k == (se.language or "zh") then cur = i end
+        end
+        local ch, i = W.select("language", sx, c.y, min(160, sw), 28, labels, cur)
+        if ch then setting(ctx, "language", I18n.LANGS[i]) end
+    end)
     local cc, vc = W.toggle("启用组合快捷键", c.x, c.y, combo)
     if cc then setting(ctx, "hotkey_combo", vc) end
     c.y = c.y + 34
