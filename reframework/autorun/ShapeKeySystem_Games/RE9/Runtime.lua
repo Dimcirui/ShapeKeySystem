@@ -94,23 +94,31 @@ function R.bounds(mesh)
     local cn = call(mesh, "get_BlendShapeChannelNum")
     local wc = call(mesh, "get_BlendShapeChannelWeightCount")
     local length = call(call(mesh, "get_ChannelWeightList"), "get_Length")
-    if call(mesh, "get_MeshReady") ~= true or call(mesh, "get_BlendShapeEnable") ~= true
-        or call(mesh, "get_BlendShapeReleasedBuffers") ~= false then return nil end
+    if call(mesh, "get_MeshReady") ~= true then return nil end
+    if call(mesh, "get_BlendShapeEnable") ~= true then
+        pcall(mesh.call, mesh, "set_BlendShapeEnable", true)
+        if call(mesh, "get_BlendShapeEnable") ~= true then return nil end
+    end
+    if call(mesh, "get_BlendShapeReleasedBuffers") == true then return nil end
     if not R.integer(cn, 8192) or cn == 0 or not R.integer(wc, 8192)
         or not R.integer(length, 8192) or wc < cn or length < cn then return nil end
     return cn, wc, length
 end
 
 local function has_leon_head_mesh(tr)
+    if not tr then return false end
     local seen, visited = {}, 0
     local function check_mesh(node, depth)
-        if not node or depth > 6 or visited > 64 then return false end
+        if not node or depth > 8 or visited > 128 then return false end
         local addr = R.address(node)
         if not addr or seen[addr] then return false end
         seen[addr], visited = true, visited + 1
-        local m = R.mesh(node)
-        if m and R.path(m) == "character/ch/ch01/0100/10/00/ch0100_10_00.mesh" then
-            return true
+        local go = call(node, "get_GameObject")
+        if go and call(go, "get_Name") ~= "Shadow" then
+            local m = R.mesh(node)
+            if m and R.path(m) == "character/ch/ch01/0100/10/00/ch0100_10_00.mesh" then
+                return true
+            end
         end
         local child = call(node, "get_Child")
         while child do
@@ -158,25 +166,22 @@ local function find_best_root(scene, in_cg)
                 end
 
                 if not parent_is_candidate and call(go, "get_Valid") == true and call(go, "get_DrawSelf") == true then
-                    local score = 0
-                    local is_cg_layer = R.check_layer_cg(go)
-                    local is_ch01 = lower:find("^ch01") ~= nil
-                    local is_cp_a = lower:find("^cp_a000") ~= nil
-
-                    if in_cg then
-                        if is_ch01 then score = score + 100 end
-                        if is_cg_layer then score = score + 50 end
-                        if is_cp_a then score = score + (is_cg_layer and 40 or 10) end
-                    else
-                        if is_cp_a then score = score + 100 end
-                        if is_ch01 then score = score + 10 end
-                    end
-
+                    -- Hard requirement: MUST contain Leon's head mesh!
                     if has_leon_head_mesh(tr) then
-                        score = score + 80
-                    end
+                        local score = 100
+                        local is_cg_layer = R.check_layer_cg(go)
+                        local is_ch01 = lower:find("^ch01") ~= nil
+                        local is_cp_a = lower:find("^cp_a000") ~= nil
 
-                    candidates[#candidates + 1] = { tr = tr, score = score, name = name }
+                        if in_cg then
+                            if is_ch01 then score = score + 50 end
+                            if is_cg_layer then score = score + 30 end
+                        else
+                            if is_cp_a then score = score + 50 end
+                        end
+
+                        candidates[#candidates + 1] = { tr = tr, score = score, name = name }
+                    end
                 end
             end
         end
@@ -222,7 +227,7 @@ function R.root(scene)
 
     if cached_root then
         local go = call(cached_root, "get_GameObject")
-        if go and call(go, "get_Valid") == true and call(go, "get_DrawSelf") == true then
+        if go and call(go, "get_Valid") == true and call(go, "get_DrawSelf") == true and has_leon_head_mesh(cached_root) then
             if not in_cg or (now - last_cache_time < 1.5) then
                 return cached_root
             end
@@ -233,9 +238,12 @@ function R.root(scene)
     if not in_cg then
         local p_go = call(s, "findGameObject(System.String)", "cp_A000")
         if p_go and call(p_go, "get_Valid") == true and call(p_go, "get_DrawSelf") == true then
-            cached_root = call(p_go, "get_Transform")
-            last_cache_time = now
-            return cached_root
+            local tr = call(p_go, "get_Transform")
+            if has_leon_head_mesh(tr) then
+                cached_root = tr
+                last_cache_time = now
+                return cached_root
+            end
         end
     end
 
@@ -248,9 +256,12 @@ function R.root(scene)
 
     local fallback_go = call(s, "findGameObject(System.String)", "cp_A000")
     if fallback_go and call(fallback_go, "get_Valid") == true and call(fallback_go, "get_DrawSelf") == true then
-        cached_root = call(fallback_go, "get_Transform")
-        last_cache_time = now
-        return cached_root
+        local tr = call(fallback_go, "get_Transform")
+        if has_leon_head_mesh(tr) then
+            cached_root = tr
+            last_cache_time = now
+            return cached_root
+        end
     end
 
     return nil
