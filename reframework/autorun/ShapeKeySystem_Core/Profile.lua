@@ -25,6 +25,7 @@
 
 local U = require("ShapeKeySystem_Core.Util")
 local Pr = require("ShapeKeySystem_Core.Procedural")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local P = {}
 
@@ -155,7 +156,7 @@ local function compile_node(node, env, depth)
     for _, key in ipairs({ "k", "const", "full_deg", "sign" }) do
         if node[key] ~= nil then
             local n = tonumber(node[key])
-            if not n or n ~= n or n == math.huge or n == -math.huge then error(key .. " 必须是有限数值") end
+            if not n or n ~= n or n == math.huge or n == -math.huge then error(L.f("%s 必须是有限数值", key)) end
         end
     end
     if node.full_deg ~= nil and tonumber(node.full_deg) <= 0 then error("满权重角度必须大于 0") end
@@ -169,7 +170,7 @@ local function compile_node(node, env, depth)
         if sig.no_signal then
             env.no_signal = not proc
             fn = function() return 0 end
-            text = sig.name .. (proc and "（自动表情）" or "（本游戏没有这个信号）")
+            text = L.f(proc and "%s（自动表情）" or "%s（本游戏没有这个信号）", sig.name)
         else
             local p, a, b = sig.key, sig.a, sig.b
             env.params[p] = true
@@ -239,10 +240,10 @@ local function compile_node(node, env, depth)
             text = "(" .. table.concat(texts, ") × (") .. ")"
         elseif op == "max" then
             fn = function(ctx) local s = fns[1](ctx); for i = 2, n do local v = fns[i](ctx); if v > s then s = v end end; return s end
-            text = "取最大值(" .. table.concat(texts, ", ") .. ")"
+            text = L.f("取最大值(%s)", table.concat(texts, ", "))
         elseif op == "min" then
             fn = function(ctx) local s = fns[1](ctx); for i = 2, n do local v = fns[i](ctx); if v < s then s = v end end; return s end
-            text = "取最小值(" .. table.concat(texts, ", ") .. ")"
+            text = L.f("取最小值(%s)", table.concat(texts, ", "))
         else
             local a, b = fns[1], fns[2]
             fn = function(ctx) return a(ctx) - b(ctx) end
@@ -261,7 +262,7 @@ local function compile_node(node, env, depth)
         for _, key in ipairs({ "deadzone", "gamma", "gain" }) do
             if c[key] ~= nil then
                 local n = tonumber(c[key])
-                if not n or n ~= n or n == math.huge or n == -math.huge then error("曲线 " .. key .. " 必须是有限数值") end
+                if not n or n ~= n or n == math.huge or n == -math.huge then error(L.f("曲线 %s 必须是有限数值", key)) end
             end
         end
         local dz = U.clamp(tonumber(c.deadzone) or 0, 0, 0.95)
@@ -276,7 +277,7 @@ local function compile_node(node, env, depth)
             if gamma ~= 1 then v = v ^ gamma end
             return v * gain
         end
-        text = "响应曲线(" .. text .. ")"
+        text = L.f("响应曲线(%s)", text)
     end
     return fn, text
 end

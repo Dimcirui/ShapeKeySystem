@@ -12,6 +12,7 @@
 --   gaze is read from them) and `face_layers(face)` -> { TreeLayer, ... }.
 -- - Joint and layer references live only as long as the caller's rigs: `H.release` drops them
 --   and restores any layer still muted by an unfinished capture.
+local L = require("ShapeKeySystem_Core.I18n")
 local H = {}
 
 local SETTLE = 2       -- frames muted before the first sample
@@ -95,7 +96,7 @@ local function capture(e)
         set_rates(e, false)
         e.layers, e.rates = nil, nil
         e.phase = "hold"
-        H.status = string.format("已禁用 %d 根表情骨骼", #e.joints)
+        H.status = L.f("已禁用 %d 根表情骨骼", #e.joints)
     end
 end
 

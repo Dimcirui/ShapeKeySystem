@@ -6,6 +6,7 @@ local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
 local TextInput = require("ShapeKeySystem_UI.TextInput")
+local L = require("ShapeKeySystem_Core.I18n")
 local select_offsets = {}
 
 local W = {}
@@ -90,10 +91,10 @@ function W.default_button(ctx, x, y, kind, cur, bound)
     local f = small()
     if bi.active and bound and cur == bound then return 0 end   -- the dropdown already says "· 默认"
     -- only the global default applies: the button says whose default it becomes
-    local label = bi.global_default and ("设为 " .. bi.display .. " 的默认") or "设为默认"
+    local label = bi.global_default and L.f("设为 %s 的默认", bi.display) or "设为默认"
     local clicked, bw = W.button(label, x, y, nil, 28, { font = f })
     if clicked then ctx.call("bind_config", { kind = kind, name = cur }) end
-    W.tooltip("穿上 " .. bi.display .. " 时自动使用左边选中的配置", x, y, bw, 28)
+    W.tooltip(L.f("穿上 %s 时自动使用左边选中的配置", bi.display), x, y, bw, 28)
     return bw
 end
 
@@ -102,8 +103,9 @@ end
 function W.default_suffix(ctx, id, bound)
     local bi = ctx.st.presets and ctx.st.presets.bind
     if not bi or not bound or id ~= bound then return "" end
-    if bi.active then return " · 默认" end
-    if bi.global_default then return " · 全局默认" end
+    -- translated here: callers append the suffix to a config name
+    if bi.active then return L.tr(" · 默认") end
+    if bi.global_default then return L.tr(" · 全局默认") end
     return ""
 end
 

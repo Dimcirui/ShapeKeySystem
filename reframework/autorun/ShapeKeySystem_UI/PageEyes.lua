@@ -4,6 +4,7 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -22,7 +23,7 @@ local function eye_box(label, a, full, x, y, size)
     local px = cx + max(-1, min(1, yaw / max(1, full.yaw))) * r
     local py = cy - max(-1, min(1, pitch / max(1, full.pitch))) * r
     D.fill_circle(px, py, 7, C.signal)
-    D.text_center(string.format("水平 %+.1f°   垂直 %+.1f°", yaw, pitch), x, y + size + 4, size, 24, C.text, W.small())
+    D.text_center(L.f("水平 %+.1f°   垂直 %+.1f°", yaw, pitch), x, y + size + 4, size, 24, C.text, W.small())
     return size + 34
 end
 

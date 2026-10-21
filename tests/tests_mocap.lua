@@ -240,7 +240,7 @@ local h_before = Panel.ui.win.h
 Panel.ui.win.h = 2000
 DRAWS, CMDS = {}, {}; CB.d2d_draw()
 check(drawn("各通道强度") and drawn("browDownLeft") and not drawn("页面出错"), "channel list drawn")
-SNAPS[#SNAPS + 1] = { name = "面捕", cmds = CMDS }
+SNAP("面捕", function() DRAWS, CMDS = {}, {}; CB.d2d_draw() end)
 Panel.ui.page_state.mocap.channels_open = nil
 Panel.ui.win.h = h_before
 Panel.set_open(false)

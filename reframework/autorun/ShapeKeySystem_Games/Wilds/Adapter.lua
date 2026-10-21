@@ -16,6 +16,7 @@ local Recorder = require("ShapeKeySystem_Games.Wilds.Recorder")
 local B = require("ShapeKeySystem_Core.BoneSignals")
 local BoneReads = require("ShapeKeySystem_Core.BoneReads")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local A = {
     id = "mhwilds",
@@ -162,10 +163,10 @@ local bones
 local function load_bones()
     local ok, data = pcall(json.load_file, "ShapeKeySystem/builtin/mhwilds/face.json")
     if not ok or type(data) ~= "table" then return nil, "荒野面部骨骼标定文件无法读取" end
-    local sigs, sig_why = BoneReads.load(data.signals, "荒野")
+    local sigs, sig_why = BoneReads.load(data.signals, L.tr("荒野"))
     bone_sigs = sigs
     if not sigs then return nil, sig_why end
-    local valid, why = B.validate(data, { label = "荒野" })
+    local valid, why = B.validate(data, { label = L.tr("荒野") })
     if not valid then return nil, why end
     local names = {}
     for id, spec in pairs(data.joints) do names[#names + 1] = spec.bone or id end
@@ -316,7 +317,7 @@ local REQUIRED = { "app.PlayerManager" }
 
 function A.init(events)
     for _, t in ipairs(REQUIRED) do
-        if not sdk.find_type_definition(t) then return false, "找不到类型 " .. t .. "（游戏更新后改名了？）" end
+        if not sdk.find_type_definition(t) then return false, L.f("找不到类型 %s（游戏更新后改名了？）", t) end
     end
     local T_DEMO = sdk.find_type_definition("app.DemoMediator")
     M_DEMO_BUSY = T_DEMO and T_DEMO:get_method("get_IsBusy")

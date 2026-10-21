@@ -3,6 +3,7 @@
 -- 实例拥有录制帧游标和累计计数，不持有引擎对象。每次经过幅值超过 1% 的录制帧计一次命中，
 -- 相同时间的重复调用不计数，循环累计，跳转只计目标帧。
 local Profile = require("ShapeKeySystem_Core.Profile")
+local L = require("ShapeKeySystem_Core.I18n")
 local A = {}
 A.__index = A
 local THRESHOLD = 0.01
@@ -75,7 +76,7 @@ function A:bindings(prog, signals, channels, revision)
         for _, sig in ipairs(signals or {}) do
             if not sig.no_signal and sig.key == param then
                 aliases[#aliases + 1] = sig.name
-                if sig.note and sig.note ~= "" then notes[#notes + 1] = sig.note end
+                if sig.note and sig.note ~= "" then notes[#notes + 1] = L.tr(sig.note) end
                 guessed = guessed or sig.guessed == true
             end
         end
@@ -85,7 +86,7 @@ function A:bindings(prog, signals, channels, revision)
         for _, alias in ipairs(aliases) do if alias ~= param_name then semantic[#semantic + 1] = alias end end
         row.label = #semantic > 0 and (table.concat(semantic, " / ") .. " · " .. param_name) or param_name
         row.signal = #semantic > 0 and semantic[1] or param_name
-        row.purpose = #notes > 0 and table.concat(notes, "；") or "词典尚未标注用途"
+        row.purpose = #notes > 0 and table.concat(notes, L.tr("；")) or "词典尚未标注用途"
         row.guessed, row.mappings, row.present_count = guessed, {}, 0
     end
     if prog then

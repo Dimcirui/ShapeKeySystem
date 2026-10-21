@@ -3,6 +3,7 @@
 -- 本模块拥有解码帧与采样表，引擎对象归游戏适配器所有；UI 只提交命令，更新回调执行连接和恢复。
 -- `final` 只覆盖匹配会话的主角色输入，其他角色继续读取自身信号。
 local U = require("ShapeKeySystem_Core.Util")
+local L = require("ShapeKeySystem_Core.I18n")
 local Recording = require("ShapeKeySystem_Core.Recording")
 local Analysis = require("ShapeKeySystem_Core.PlaybackAnalysis")
 local Perf = require("ShapeKeySystem_Core.Perf")
@@ -84,7 +85,7 @@ function R.stop(restore, message)
         end
     end
     if restore_error then
-        R.state.message = R.state.message .. " · 输入恢复失败：" .. tostring(restore_error)
+        R.state.message = L.f("%s · 输入恢复失败：%s", L.tr(R.state.message), tostring(restore_error))
         if R.log then R.log("recording restore: %s", tostring(restore_error)) end
     end
     R.epoch = R.epoch + 1
@@ -92,7 +93,7 @@ function R.stop(restore, message)
 end
 
 function R.fail(message)
-    R.stop(true, "播放失败：" .. tostring(message))
+    R.stop(true, L.f("播放失败：%s", L.tr(tostring(message))))
     if R.log then R.log("recording playback: %s", tostring(message)) end
 end
 
@@ -147,8 +148,8 @@ local function prepare_tick()
     local done, decoded, ready_analysis = task.job:step()
     Perf.record("playback_prepare", clock() - slice_start)
     R.state.preparation_progress = task.job.progress
-    R.state.message = (task.job.stage == "analysis" and "正在分析录制信号… " or "正在校验录制帧… ")
-        .. string.format("%.0f%%", task.job.progress * 100)
+    R.state.message = L.f(task.job.stage == "analysis" and "正在分析录制信号… %.0f%%" or "正在校验录制帧… %.0f%%",
+        task.job.progress * 100)
     if not done then return end
     local missing = {}
     for _, param in ipairs(R.params and R.params() or {}) do
@@ -164,7 +165,7 @@ local function prepare_tick()
     update_analysis_bindings()
     s.message = adapter.message and adapter.message(decoded) or (decoded.track == "raw" and "重播原版输入，SKS 读取游戏求值后的信号"
         or "直接测试最终信号；眼球角度固定为零，缺失参数置零")
-    if #missing > 0 then s.message = s.message .. " · 配置未覆盖参数：" .. s.missing end
+    if #missing > 0 then s.message = L.f("%s · 配置未覆盖参数：%s", L.tr(s.message), s.missing) end
     s.rev, R.epoch = s.rev + 1, R.epoch + 1
     if R.log then R.log("recording started: %s / %s / %s (%d frames, %d params, %.3fs)",
         s.game, task.file.name, decoded.track, s.frames, s.channels, s.duration) end
@@ -261,7 +262,7 @@ function R.init(game, log, params, context)
     adapter = game.playback
     R.raw_label = game.raw and game.raw.label or tostring
     R.state.game, R.state.game_name, R.state.supported = game.id, game.name, false
-    if not adapter then R.state.message = "当前游戏尚未提供面部动画测试适配器：" .. game.id; return end
+    if not adapter then R.state.message = L.f("当前游戏尚未提供面部动画测试适配器：%s", game.id); return end
     local ok, result = pcall(adapter.catalog)
     if not ok then R.state.message = tostring(result); adapter = nil; return end
     catalog = result

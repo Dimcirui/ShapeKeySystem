@@ -2,6 +2,7 @@
 --
 -- 解码结果拥有只读快照；未变化的差分帧共享快照，源数据保持不变，不持有引擎对象。
 -- 差分列是 `params` 的一基下标，值为绝对值，空差分保留前帧；格式见 docs/plans/shape-key-system-api.md。
+local L = require("ShapeKeySystem_Core.I18n")
 local R = {}
 local abs, min, max = math.abs, math.min, math.max
 
@@ -11,16 +12,16 @@ end
 
 -- 拒绝对象键和缺号数组；调用方另行检查是否允许空数组。
 local function array(t, limit, label, checkpoint)
-    assert(type(t) == "table", label .. " 必须是数组")
+    assert(type(t) == "table", L.f("%s 必须是数组", label))
     local n = #t
-    assert(n <= limit, label .. " 超过数量上限")
+    assert(n <= limit, L.f("%s 超过数量上限", label))
     local count = 0
     for k in pairs(t) do
-        assert(R.finite(k, n, true) and k >= 1, label .. " 包含无效下标或对象键")
+        assert(R.finite(k, n, true) and k >= 1, L.f("%s 包含无效下标或对象键", label))
         count = count + 1
         if checkpoint and count % 128 == 0 then checkpoint(128) end
     end
-    assert(count == n, label .. " 包含缺号")
+    assert(count == n, L.f("%s 包含缺号", label))
     return n
 end
 
@@ -43,7 +44,7 @@ function R.decode(data, track, catalog, game, checkpoint)
         assert(type(row) == "table" and R.finite(row.param, 200, true) and row.param >= 1 and not map[row.param],
             "录制包含无效或重复参数编号")
         assert(R.finite(row.hash, 4294967295, true) and row.hash >= 0, "录制参数哈希无效")
-        assert(catalog and catalog[row.param] == row.hash, string.format("参数 %03d 名称哈希与当前游戏不匹配", row.param))
+        assert(catalog and catalog[row.param] == row.hash, L.f("参数 %03d 名称哈希与当前游戏不匹配", row.param))
         map[row.param], hashes[i] = i, row.hash
     end
     local count = array(data.frames, 9001, "frames", checkpoint)
@@ -62,7 +63,7 @@ function R.decode(data, track, catalog, game, checkpoint)
             local limit = (key == "raw" and 1000 or 100000) * scale
             local values
             if not compact or i == 1 then
-                assert(array(row[key], n, "完整 " .. key .. " 帧", checkpoint) == n, "完整帧长度与 params 不一致")
+                assert(array(row[key], n, L.f("完整 %s 帧", key), checkpoint) == n, "完整帧长度与 params 不一致")
                 if key == track then values = {} end
                 for column = 1, n do
                     local v = row[key][column]
@@ -73,7 +74,7 @@ function R.decode(data, track, catalog, game, checkpoint)
             else
                 assert(row[key] == nil, "差分帧不能同时带完整轨道")
                 local delta = row[key == "raw" and "d" or "df"]
-                local dn = delta ~= nil and array(delta, n * 2, key .. " 差分", checkpoint) or 0
+                local dn = delta ~= nil and array(delta, n * 2, L.f("%s 差分", key), checkpoint) or 0
                 assert(dn % 2 == 0, "差分必须是列号与数值对")
                 if key == track then
                     values = previous[key]

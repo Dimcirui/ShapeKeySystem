@@ -5,6 +5,7 @@
 -- 接口与文件格式见 docs/plans/shape-key-system-api.md。
 
 local U       = require("ShapeKeySystem_Core.Util")
+local I18n    = require("ShapeKeySystem_Core.I18n")
 local Names   = require("ShapeKeySystem_Core.Names")
 local Profile = require("ShapeKeySystem_Core.Profile")
 local Scene   = require("ShapeKeySystem_Core.Scene")
@@ -255,7 +256,7 @@ local QUICK_RESCAN = 2
 
 local function drop_rigs(reason, rescan_after)
     ActorInstances.release(reason)
-    Playback.stop(false, "角色或场景变化，录制播放已停止：" .. tostring(reason))
+    Playback.stop(false, I18n.f("角色或场景变化，录制播放已停止：%s", tostring(reason)))
     if #C.rigs > 0 or #C.pending_zero > 0 then log("released rigs: %s", reason) end
     -- warm-up by mesh address only (numbers, no engine references); the next scan consumes it
     C.warm = C.warm or {}
@@ -543,7 +544,7 @@ local function armor_name(model)
         armor_names = d and type(d.models) == "table" and d.models or false
     end
     local e = armor_names and model and armor_names[model]
-    return e and (e.zh or e.en) or nil
+    return e and (I18n.lang == "en" and e.en or e.zh or e.en) or nil
 end
 
 -- "ch03_032_5012" -> "护锁刃龙 α/β", "躯干" (A.slot_names; the slot number without one); nil when
@@ -553,7 +554,7 @@ local function part_name(part)
     local name = model and armor_name(model)
     if not name then return nil end
     local sn = SKS.adapter.slot_names
-    return name, sn and sn[slot] or slot
+    return name, sn and sn[slot] and I18n.tr(sn[slot]) or slot
 end
 
 local function part_display(part)
@@ -665,7 +666,7 @@ local function build_sculpt_state()
         end
         for _, i in ipairs(g.key_indices) do
             local k = keys[i]
-            if k.label and seen[k.label] > 1 then k.label = k.label .. "（" .. k.name .. "）" end
+            if k.label and seen[k.label] > 1 then k.label = I18n.f("%s（%s）", I18n.tr(k.label), k.name) end
         end
     end
     sc.keys, sc.groups = keys, groups
@@ -694,7 +695,7 @@ local function resolve_bindings(parts)
                 local key = detail and (p.id .. "|" .. e.path .. "|" .. detail)
                 if key and not C.warned[key] then
                     C.warned[key] = true
-                    notice("warn", string.format("%s：%s %s", p.id, e.path, detail))
+                    notice("warn", I18n.f("%s：%s %s", p.id, e.path, I18n.tr(detail)))
                 end
             end
         end
@@ -1042,7 +1043,7 @@ local function do_scan()
     if want and not Profile.registry[want] then
         if C.missing_profile ~= want then
             C.missing_profile = want
-            notice("warn", string.format("绑定 %s 指定的表情配置 %s 不存在", tostring(b.hit), want))
+            notice("warn", I18n.f("绑定 %s 指定的表情配置 %s 不存在", tostring(b.hit), want))
         end
         want = nil
     end
@@ -1490,7 +1491,7 @@ function SKS.update_motion()
     local ok, err = pcall(update_hold)
     if not ok then
         FaceHold.release()
-        FaceHold.status = "禁用骨骼表情出错：" .. tostring(err)
+        FaceHold.status = I18n.f("禁用骨骼表情出错：%s", tostring(err))
     end
     if not (C.driven_frame and C.driven_frame == C.frame and Mocap.wants_head()) then return end
     Mocap.update_motion(Scene.primary_root(), Writer.M_JBN)
@@ -1562,6 +1563,7 @@ function cmds.set_setting(a)
     end
     if a.key == "hotkey_mod" and not HOTKEY_MODS[v] then return false, "E_BAD_ARGS", "hotkey_mod: Ctrl / Shift / Alt" end
     if a.key == "ui_backend" and not UI_BACKENDS[v] then return false, "E_BAD_ARGS", "ui_backend: auto / d2d / imgui" end
+    if a.key == "language" and not I18n.set(v) then return false, "E_BAD_ARGS", "language: zh / en" end
     if a.key == "window" then v = { x = tonumber(v.x) or 0, y = tonumber(v.y) or 0, w = tonumber(v.w) or 900, h = tonumber(v.h) or 640 } end
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end
@@ -1605,7 +1607,7 @@ function cmds.auto_match_profile()
     if C.prog and id == C.prog.id then return true, nil, nil, { id = id, changed = false } end
     local ok, code, msg = cmds.set_profile({ id = id })
     if not ok then return false, code, msg end
-    notice("info", string.format("已切换到匹配度最高的表情配置：%s", C.prog.name))
+    notice("info", I18n.f("已切换到匹配度最高的表情配置：%s", C.prog.name))
     return true, nil, nil, { id = id, changed = true }
 end
 
@@ -1814,7 +1816,7 @@ function cmds.set_mapping(a)
     candidate.channels = data.channels
     for i, other in ipairs(candidate.channels) do
         if other.name ~= e.name and U.norm(other.name) == U.norm(e.name) then
-            return false, "E_EXISTS", "存在名称匹配冲突：" .. other.name
+            return false, "E_EXISTS", I18n.f("存在名称匹配冲突：%s", other.name)
         end
         if other.name == e.name then candidate.channels[i] = U.copy(e) end
     end
@@ -1873,7 +1875,7 @@ function cmds.create_profile(a)
     if not ok then return false, code, msg end
     cfg.profile = id; save_soon()
     C.profile_manual = { id = id, hit = C.binding and C.binding.hit or nil }
-    notice("info", "已新建表情配置：" .. a.name)
+    notice("info", I18n.f("已新建表情配置：%s", a.name))
     return true, nil, nil, { id = id }
 end
 
@@ -1905,7 +1907,7 @@ function cmds.save_profile(a)
     if not ok then return false, code, msg end
     cfg.profile = id; save_soon()
     C.profile_manual = { id = id, hit = C.binding and C.binding.hit or nil }
-    notice("info", "已保存表情配置：" .. name)
+    notice("info", I18n.f("已保存表情配置：%s", name))
     return true, nil, nil, { id = id }
 end
 
@@ -2040,7 +2042,7 @@ function cmds.load_sculpt(a)
     Sculpt.apply_preset(e)
     C.sculpt_preset, C.sculpt_preset_manual = e, true
     build_sculpt_state()
-    notice("info", "已加载捏脸配置：" .. e.name)
+    notice("info", I18n.f("已加载捏脸配置：%s", e.name))
     return true
 end
 
@@ -2060,7 +2062,7 @@ function cmds.save_sculpt(a)
     C.sculpt_preset = Presets.find_sculpt(a.name, folder, "user")
     C.sculpt_preset_manual = true
     build_presets_state(); build_sculpt_state()
-    notice("info", "已保存捏脸配置：" .. a.name)
+    notice("info", I18n.f("已保存捏脸配置：%s", a.name))
     return true, nil, nil, r4
 end
 
@@ -2103,7 +2105,7 @@ function cmds.write_binding(a)
     local ok, code, msg, res = Presets.write_binding(a.part, data)
     if not ok then return false, code, msg end
     request_rescan(1)
-    notice("info", "已写入绑定：" .. res.path)
+    notice("info", I18n.f("已写入绑定：%s", res.path))
     return true, nil, nil, res
 end
 
@@ -2135,7 +2137,7 @@ function cmds.bind_config(a)
     if not ok then return false, code, msg end
     request_rescan(1)
     build_presets_state()
-    notice("info", "已绑定到 " .. display)
+    notice("info", I18n.f("已绑定到 %s", display))
     return true, nil, nil, res
 end
 
@@ -2150,7 +2152,7 @@ function cmds.save_tuning()
     C.tuning.dirty = false
     build_tuning_state()
     request_rescan(1)
-    notice("info", "已保存到绑定：" .. res.path)
+    notice("info", I18n.f("已保存到绑定：%s", res.path))
     return true, nil, nil, res
 end
 
@@ -2214,7 +2216,7 @@ function cmds.confirm_delete()
     if not ok then return false, "E_IO", "write failed" end
     request_rescan(1)
     build_presets_state()
-    notice("info", "已删除：" .. d.name)
+    notice("info", I18n.f("已删除：%s", d.name))
     return true
 end
 
@@ -2261,6 +2263,9 @@ end
 -- returns false, reason (a type it needs is missing), nothing else starts and the data folder is
 -- not touched. Returns true, or false, reason.
 function SKS.init(adapter)
+    -- the language before the adapter's init: a failed init returns a message for the menu
+    local saved = U.load_json(SETTINGS_PATH)
+    if type(saved) == "table" then I18n.set(saved.language) end
     ActorInstances.init(adapter)
     if adapter.init then
         local ok, why = adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
@@ -2276,6 +2281,7 @@ function SKS.init(adapter)
     Cnd.install(adapter.conditions)
     Trail.open()
     load_settings()
+    if not I18n.set(cfg.language) then cfg.language = "zh"; I18n.set("zh") end
     Playback.init(adapter, log, function() return C.prog and C.prog.params or {} end, function()
         return C.prog, Profile.signals.list, state.expression.channels,
             state.mapping.rev .. ":" .. state.expression.rev .. ":" .. state.scene.rev
@@ -2304,12 +2310,12 @@ function SKS.init(adapter)
     C.build_cond_state()
     local ok, code, msg = apply_profile(cfg.profile, false)
     if not ok and cfg.profile ~= "arkit" then
-        notice("warn", "表情配置加载失败，改用 ARKit：" .. tostring(msg))
+        notice("warn", I18n.f("表情配置加载失败，改用 ARKit：%s", I18n.tr(tostring(msg))))
         ok, code, msg = apply_profile("arkit", false)
         if ok then cfg.profile = "arkit" end
     end
     if not ok then
-        notice("error", "没有可用的表情配置：" .. tostring(code) .. " " .. tostring(msg))
+        notice("error", I18n.f("没有可用的表情配置：%s %s", tostring(code), I18n.tr(tostring(msg))))
     end
     if not U.load_json(SETTINGS_PATH) then save_now() end
     C.saved_gains = gains_of(cfg.expression)
@@ -2468,7 +2474,7 @@ function C.select_conditions()
         if not cur or cur.id ~= want then
             if not CondExpr.select(want) then
                 local key = "cond:" .. want
-                if not C.warned[key] then C.warned[key] = true; notice("warn", "条件规则配置不存在：" .. want) end
+                if not C.warned[key] then C.warned[key] = true; notice("warn", I18n.f("条件规则配置不存在：%s", want)) end
             end
             C.build_cond_state()
         end
@@ -2518,7 +2524,7 @@ function cmds.cond_save(a)
     if not ok then return false, code, msg end
     if not (C.binding and C.binding.data and C.binding.data.conditions) then cfg.conditions = res.id; save_soon() end
     C.build_cond_state()
-    notice("info", "已保存条件规则：" .. CondExpr.current.name)
+    notice("info", I18n.f("已保存条件规则：%s", CondExpr.current.name))
     return true, nil, nil, res
 end
 

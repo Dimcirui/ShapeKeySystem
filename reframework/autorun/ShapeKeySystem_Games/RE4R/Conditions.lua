@@ -70,14 +70,16 @@ function C.init()
     end)
     if not ok or not fields then return end
     local options, seen = {}, {}
-    local labels = { Fine = "正常", Caution = "注意", Danger = "危险", Poison = "中毒", Dead = "死亡" }
+    -- whole labels, so the draw layer finds each one in the translation table
+    local labels = { Fine = "正常（Fine）", Caution = "注意（Caution）", Danger = "危险（Danger）",
+        Poison = "中毒（Poison）", Dead = "死亡（Dead）" }
     for _, field in ipairs(fields) do
         local valid, value, name = pcall(function()
             if field:is_static() then return field:get_data(nil), field:get_name() end
         end)
         if valid and finite(value) and type(name) == "string" and not seen[value] then
             seen[value] = true
-            options[#options + 1] = { value = value, label = labels[name] and (labels[name] .. "（" .. name .. "）") or name }
+            options[#options + 1] = { value = value, label = labels[name] or name }
         end
     end
     if #options > 0 then

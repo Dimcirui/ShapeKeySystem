@@ -18,6 +18,7 @@
 --   blinking and the idle mouth opening in its default (fallback) mode; gaze follows from the
 --   missing eye joints.
 local B = require("ShapeKeySystem_Core.BoneSignals")
+local L = require("ShapeKeySystem_Core.I18n")
 local Cond = require("ShapeKeySystem_Games.Rise.Conditions")
 local A = {
     id = "mhrise",
@@ -256,16 +257,16 @@ function A.init()
         { "via.render.Mesh", "set_BlendShapeChannelWeightCount(System.UInt64)", "get_ChannelWeightList()", "get_MeshReady()" },
     }) do
         local t = sdk.find_type_definition(spec[1])
-        if not t then return false, "找不到类型 " .. spec[1] end
+        if not t then return false, L.f("找不到类型 %s", spec[1]) end
         for i = 2, #spec do
-            if not t:get_method(spec[i]) then return false, "找不到方法 " .. spec[1] .. "." .. spec[i] end
+            if not t:get_method(spec[i]) then return false, L.f("找不到方法 %s.%s", spec[1], spec[i]) end
         end
     end
     M_JBN = sdk.find_type_definition("via.Transform"):get_method("getJointByName(System.String)")
     T_MOTION = sdk.typeof("via.motion.Motion")
     local ok, data = pcall(json.load_file, "ShapeKeySystem/builtin/mhrise/face.json")
     if not ok then return false, "崛起面部标定文件无法读取" end
-    local valid, why = B.validate(data, { label = "崛起" })
+    local valid, why = B.validate(data, { label = L.tr("崛起") })
     if not valid then return false, why end
     calibration = data
 

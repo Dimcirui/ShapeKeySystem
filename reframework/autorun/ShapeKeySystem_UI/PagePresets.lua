@@ -4,6 +4,7 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -24,7 +25,7 @@ local function confirm_bar(ctx, x, y, w)
     if not pd then return 0 end
     D.rrect(x, y, w, 40, 3, C.ink)
     D.outline(x, y, w, 40, 3, 1, C.warn)
-    D.text_mid(string.format("删除「%s」？此操作不能撤销。", pd.name), x + 12, y + 6, 28, C.warn, W.body(), w - 200)
+    D.text_mid(L.f("删除「%s」？此操作不能撤销。", pd.name), x + 12, y + 6, 28, C.warn, W.body(), w - 200)
     if W.button("删除", x + w - 170, y + 6, 76, 28, { kind = "danger" }) then ctx.call("confirm_delete") end
     if W.button("取消", x + w - 86, y + 6, 76, 28, { kind = "ghost" }) then ctx.call("cancel_delete") end
     return 48
@@ -43,7 +44,7 @@ local function binding_card(ctx, x, y, w)
     W.panel_box(x, y, w, h, true)
     local cy = y + 10
     local tw = W.h2("绑定（查找过程）", x + 12, cy)
-    D.text(part and ("部件 " .. display) or "没有带形态键的部件", x + 24 + tw, cy + 2, C.muted, W.small(), w - tw - 40)
+    D.text(part and L.f("部件 %s", display) or "没有带形态键的部件", x + 24 + tw, cy + 2, C.muted, W.small(), w - tw - 40)
     cy = cy + 30
     if b then
         for i, c in ipairs(b.chain) do
@@ -52,14 +53,14 @@ local function binding_card(ctx, x, y, w)
             D.outline(x + 12, cy, w - 24, 26, 3, 1, c.hit and C.brass or C.line)
             D.text_mid(tostring(i), x + 20, cy, 26, C.faint, W.mono())
             D.text_mid(c.path, x + 40, cy, 26, c.exists and C.text or C.faint, W.mono(), w - 200)
-            local tag = c.error and ("错误：" .. c.error) or (c.hit and "命中" or (c.exists and "存在 · 未采用" or "—"))
+            local tag = c.error and L.f("错误：%s", L.tr(c.error)) or (c.hit and "命中" or (c.exists and "存在 · 未采用" or "—"))
             local col = c.error and C.error or (c.hit and C.ok or C.muted)
             local tw2 = D.measure(W.small(), tag)
             D.text_mid(tag, x + w - 24 - tw2, cy, 26, col, W.small())
             cy = cy + 30
         end
         cy = cy + 4
-        D.text(string.format("表情配置：%s    捏脸配置：%s", tostring(b.expression or "-"), tostring(b.sculpt or "-")),
+        D.text(L.f("表情配置：%s    捏脸配置：%s", tostring(b.expression or "-"), tostring(b.sculpt or "-")),
             x + 12, cy, C.text, W.body(), w - 24)
         cy = cy + 22
         if not b.fingerprint_ok then D.text("捏脸配置和当前网格的通道不一致（换过模型？）", x + 12, cy, C.warn, W.small(), w - 24) end
@@ -85,9 +86,9 @@ end
 local function tuning_line(ctx, x, y, w)
     local tu = ctx.st.expression.tuning
     if not tu then return 0 end
-    local text = "表情增益与视线设置来自：" .. (tu.source == "binding" and tostring(tu.path) or "全局设置 settings.json")
-        .. (tu.dirty and "  · 未保存" or "")
-        .. (tu.profile_mismatch and ("  · 通道增益是为 " .. tostring(tu.for_profile) .. " 调的，暂不生效") or "")
+    local text = L.f("表情增益与视线设置来自：%s", tu.source == "binding" and tostring(tu.path) or L.tr("全局设置 settings.json"))
+        .. (tu.dirty and L.tr("  · 未保存") or "")
+        .. (tu.profile_mismatch and L.f("  · 通道增益是为 %s 调的，暂不生效", tostring(tu.for_profile)) or "")
     local bw = 0
     if tu.source == "binding" then
         bw = 150
@@ -126,7 +127,7 @@ function Page.draw(ctx, x, y, w)
     local h1 = list_box(ctx, "捏脸配置", x, cy, lw, pr.sculpt or {}, function(e, rx, ry, rw)
         local cur = cur_sculpt and cur_sculpt.name == e.name and cur_sculpt.folder == e.folder
         D.text_mid(e.name, rx, ry, 32, cur and C.brass or C.text, W.body(), rw * 0.45)
-        local meta = (SOURCE[e.source] or e.source) .. " · " .. (e.folder or "通用")
+        local meta = L.tr(SOURCE[e.source] or e.source) .. " · " .. (e.folder or L.tr("通用"))
         D.text_mid(meta, rx + rw * 0.45, ry, 32, C.faint, W.small(), rw * 0.3)
         local bx = rx + rw - 46
         if e.source == "user" then
@@ -142,7 +143,7 @@ function Page.draw(ctx, x, y, w)
     local h2 = list_box(ctx, "表情配置", lx, ly, lw, pr.expression or {}, function(e, rx, ry, rw)
         local cur = ex.profile and ex.profile.id == e.id
         D.text_mid(e.name, rx, ry, 32, cur and C.brass or C.text, W.body(), rw * 0.5)
-        D.text_mid((SOURCE[e.source] or e.source) .. (e.extends and (" · 继承 " .. e.extends) or ""), rx + rw * 0.5, ry, 32,
+        D.text_mid(L.tr(SOURCE[e.source] or e.source) .. (e.extends and L.f(" · 继承 %s", e.extends) or ""), rx + rw * 0.5, ry, 32,
             C.faint, W.small(), rw * 0.3)
         local bx = rx + rw - 46
         if e.source == "user" then

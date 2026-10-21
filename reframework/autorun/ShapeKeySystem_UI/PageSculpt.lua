@@ -5,6 +5,7 @@ local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -31,7 +32,7 @@ local function toolbar(ctx, x, y, w)
     local _, bw = W.button("扫描装备", x + 10, cy + 8, nil, 28, { kind = "primary" })
     if _ then call("sculpt_scan") end
     local scan = sc.scan
-    local info = scan and string.format("%d 个部件 · %d 项（已合并同名，%d 项由表情驱动）", #(scan.parts or {}), scan.keys or 0,
+    local info = scan and L.f("%d 个部件 · %d 项（已合并同名，%d 项由表情驱动）", #(scan.parts or {}), scan.keys or 0,
         scan.expression_keys or 0) or "还没有扫描"
     local tw = D.measure(W.body(), "强制覆盖") + 38
     D.text_mid(info, x + 22 + bw, cy + 8, 28, C.muted, W.small(), w - bw - tw - 50)
@@ -46,8 +47,8 @@ local function toolbar(ctx, x, y, w)
     local labels, cur = {}, nil
     for i, e in ipairs(pr) do
         -- presets of this outfit's model are plain names; general ones say so
-        labels[i] = e.name .. W.default_suffix(ctx, e.name, st.presets.binding and st.presets.binding.sculpt)
-            .. (e.folder and "" or "（通用）")
+        labels[i] = e.name .. L.tr(W.default_suffix(ctx, e.name, st.presets.binding and st.presets.binding.sculpt))
+            .. (e.folder and "" or L.tr("（通用）"))
         if sc.preset and sc.preset.name == e.name and sc.preset.folder == e.folder then cur = i end
     end
     W.panel_box(x, cy, w, 44)
@@ -69,7 +70,7 @@ local function toolbar(ctx, x, y, w)
         W.start_text(s, "name_form", { title = title, text = preset and preset.name or "",
             extra = { label = "存为通用配置（不属于这套装备）", value = false },
             on_submit = function(name, general)
-                if name ~= "" and call("save_sculpt", { name = name, general = general }) then ctx.toast("info", "已保存：" .. name) end
+                if name ~= "" and call("save_sculpt", { name = name, general = general }) then ctx.toast("info", L.f("已保存：%s", name)) end
             end })
     end
     -- 保存: your own config is overwritten in place; a mod's (read-only) or none asks for a name
@@ -77,7 +78,7 @@ local function toolbar(ctx, x, y, w)
         disabled = not sc.scan or (own and not sc.dirty) })
     if c1 then
         if own then
-            if call("save_sculpt", { name = preset.name, general = preset.folder == nil }) then ctx.toast("info", "已保存：" .. preset.name) end
+            if call("save_sculpt", { name = preset.name, general = preset.folder == nil }) then ctx.toast("info", L.f("已保存：%s", preset.name)) end
         else
             save_as(preset and "保存为新配置（mod 自带的配置不能覆盖）" or "保存捏脸配置")
         end
@@ -96,7 +97,7 @@ local function toolbar(ctx, x, y, w)
     local pd = st.presets.pending_delete
     if pd and pd.kind == "sculpt" then
         D.rrect(x, cy, w, 36, 3, C.ink); D.outline(x, cy, w, 36, 3, 1, C.warn)
-        D.text_mid("删除捏脸配置「" .. pd.name .. "」？", x + 10, cy + 4, 28, C.warn, W.body(), w - 200)
+        D.text_mid(L.f("删除捏脸配置「%s」？", pd.name), x + 10, cy + 4, 28, C.warn, W.body(), w - 200)
         if W.button("删除", x + w - 160, cy + 4, 70, 28, { kind = "danger" }) then call("confirm_delete") end
         if W.button("取消", x + w - 82, cy + 4, 70, 28, { kind = "ghost" }) then call("cancel_delete") end
         cy = cy + 44
@@ -164,9 +165,9 @@ local function key_row(ctx, k, x, y, w)
     local has_ovr = next(k.overrides or {}) ~= nil
     -- second line only for what the group header does not already say
     local sub = {}
-    if k.mixed then sub[#sub + 1] = "表情叠加" end
+    if k.mixed then sub[#sub + 1] = L.tr("表情叠加") end
     if multi then sub[#sub + 1] = table.concat(k.part_labels or k.parts, " · ") end
-    if has_ovr then sub[#sub + 1] = "有部件单独值" end
+    if has_ovr then sub[#sub + 1] = L.tr("有部件单独值") end
     local h = (#sub > 0 and 42 or 34) + nparts * 30
     if not visible(y, h) then return h end
     local modified = abs(k.value - (k.default or 0)) > 1e-6
@@ -180,22 +181,27 @@ local function key_row(ctx, k, x, y, w)
     else
         D.text_mid(title, x + 10, y + 3, 28, C.text, W.body(), nw - 16)
     end
-    if k.label then W.tooltip("形态键名：" .. k.name, x, y, nw, rh) end
+    if k.label then W.tooltip(L.f("形态键名：%s", k.name), x, y, nw, rh) end
     local oy0 = (rh - 42) / 2   -- controls stay centred on the shorter row
-    local ax = x + w - 106
+    -- right-aligned buttons sized by their (translated) labels
+    local f = W.small()
+    local bw = D.measure(f, "默认") + 22
+    local bx = x + w - bw - 2
+    local ax = min(x + w - 106, bx - 8 - (D.measure(f, "按部件") + 22))
     local ext = W.external_owner(ctx.st, k.name)
     if ext then
-        local cw = W.chip("由 " .. ext .. " 控制", x + nw, y + 11 + oy0, C.brass)
+        local cw = W.chip(L.f("由 %s 控制", ext), x + nw, y + 11 + oy0, C.brass)
         D.text_mid(string.format("%.2f", k.value), x + nw + cw + 10, y + 7 + oy0, 28, C.faint, W.mono())
-        if W.tbutton("收回", x + w - 42, y + 10 + oy0) then call("external_release", { owner = ext, name = k.name }) end
-        W.tooltip("另一个插件正在控制这个形态键；收回后恢复捏脸的值", x + w - 42, y + 10 + oy0, 40, 22)
+        local rw = D.measure(f, "收回") + 22
+        if W.tbutton("收回", x + w - rw - 2, y + 10 + oy0) then call("external_release", { owner = ext, name = k.name }) end
+        W.tooltip("另一个插件正在控制这个形态键；收回后恢复捏脸的值", x + w - rw - 2, y + 10 + oy0, rw, 22)
     else
         local ch, v = W.slider("sk:" .. k.name, x + nw, y + 7 + oy0, ax - x - nw - 12, 28, k.value, k.range[1], k.range[2],
             { step = 0.01, fmt = "%.2f" })
         if ch then call("set_sculpt_key", { name = k.name, value = v }) end
         if multi and W.tbutton("按部件", ax, y + 10 + oy0, { pressed = expanded }) then s.expanded[k.name] = not expanded end
-        if W.tbutton("默认", x + w - 42, y + 10 + oy0, { disabled = not modified }) then call("reset_sculpt_key", { name = k.name }) end
-        W.tooltip(string.format("恢复为 mod 默认值 %.2f", k.default or 0), x + w - 42, y + 10 + oy0, 40, 22)
+        if W.tbutton("默认", bx, y + 10 + oy0, { disabled = not modified }) then call("reset_sculpt_key", { name = k.name }) end
+        W.tooltip(L.f("恢复为 mod 默认值 %.2f", k.default or 0), bx, y + 10 + oy0, bw, 22)
     end
     if expanded and not ext then
         local oy = y + rh
@@ -247,7 +253,7 @@ function Page.draw(ctx, x, y, w)
         if #rows > 0 then
             local open = not s.collapsed[g.key] or filter ~= ""
             -- a named part keeps its id next to the count (binding files are named by it)
-            local stat = g.name ~= g.key and string.format("%s · %d 项", g.key, #rows) or string.format("%d 项", #rows)
+            local stat = g.name ~= g.key and L.f("%s · %d 项", g.key, #rows) or L.f("%d 项", #rows)
             local clicked, hh = W.header(g.name, x, cy, w, open, stat)
             if clicked then s.collapsed[g.key] = open end
             cy = cy + hh + 2

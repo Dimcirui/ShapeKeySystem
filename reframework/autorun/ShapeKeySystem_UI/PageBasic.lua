@@ -11,6 +11,7 @@ local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Faces = require("ShapeKeySystem_UI.Faces")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -135,7 +136,7 @@ local function draw_face(ctx, x, y, w)
     local fx, fy = x + 10, y + 10
     local lines = img(style, "lines")
     if not lines then
-        D.text("缺少图片 reframework/images/" .. style.prefix .. "face_lines.png", fx, fy, C.warn, W.small(), w - 20)
+        D.text(L.f("缺少图片 reframework/images/%s", style.prefix .. "face_lines.png"), fx, fy, C.warn, W.small(), w - 20)
     else
         D.image(lines, fx, fy, iw, ih)
     end
@@ -200,9 +201,9 @@ local function draw_controls(ctx, x, y, w)
     W.panel_box(x, cy, w, card_h, true)
     if r then
         local tw = W.h2(r.name, x + 14, cy + 12)
-        W.chip(string.format("实时 %.2f", live.region_activity[i] or 0), x + 26 + tw, cy + 11, C.signal)
+        W.chip(L.f("实时 %.2f", live.region_activity[i] or 0), x + 26 + tw, cy + 11, C.signal)
         if st.runtime.advanced then
-            local label = string.format("在表情详情中查看 %d 个通道", #r.channel_slots)
+            local label = L.f("在表情详情中查看 %d 个通道", #r.channel_slots)
             local bw = D.measure(W.small(), label) + 22
             if W.button(label, x + w - bw - 12, cy + 8, bw, 24, { kind = "ghost", font = W.small() }) then
                 ctx.goto_page("expr")

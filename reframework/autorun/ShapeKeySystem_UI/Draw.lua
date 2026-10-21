@@ -9,8 +9,11 @@
 --     images that do not fit inside it entirely are skipped (the same on both backends)
 --   * fonts are created on first use per (size, bold, mono) and text sizes are cached
 --   * D.defer(fn) runs fn after the page (dropdown popups, tooltips) without any clip
+--   * every string is measured and drawn in the interface language (I18n.tr), so pages pass the
+--     Chinese text and a cut with an ellipsis applies to the translation
 
 local T = require("ShapeKeySystem_UI.Theme")
+local tr = require("ShapeKeySystem_Core.I18n").tr
 
 local D = {}
 
@@ -199,6 +202,7 @@ end
 -- logical width, height of a string
 function D.measure(f, s)
     if not f or s == nil or s == "" then return 0, 0 end
+    s = tr(s)
     local per = measure_cache[f]
     if not per then per = {}; measure_cache[f] = per end
     local m = per[s]
@@ -216,7 +220,7 @@ local UTF8_CHAR = "[%z\1-\127\194-\244][\128-\191]*"
 
 -- s cut to max_w with an ellipsis (cached through D.measure)
 function D.fit(f, s, max_w)
-    s = tostring(s or "")
+    s = tr(tostring(s or ""))
     if max_w <= 0 then return "" end
     if D.measure(f, s) <= max_w then return s end
     local chars = {}
@@ -237,7 +241,7 @@ end
 function D.text(s, x, y, color, f, max_w)
     f = f or D.font()
     if not f or s == nil then return 0 end
-    s = tostring(s)
+    s = tr(tostring(s))
     -- 不合法的 UTF-8 会让 d2d 丢掉整帧，切出窗口时还会卡死游戏
     if not utf8.len(s) then return 0 end
     if max_w then s = D.fit(f, s, max_w) end

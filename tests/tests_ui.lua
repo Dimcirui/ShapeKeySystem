@@ -266,8 +266,15 @@ check(st.settings.window.x == w0 + 50, "title drag moves the window and saves it
 -- every page draws without a page error
 for _, name in ipairs({ "表情", "捏脸", "表情详情", "条件规则", "设置与调试" }) do
     click_text(name, true); MOUSE.x, MOUSE.y = 1500, 900; frame()
-    SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
     local e = find("页面出错", false)
+    if SHOT_LANG then
+        -- the screenshot in another language; the page is found and checked in Chinese
+        SKS.call("set_setting", { key = "language", value = SHOT_LANG }); frame()
+        SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
+        SKS.call("set_setting", { key = "language", value = "zh" }); frame()
+    else
+        SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
+    end
     check(e == nil, "page " .. name .. " draws" .. (e and (": " .. e.s) or ""))
 end
 local logged = 0
