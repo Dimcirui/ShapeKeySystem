@@ -11,6 +11,7 @@
 -- turns; the drawn head is the face, and child_tag adds the draw state so the switch rescans.
 -- Every part of the player belongs to one model, "musashi": one binding for the whole character.
 local BoneReads = require("ShapeKeySystem_Core.BoneReads")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local A = {
     id = "onimusha_wots",
@@ -32,7 +33,7 @@ local function sigs()
     if bone_sigs == nil then
         -- an unreadable calibration only leaves face_joint heads without signals
         local ok, data = pcall(json.load_file, "ShapeKeySystem/builtin/onimusha_wots/face.json")
-        bone_sigs, A.bones_error = BoneReads.load(ok and type(data) == "table" and data.signals or nil, "鬼武者")
+        bone_sigs, A.bones_error = BoneReads.load(ok and type(data) == "table" and data.signals or nil, L.tr("鬼武者"))
         bone_sigs = bone_sigs or false
     end
     return bone_sigs or nil
@@ -214,10 +215,10 @@ function A.init(events)
         { "app.DemoMediator", "get_IsBusy()", "get_IsBusyLoad()" },
     }) do
         local t = sdk.find_type_definition(spec[1])
-        if not t then return false, "找不到类型 " .. spec[1] end
+        if not t then return false, L.f("找不到类型 %s", spec[1]) end
         for i = 2, #spec do
             local m = t:get_method(spec[i])
-            if not m then return false, "找不到方法 " .. spec[1] .. "." .. spec[i] end
+            if not m then return false, L.f("找不到方法 %s.%s", spec[1], spec[i]) end
             methods[spec[i]] = m
         end
     end

@@ -5,6 +5,7 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -66,7 +67,7 @@ function Page.draw(ctx, x, y, w)
     if c3 then call("set_procedural", { patch = { speed = v3 } }) end
     ry = ry + 32
     local f, sp = p.frequency > 0 and p.frequency or 1, p.speed > 0 and p.speed or 1
-    D.text(string.format("约每 %.1f–%.1f 秒眨一次，单次 %.0f 毫秒", b.interval_min / f, b.interval_max / f,
+    D.text(L.f("约每 %.1f–%.1f 秒眨一次，单次 %.0f 毫秒", b.interval_min / f, b.interval_max / f,
         (b.close + b.hold + b.open) * 1000 / sp), spx, ry, C.muted, W.small(), rw - SWITCH_W)
     ry = ry + 26
 
@@ -82,7 +83,7 @@ function Page.draw(ctx, x, y, w)
     ry = ry + row(call, "breath", "微微张嘴", m.enabled ~= false, (lp.mouth or 0) / mamp, rx, ry, rw,
         { id = "proc_mouth_amp", label = "张嘴幅度", value = m.amplitude, lo = 0, hi = 0.3, opt = { step = 0.01, fmt = "%.2f" },
           patch = function(v) return { breath = { amplitude = v } } end })
-    D.text(string.format("张嘴约每 %.0f–%.0f 秒一次", m.interval_min, m.interval_max), spx, ry, C.muted, W.small(), rw - SWITCH_W)
+    D.text(L.f("张嘴约每 %.0f–%.0f 秒一次", m.interval_min, m.interval_max), spx, ry, C.muted, W.small(), rw - SWITCH_W)
     ry = ry + 26
 
     local blink_lacking = lacking["blink.L"] or lacking["blink.R"]

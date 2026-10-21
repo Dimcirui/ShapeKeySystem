@@ -32,6 +32,8 @@
 --     that had to wait is done by B.frame() once the other mod lets go (this also repairs a
 --     restore of a wrong saved state by the other side)
 
+local L = require("ShapeKeySystem_Core.I18n")
+
 local B = {
     enabled = false, installed = false, failed = {}, last_error = nil,
     wheel = 0, saved = nil, last_mode_at = 0,
@@ -220,12 +222,12 @@ end
 -- one line for the status bar: is the OS cursor pinned, how often the game fought the mode
 function B.diag()
     if not B.enabled then return "" end
-    local hook = (#B.failed == 0) and string.format("放开光标 %d 次", B.forced) or ("hook 失败：" .. B.failed[#B.failed])
+    local hook = (#B.failed == 0) and L.f("放开光标 %d 次", B.forced) or L.f("hook 失败：%s", B.failed[#B.failed])
     if B.game and B.game.status then
         local ok, status = pcall(B.game.status)
         if ok and type(status) == "string" then hook = hook .. " · " .. status end
     end
-    return string.format("鼠标 %s · %s · 最近移动 %.0f,%.0f", B.pinned and "锁定(虚拟光标)" or "自由",
+    return L.f("鼠标 %s · %s · 最近移动 %.0f,%.0f", L.tr(B.pinned and "锁定(虚拟光标)" or "自由"),
         hook, B.delta[1], B.delta[2])
 end
 

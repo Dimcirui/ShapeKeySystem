@@ -103,6 +103,8 @@ L.execute('dofile("%s")' % os.path.join(GAME, "autorun", "ShapeKeySystem.lua").r
 L.execute('package.searchers[2] = function(name) return "autorun module after load: " .. name end')
 G.TESTS_DIR = HERE.replace("\\", "/")
 L.execute(open(os.path.join(HERE, "tests.lua"), encoding="utf-8").read())
+# SKS_LANG=en: tests_ui takes its page screenshots (--shots) in that interface language
+G.SHOT_LANG = os.environ.get("SKS_LANG")
 L.execute(open(os.path.join(HERE, "tests_ui.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_api.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_mocap.lua"), encoding="utf-8").read())
@@ -124,6 +126,25 @@ L.execute(open(os.path.join(HERE, "tests_playback_adapter.lua"), encoding="utf-8
 L.execute(open(os.path.join(HERE, "tests_games.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_procedural.lua"), encoding="utf-8").read())
 L.execute(open(os.path.join(HERE, "tests_facehold.lua"), encoding="utf-8").read())
+L.execute(open(os.path.join(HERE, "tests_i18n.lua"), encoding="utf-8").read())
+import i18n_check
+i18n_check.main()
+
+# screenshots right after the main runtime, so a later group that aborts does not lose them
+if "--shots" in sys.argv:
+    from render_ui import render
+    os.makedirs(os.path.join(HERE, "shots"), exist_ok=True)
+    snaps = G.SNAPS
+    for i in range(1, len(snaps) + 1):
+        sn = snaps[i]
+        cmds = []
+        for j in range(1, len(sn.cmds) + 1):
+            c = sn.cmds[j]
+            cmds.append([c[k] for k in range(1, c.n + 1)])
+        out = os.path.join(HERE, "shots", "page_%d.png" % i)
+        render(cmds, out)
+        print("shot", out, len(cmds))
+
 
 # a second runtime with a minimal made-up adapter (no signals, hooks, conditions or input)
 data2 = tempfile.mkdtemp(prefix="sks_fake_")
@@ -159,20 +180,6 @@ print("murmur3 lua", G.MM3, "python", want, "ok" if G.MM3 == want else "FAIL")
 print("data dir:", data)
 for root, _, files in os.walk(os.path.join(data, "ShapeKeySystem", "user")):
     for fn in files: print("user file:", os.path.relpath(os.path.join(root, fn), data))
-
-if "--shots" in sys.argv:
-    from render_ui import render
-    os.makedirs(os.path.join(HERE, "shots"), exist_ok=True)
-    snaps = G.SNAPS
-    for i in range(1, len(snaps) + 1):
-        sn = snaps[i]
-        cmds = []
-        for j in range(1, len(sn.cmds) + 1):
-            c = sn.cmds[j]
-            cmds.append([c[k] for k in range(1, c.n + 1)])
-        out = os.path.join(HERE, "shots", "page_%d.png" % i)
-        render(cmds, out)
-        print("shot", out, len(cmds))
 
 if G.PREVIEW_CMDS:
     from render_ui import render

@@ -4,6 +4,7 @@
 -- 骨骼引用按面部、控制器和动画层地址缓存，地址或参数数量变化即重建；录制数据只保存数值。
 local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
 local Recording = require("ShapeKeySystem_Core.Recording")
+local L = require("ShapeKeySystem_Core.I18n")
 local R = {}
 local RAW_SCALE, FINAL_SCALE = 10000000, 100000
 local EYES = { "L_EyeJ_LOD02", "R_EyeJ_LOD02" }
@@ -62,7 +63,7 @@ function R.snapshot(context)
     local joints, outputs, status = {}, {}, {}
     for i, joint in ipairs(b.joints) do
         local p = M_LPOS:call(joint)
-        assert(p and Recording.finite(p.z, 10), b.labels[i] .. " 无法读取")
+        if not (p and Recording.finite(p.z, 10)) then error(L.f("%s 无法读取", b.labels[i]), 0) end
         outputs[i] = p.z / Playback.final_unit
         joints[b.labels[i]] = { p.x, p.y, p.z, 0, 0, 0, 1 }
     end
@@ -84,7 +85,7 @@ function R.sample(snapshot)
 end
 
 local function quantize(v, scale, limit, label)
-    assert(Recording.finite(v, limit), label .. " 数值无效")
+    if not Recording.finite(v, limit) then error(L.f("%s 数值无效", label), 0) end
     return math.floor(v * scale + 0.5)
 end
 

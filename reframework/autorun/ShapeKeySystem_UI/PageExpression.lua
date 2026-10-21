@@ -10,6 +10,7 @@ local Procedural = require("ShapeKeySystem_UI.PageProcedural")
 local Mapping = require("ShapeKeySystem_UI.MappingEditor")
 local I = require("ShapeKeySystem_UI.Input")
 local PlaybackPanel = require("ShapeKeySystem_UI.PlaybackPanel")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -28,7 +29,7 @@ local function top_bars(ctx, x, y, w)
     W.panel_box(x, cy, w, bar_h)
     local plist, labels, cur = st.presets.expression or {}, {}, nil
     for i, p in ipairs(plist) do
-        labels[i] = string.format("%s（%s）", p.name, p.source)
+        labels[i] = L.f("%s（%s）", p.name, L.tr(p.source))
             .. W.default_suffix(ctx, p.id, st.presets.binding and st.presets.binding.profile_id)
         if ex.profile and p.id == ex.profile.id then cur = i end
     end
@@ -99,7 +100,7 @@ local function top_bars(ctx, x, y, w)
     if s.mapping_draft and not pv then return cy - y end
     if pv then
         W.panel_box(x, cy, w, 34, true)
-        D.text_mid(string.format("正在浏览：%s（未应用）· 当前装备的网格匹配 %d / %d 个通道", pv.name, pv.present, pv.total),
+        D.text_mid(L.f("正在浏览：%s（未应用）· 当前装备的网格匹配 %d / %d 个通道", pv.name, pv.present, pv.total),
             x + 12, cy + 3, 28, C.brass, W.small(), w - 24)
         cy = cy + 42
     end
@@ -110,8 +111,8 @@ local function top_bars(ctx, x, y, w)
     -- one info line: gains tuned for another profile, unsaved tuning
     if not pv then
     local info = {}
-    if tu and tu.profile_mismatch then info[#info + 1] = "单通道增益属于 " .. tostring(tu.for_profile) .. "，切回它时生效" end
-    if tu and tu.source == "binding" and tu.dirty then info[#info + 1] = "调整未保存" end
+    if tu and tu.profile_mismatch then info[#info + 1] = L.f("单通道增益属于 %s，切回它时生效", tostring(tu.for_profile)) end
+    if tu and tu.source == "binding" and tu.dirty then info[#info + 1] = L.tr("调整未保存") end
     if #info > 0 then
         D.text(table.concat(info, " · "), x + 2, cy, (tu and (tu.profile_mismatch or tu.dirty)) and C.warn or C.muted, W.small(), w)
         cy = cy + 22
@@ -126,8 +127,8 @@ local function top_bars(ctx, x, y, w)
     local sx = x + 40 + fw + w1
     local groups_now = (pv or ex).groups or {}
     if not pv then
-        D.text_mid("平滑", sx, cy + 8, 28, C.muted, W.small())
-        local c2, v2 = W.slider("smooth", sx + 36, cy + 8, min(200, x + w - sx - 200), 28, ex.smoothing or 0, 0, 1,
+        local lw = D.text_mid("平滑", sx, cy + 8, 28, C.muted, W.small())
+        local c2, v2 = W.slider("smooth", sx + lw + 10, cy + 8, min(200, x + w - sx - 200), 28, ex.smoothing or 0, 0, 1,
             { step = 0.01, fmt = "%.2f" })
         if c2 then call("set_smoothing", { value = v2 }) end
     end
@@ -144,7 +145,7 @@ local function top_bars(ctx, x, y, w)
     for i, r in ipairs(ex.regions or {}) do
         local rx = x + 10 + ((i - 1) % 2) * (cw + 10)
         local ry = cy + 8 + math.floor((i - 1) / 2) * 34
-        D.text_mid(r.name .. " 强度", rx, ry, 28, C.text, W.small(), 80)
+        D.text_mid(L.f("%s 强度", L.tr(r.name)), rx, ry, 28, C.text, W.small(), 80)
         local c3, v3 = W.slider("region:" .. r.key, rx + 84, ry, cw - 84, 28, r.gain, 0, 2, { step = 0.01, fmt = "%.2f" })
         if c3 then call("set_region_gain", { region = r.key, value = v3 }) end
     end
@@ -154,7 +155,7 @@ end
 
 -- tooltip line with the mesh name when the row shows a label instead
 local function key_name(c)
-    return c.label and ("形态键名：" .. c.name .. "\n") or ""
+    return c.label and L.f("形态键名：%s\n", c.name) or ""
 end
 
 -- on the name line, so it reads as being about the shape key, not the source formula below
@@ -179,7 +180,7 @@ local function channel_row(ctx, c, x, y, w)
     if c.guessed then nx = nx + 6 + W.chip("推测", nx + 6, y + 4, C.warn, 16) end
     missing_note(c, nx, x + nw, y)
     D.text(c.source_text or "", x + 8, y + 22, C.faint, W.small(), nw - 12)
-    W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, nw, h)
+    W.tooltip(key_name(c) .. L.tr(c.source_text or "") .. (c.note and ("\n" .. L.tr(c.note)) or ""), x, y, nw, h)
     local mx = x + nw
     local mw = max(60, (w - nw) * 0.36)
     W.meter(mx, y + 15, mw, 9, v, c.forced and C.brass or (c.has_signal and C.signal or C.faint))
@@ -188,7 +189,7 @@ local function channel_row(ctx, c, x, y, w)
     local gw = x + w - 70 - gx
     local ext = W.external_owner(ctx.st, c.canonical) or W.external_owner(ctx.st, c.name)
     if ext then
-        W.chip("由 " .. ext .. " 控制", gx, y + 11, C.brass)
+        W.chip(L.f("由 %s 控制", ext), gx, y + 11, C.brass)
         if W.tbutton("收回", x + w - 52, y + 9) then call("external_release", { owner = ext, name = c.canonical }) end
         return h
     end
@@ -208,9 +209,9 @@ local function preview_row(ctx, c, x, y, w)
     if c.guessed then nx = nx + 6 + W.chip("推测", nx + 6, y + 4, C.warn, 16) end
     if c.extension then nx = nx + 6 + W.chip("扩展", nx + 6, y + 4, C.faint, 16) end
     missing_note(c, nx, x + nw, y)
-    if c.present then D.text("形态键：" .. c.name, x + 8, y + 22, C.faint, W.small(), nw - 12) end
+    if c.present then D.text(L.f("形态键：%s", c.name), x + 8, y + 22, C.faint, W.small(), nw - 12) end
     D.text(c.source_text or "", x + nw, y + 12, C.muted, W.small(), w - nw - 12)
-    W.tooltip(key_name(c) .. (c.source_text or "") .. (c.note and ("\n" .. c.note) or ""), x, y, w, h)
+    W.tooltip(key_name(c) .. L.tr(c.source_text or "") .. (c.note and ("\n" .. L.tr(c.note)) or ""), x, y, w, h)
     return h
 end
 
@@ -255,7 +256,7 @@ function Page.draw(ctx, x, y, w)
             local entry = draft and draft.original_name and st.mapping.entries[draft.original_name]
             local editing_group = entry and entry.group == g.key
             local open = not s.collapsed[g.key] or filter ~= "" or editing_group
-            local clicked, hh = W.header(g.name, x, cy, w, open, string.format("%d 个", #rows))
+            local clicked, hh = W.header(g.name, x, cy, w, open, L.f("%d 个", #rows))
             if clicked then s.collapsed[g.key] = open end
             cy = cy + hh + 2
             if open then

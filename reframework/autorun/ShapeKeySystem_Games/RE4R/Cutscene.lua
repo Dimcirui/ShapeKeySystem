@@ -1,5 +1,6 @@
 -- ShapeKeySystem: read RE4R timeline playback state for the cutscene drive setting.
 -- Manager entries are resolved per sample; no timeline objects survive between frames.
+local L = require("ShapeKeySystem_Core.I18n")
 local C = {}
 local list_field, status_method
 local active = {}
@@ -17,7 +18,7 @@ function C.init()
     for _, name in ipairs({"Play", "Pausing", "Pause", "Resume", "Skip"}) do
         local field = status:get_field(name)
         local value = field and field:get_data(nil)
-        if type(value) ~= "number" then return false, "找不到 RE4R 过场状态 " .. name end
+        if type(value) ~= "number" then return false, L.f("找不到 RE4R 过场状态 %s", name) end
         active[value] = true
     end
     return true

@@ -6,6 +6,7 @@
 -- that no primary rule produced. Adapters may feed extra sources (RE4R native taps) through `source`.
 -- Handles belong to a rig and are discarded with it; this module retains no engine objects.
 local Names = require("ShapeKeySystem_Core.Names")
+local L = require("ShapeKeySystem_Core.I18n")
 local B = {}
 local by_name, by_key = {}, {}
 for i, name in ipairs(Names.ARKIT52) do by_name[name], by_key[i] = i, name end
@@ -22,21 +23,21 @@ end
 -- opts.label prefixes the messages ("Leon"); opts.taps allows rules without a joint (adapter sources).
 function B.validate(calibration, opts)
     opts = opts or {}
-    local label = opts.label and (opts.label .. " ") or ""
+    local label = opts.label and (L.tr(opts.label) .. " ") or ""
     if type(calibration) ~= "table" or type(calibration.joints) ~= "table" or type(calibration.rules) ~= "table" then
-        return false, label .. "标定数据缺失"
+        return false, L.f("%s标定数据缺失", label)
     end
     for _, rule in ipairs(calibration.rules) do
         if not by_name[rule.key] or not finite(rule.lo) or not finite(rule.hi) or rule.lo == rule.hi
-            or not finite(rule.gain or 1) then return false, label .. "标定规则无效" end
+            or not finite(rule.gain or 1) then return false, L.f("%s标定规则无效", label) end
         if rule.fallback ~= nil and (type(rule.fallback) ~= "boolean" or not rule.joint) then
-            return false, label .. "补充规则需要骨骼来源"
+            return false, L.f("%s补充规则需要骨骼来源", label)
         end
         if rule.joint then
             local j = calibration.joints[rule.joint]
             if not j or (j.kind ~= "pos" and j.kind ~= "rot") or type(j.axis) ~= "table"
                 or type(j.neutral) ~= "table" or #j.axis ~= 3 or #j.neutral ~= 7 then
-                return false, label .. "骨骼标定无效"
+                return false, L.f("%s骨骼标定无效", label)
             end
             for _, v in ipairs(j.axis) do if not finite(v) then return false, "标定轴无效" end end
             for _, v in ipairs(j.neutral) do if not finite(v) then return false, "中立位无效" end end

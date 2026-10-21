@@ -8,6 +8,7 @@ local BoneHold = require("ShapeKeySystem_Games.RE4R.BoneHold")
 local Conditions = require("ShapeKeySystem_Games.RE4R.Conditions")
 local Playback = require("ShapeKeySystem_Games.RE4R.Playback")
 local Cutscene = require("ShapeKeySystem_Games.RE4R.Cutscene")
+local L = require("ShapeKeySystem_Core.I18n")
 local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
     rewrite_active_weights = true, scene_search = false, scoped_bindings = true,
     conditions = Conditions,
@@ -250,9 +251,9 @@ function A.init(events)
     end)
     for _, actor in ipairs({"leon", "ada"}) do
         local ok, d = pcall(json.load_file, "ShapeKeySystem/builtin/re4/" .. actor .. ".json")
-        if not ok then return false, actor .. " 标定文件无法读取" end
+        if not ok then return false, L.f("%s 标定文件无法读取", actor) end
         local configured, valid, why = pcall(Signals.validate, d)
-        if not configured then return false, actor .. " 标定格式无效" end
+        if not configured then return false, L.f("%s 标定格式无效", actor) end
         if not valid then return false, why end
         calibrations[actor] = d
     end

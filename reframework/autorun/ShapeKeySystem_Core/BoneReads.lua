@@ -16,6 +16,7 @@
 -- - Handles hold joint references and belong to a rig; they are dropped with it.
 
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local R = { BASE = 1000 }
 
@@ -42,10 +43,10 @@ local function finite(v) return type(v) == "number" and v == v and math.abs(v) <
 -- Returns { list, by_name } from a calibration table (name -> entry), or nil and a reason; an absent
 -- table is an empty list. label prefixes the messages.
 function R.load(data, label)
-    label = label or ""
+    label = label and L.tr(label) or ""
     local out = { list = {}, by_name = {} }
     if data == nil then return out end
-    if type(data) ~= "table" then return nil, label .. "骨骼信号表无效" end
+    if type(data) ~= "table" then return nil, L.f("%s骨骼信号表无效", label) end
     local names = {}
     for name in pairs(data) do names[#names + 1] = name end
     table.sort(names)
@@ -53,7 +54,7 @@ function R.load(data, label)
         local e = data[name]
         local pos = type(e) == "table" and AXES[e.axis] and finite(e.full_mm) and e.full_mm ~= 0
         local rot = type(e) == "table" and AXES[e.rot_axis] and finite(e.full_deg) and e.full_deg ~= 0
-        if type(e.bone) ~= "string" or not (pos or rot) then return nil, label .. "骨骼信号无效：" .. tostring(name) end
+        if type(e.bone) ~= "string" or not (pos or rot) then return nil, L.f("%s骨骼信号无效：%s", label, tostring(name)) end
         local sig = { name = name, bone = e.bone, kind = pos and "pos" or "rot",
                       axis = pos and AXES[e.axis] or AXES[e.rot_axis],
                       full = pos and e.full_mm / 1000 or e.full_deg,
@@ -71,7 +72,7 @@ end
 function R.parse(sigs, v)
     if type(v) ~= "string" or v:find("bone.", 1, true) ~= 1 then return nil, nil end
     local sig = sigs and sigs.by_name[v:sub(6)]
-    if not sig then return nil, "未知骨骼信号：" .. v end
+    if not sig then return nil, L.f("未知骨骼信号：%s", v) end
     return sig.key
 end
 

@@ -11,6 +11,7 @@ local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
 local TextInput = require("ShapeKeySystem_UI.TextInput")
 local Blocker = require("ShapeKeySystem_UI.InputBlocker")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Panel = { open = false }
 local C, M = T.c, T.m
@@ -49,7 +50,7 @@ Panel.toast = toast
 -- SKS.call with failures shown as a toast
 local function call(cmd, args)
     local ok, code, msg, res = SKS.call(cmd, args)
-    if not ok then toast("error", string.format("%s：%s %s", cmd, tostring(code), tostring(msg or ""))) end
+    if not ok then toast("error", L.f("%s：%s %s", cmd, tostring(code), L.tr(tostring(msg or "")))) end
     return ok, res
 end
 
@@ -72,7 +73,7 @@ end
 local function get_page(key)
     local impl = page_impl[key]
     if not impl and page_load_err[key] then
-        toast("error", "页面加载失败：" .. page_load_err[key])
+        toast("error", L.f("页面加载失败：%s", page_load_err[key]))
         page_load_err[key] = nil
     end
     return impl or nil
@@ -112,6 +113,15 @@ local function draw_titlebar(st, x, y, w)
     -- right side, right to left
     local rx = x + w - 12 - 26
     if W.close_button(rx, y + 7, 26) then Panel.set_open(false) end
+    -- the language switch names the other language in its own script, so a player who cannot
+    -- read the current one still finds it
+    local other = (st.settings.language or "zh") == "zh" and "en" or "zh"
+    local lw = D.measure(W.small(), L.LANG_NAMES[other]) + 18
+    rx = rx - 12 - lw
+    if W.button(L.LANG_NAMES[other], rx, y + 9, lw, 22, { kind = "ghost", font = W.small() }) then
+        call("set_setting", { key = "language", value = other })
+    end
+    W.tooltip("语言 / Language", rx, y + 9, lw, 22)
     local rt = st.runtime
     local tw = D.measure(W.body(), "启用") + 38
     rx = rx - 16 - tw
@@ -126,11 +136,14 @@ local function draw_titlebar(st, x, y, w)
             for _, p in ipairs(PAGES) do if p.key == ui.page and p.adv then goto_page("basic") end end
         end
     end
-    tw = D.measure(W.body(), "翻译形态键") + 38
-    rx = rx - 16 - tw
-    ch, v = W.toggle("翻译形态键", rx, y + 6, st.settings.translate_keys == true)
-    if ch then call("set_setting", { key = "translate_keys", value = v }) end
-    W.tooltip("形态键显示中文译名，悬停可看原名；只影响显示", rx, y + 6, tw, 28)
+    -- 译名只有中文（API.lua 只在 language = "zh" 时翻译形态键），其他界面语言不显示这个开关
+    if (st.settings.language or "zh") == "zh" then
+        tw = D.measure(W.body(), "翻译形态键") + 38
+        rx = rx - 16 - tw
+        ch, v = W.toggle("翻译形态键", rx, y + 6, st.settings.translate_keys == true)
+        if ch then call("set_setting", { key = "translate_keys", value = v }) end
+        W.tooltip("形态键显示中文译名，悬停可看原名；只影响显示", rx, y + 6, tw, 28)
+    end
     return rx - 10   -- right end of the drag area
 end
 
@@ -167,7 +180,7 @@ local function draw_statusbar(st, x, y, w)
     D.rect(x, y, w, h, C.panel)
     D.rect(x, y, w, 1, C.line)
     local a = st.debug.perf or {}
-    local text = string.format("%.2f ms/帧 · 写入 %.1f / 跳过 %.1f", a.total or 0, a.writes or 0, a.skipped or 0)
+    local text = L.f("%.2f ms/帧 · 写入 %.1f / 跳过 %.1f", a.total or 0, a.writes or 0, a.skipped or 0)
     local f = W.small()
     local used = D.text_mid(text, x + 12, y, h, C.muted, f, w * 0.6)
     D.text_mid(st.debug.status or "", x + 24 + used, y, h, C.faint, f, w - used - 40)
@@ -259,7 +272,7 @@ end
 function Panel.draw_inputs()
     if not Panel.open then return end
     local ok, e = pcall(TextInput.draw)
-    if not ok then TextInput.clear(); toast("error", "输入框：" .. tostring(e)) end
+    if not ok then TextInput.clear(); toast("error", L.f("输入框：%s", tostring(e))) end
 end
 
 function Panel.ui_open() return Panel.open, Panel.open and ui.want_signals end
@@ -320,7 +333,7 @@ local function draw()
         if not ok then
             local e = tostring(used)
             used = 40
-            D.text("页面出错：" .. e, cx, y0 + 4, C.error, W.small(), cw)
+            D.text(L.f("页面出错：%s", e), cx, y0 + 4, C.error, W.small(), cw)
             if ctx.state.last_err ~= e then ctx.state.last_err = e; SKS.log("panel page error: %s", e) end
         end
         W.end_scroll((tonumber(used) or 0) + 12)

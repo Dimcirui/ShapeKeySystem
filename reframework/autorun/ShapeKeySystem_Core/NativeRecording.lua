@@ -5,19 +5,20 @@
 local Recording = require("ShapeKeySystem_Core.Recording")
 local Names = require("ShapeKeySystem_Core.Names")
 local X = require("ShapeKeySystem_Core.Expression")
+local L = require("ShapeKeySystem_Core.I18n")
 local N = {}
 local key_of = {}
 for i, name in ipairs(Names.ARKIT52) do key_of[name] = i end
 
 local function array(values, limit, label)
-    assert(type(values) == "table", label .. " 必须是数组")
+    assert(type(values) == "table", L.f("%s 必须是数组", label))
     local n, count = #values, 0
-    assert(n <= limit, label .. " 超过数量上限")
+    assert(n <= limit, L.f("%s 超过数量上限", label))
     for key in pairs(values) do
-        assert(Recording.finite(key, n, true) and key >= 1, label .. " 下标无效")
+        assert(Recording.finite(key, n, true) and key >= 1, L.f("%s 下标无效", label))
         count = count + 1
     end
-    assert(count == n, label .. " 包含缺号")
+    assert(count == n, L.f("%s 包含缺号", label))
     return n
 end
 
@@ -75,8 +76,8 @@ function N.decode(data, track, catalog, game, checkpoint)
         end
         for name, value in pairs(values.outputs) do
             local key = key_of[name]
-            assert(key and catalog[key], "录制包含未知信号：" .. tostring(name))
-            assert(Recording.finite(value, 1) and value >= 0, "录制信号超出 0..1：" .. name)
+            assert(key and catalog[key], L.f("录制包含未知信号：%s", tostring(name)))
+            assert(Recording.finite(value, 1) and value >= 0, L.f("录制信号超出 0..1：%s", name))
             present[key] = true
         end
         if checkpoint then checkpoint(64, i, count * 2) end
@@ -96,7 +97,7 @@ function N.decode(data, track, catalog, game, checkpoint)
         local row = {t = sample.t, values = {}}
         for column, item in ipairs(keys) do
             local value = sample.values.outputs[item.name]
-            assert(value ~= nil, "录制信号中途缺失：" .. item.name .. "，请重新录制")
+            assert(value ~= nil, L.f("录制信号中途缺失：%s，请重新录制", item.name))
             row.values[column] = value
         end
         local joints = sample.values.joints

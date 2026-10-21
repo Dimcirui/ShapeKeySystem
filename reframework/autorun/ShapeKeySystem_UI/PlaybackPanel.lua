@@ -5,6 +5,7 @@ local D = require("ShapeKeySystem_UI.Draw")
 local T = require("ShapeKeySystem_UI.Theme")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Mapping = require("ShapeKeySystem_UI.MappingEditor")
+local L = require("ShapeKeySystem_Core.I18n")
 local P = {}
 local C = T.c
 
@@ -21,13 +22,13 @@ local function draw_analysis(ctx, x, y, w)
     if s.playback_analysis ~= a then
         s.playback_analysis, s.playback_analysis_page = a, 1
     end
-    local summary = string.format("%s · %s · %s · 已统计 %d 帧", a.file,
-        ctx.st.playback.signal_replay and "录制信号" or a.mode == "raw" and "原版输入" or "最终信号", a.finished and "已结束" or "统计中", a.sampled_frames)
+    local summary = L.f("%s · %s · %s · 已统计 %d 帧", a.file,
+        L.tr(ctx.st.playback.signal_replay and "录制信号" or a.mode == "raw" and "原版输入" or "最终信号"), L.tr(a.finished and "已结束" or "统计中"), a.sampled_frames)
     D.text_mid(summary, x + 8, cy, 24, C.text, W.small(), w - 16)
     W.tooltip(summary, x + 8, cy, w - 16, 24)
     cy = cy + 24
-    local binding_summary = string.format("当前配置：%s · 活跃 %d · 已绑定 %d · 未绑定 %d",
-        a.profile or "无表情配置", a.active_signals, a.bound_signals, a.unbound_signals)
+    local binding_summary = L.f("当前配置：%s · 活跃 %d · 已绑定 %d · 未绑定 %d",
+        a.profile or L.tr("无表情配置"), a.active_signals, a.bound_signals, a.unbound_signals)
     D.text_mid(binding_summary, x + 8, cy, 24, C.muted, W.small(), w - 16)
     W.tooltip(binding_summary, x + 8, cy, w - 16, 24)
     cy = cy + 24
@@ -62,13 +63,13 @@ local function draw_analysis(ctx, x, y, w)
         local label = item.rank .. ". " .. row.label
         D.text_mid(label, x + 16, cy, 24, C.text, W.small(), action_x - x - 24)
         W.tooltip(label, x + 16, cy, action_x - x - 24, 24)
-        D.text_center(string.format("%d 次 · %.1f%%", row.hits, 100 * row.hits / math.max(1, a.sampled_frames)),
+        D.text_center(L.f("%d 次 · %.1f%%", row.hits, 100 * row.hits / math.max(1, a.sampled_frames)),
             action_x, cy, action_w, 24, C.brass, W.small())
         local names = {}
         for _, mapping in ipairs(row.mappings) do
-            names[#names + 1] = mapping.name .. (mapping.present and "" or "（当前模型缺失）")
+            names[#names + 1] = mapping.present and mapping.name or L.f("%s（当前模型缺失）", mapping.name)
         end
-        local bound = #names > 0 and ("已绑定：" .. table.concat(names, "、")) or "未绑定形态键映射"
+        local bound = #names > 0 and L.f("已绑定：%s", table.concat(names, L.tr("、"))) or "未绑定形态键映射"
         if #names > 0 then
             D.text_mid(bound, x + 16, cy + 24, 24, C.muted, W.small(), action_x - x - 24)
             W.tooltip(bound, x + 16, cy + 24, action_x - x - 24, 24)
@@ -77,9 +78,9 @@ local function draw_analysis(ctx, x, y, w)
             if W.button("添加映射", action_x, cy + 22, action_w, 24, { font = W.small() }) then
                 Mapping.open(ctx, nil, row.signal)
             end
-            W.tooltip("新建形态键映射，并自动使用 " .. (row.signal or row.label) .. " 作为面部信号", x + 16, cy + 24, action_x - x - 24, 24)
+            W.tooltip(L.f("新建形态键映射，并自动使用 %s 作为面部信号", row.signal or row.label), x + 16, cy + 24, action_x - x - 24, 24)
         end
-        local purpose = (row.guessed and "用途（推测）：" or "用途：") .. row.purpose
+        local purpose = L.f(row.guessed and "用途（推测）：%s" or "用途：%s", L.tr(row.purpose))
         D.text_mid(purpose, x + 16, cy + 48, 24, C.faint, W.small(), w - 32)
         W.tooltip(purpose, x + 16, cy + 48, w - 32, 24)
         cy = cy + rh
@@ -94,8 +95,8 @@ function P.draw(ctx, x, y, w)
     local active = r.status ~= "stopped"
     local open = active or s.playback_open == true
     local clicked, height = W.header("面部动画测试", x, y, w, open,
-        active and ((preparing and "准备中" or r.status == "paused" and "暂停" or "播放中") .. " · " .. (r.file or "")
-            .. (r.signal_replay and " · 录制信号" or r.mode == "final" and " · 最终信号" or " · 原版输入")) or nil)
+        active and L.f("%s · %s · %s", L.tr(preparing and "准备中" or r.status == "paused" and "暂停" or "播放中"), r.file or "",
+            L.tr(r.signal_replay and "录制信号" or r.mode == "final" and "最终信号" or "原版输入")) or nil)
     if clicked and not active then s.playback_open = not open end
     local cy = y + height + 6
     if not open then return cy - y end
@@ -114,7 +115,7 @@ function P.draw(ctx, x, y, w)
     if not mode_index then mode_index, s.playback_mode = 1, modes[1].value end
     local labels, pick = {}, nil
     for i, file in ipairs(r.files) do
-        labels[i] = file.name .. (file.source == "user" and " · 用户" or " · 内置")
+        labels[i] = L.f(file.source == "user" and "%s · 用户" or "%s · 内置", file.name)
         if file.id == s.playback_id then pick = i end
     end
     if not pick and r.files[1] then pick, s.playback_id = 1, r.files[1].id end
@@ -128,7 +129,7 @@ function P.draw(ctx, x, y, w)
         mode_labels, mode_index)
     if changed then s.playback_mode = modes[index].value end
     local mode = s.playback_mode or "raw"
-    local hint = file and string.format("%.2f 秒 · %s", file.duration or 0, r.signal_replay and "录制表情信号" or file.final and "含最终信号" or "仅原版输入") or "请添加录制后刷新"
+    local hint = file and L.f("%.2f 秒 · %s", file.duration or 0, L.tr(r.signal_replay and "录制表情信号" or file.final and "含最终信号" or "仅原版输入")) or "请添加录制后刷新"
     if w >= 480 then D.text_mid(hint, x + 240, cy, 28, C.muted, W.small(), w - 248)
     else cy = cy + 32; D.text_mid(hint, x + 8, cy, 24, C.muted, W.small(), w - 16) end
     cy = cy + 34
