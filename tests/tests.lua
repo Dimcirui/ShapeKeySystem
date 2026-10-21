@@ -492,7 +492,14 @@ do
         if l:find("hunter parts changed (+ch03_024_0013 -ch03_012_0012)", 1, true) then found = true end
     end
     check(found, "a real part change drops the rigs and the trail names the parts")
+    found = false
+    for _, l in ipairs(trail) do if l == "primary parts: Player_Face ch03_024_0013" then found = true end end
+    check(found, "a scan after a part change trails the primary parts")
     ARMOR._name = "ch03_012_0012"; ticks(130)
+    trail = {}
+    SKS.call("set_master_gain", { value = 0.5 }); ticks(70)
+    check(trail[1] == "gains saved: master 1.00 -> 0.50", "a saved gain change is trailed: " .. tostring(trail[1]))
+    SKS.call("set_master_gain", { value = 1.0 }); ticks(70)
     Trail.event = event
 end
 
