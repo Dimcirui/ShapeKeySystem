@@ -231,4 +231,57 @@ event.playing = false
 check(A.primary_root() == ROOT and A.primary_source == "master", "cutscene over: back to the master player")
 sdk.get_managed_singleton = singleton
 
+-- conditions: weapon state fields read straight off the master player's weapon class
+local Cnd = require("ShapeKeySystem_Core.Conditions")
+check(A.conditions and Cnd.defs.weapon_form and Cnd.defs.scroll, "conditions installed")
+local hunter = { fields = {}, calls = {} }
+function hunter:get_field(n) return self.fields[n] end
+function hunter:call(m) return self.calls[m] end
+local hud_state = "DEFAULT_BLUE"
+local hud = { get_field = function(_, n) if n == "pnl_scrollicon" then
+    return { call = function(_, m) if m == "get_PlayState" then return hud_state end end } end end }
+sdk.get_managed_singleton = function(name)
+    if name == "snow.player.PlayerManager" then
+        return { call = function(_, m) if m == "findMasterPlayer" then return hunter end end }
+    end
+    if name == "snow.gui.GuiManager" then
+        return { call = function(_, m) if m == "get_refGuiHud_WeaponTechniqueMySet" then return hud end end }
+    end
+    return singleton(name)
+end
+local frame_no = 1000
+local function sample() frame_no = frame_no + 1; Cnd.reset(); Cnd.sample(frame_no); return Cnd.V end
+hunter.fields._playerWeaponType = 11
+hunter.calls.isWeaponOn = true
+hunter.calls.get_Mode = 0
+hunter.fields._ShieldBuffTimer, hunter.fields._SwordBuffTimer = 30.0, 0.0
+local V = sample()
+check(V.weapon_on == true and V.weapon_type == 11 and V.weapon_form == "cb_shield", "charge blade: sword + red shield")
+check(V.charge_level == nil and V.spirit_level == nil, "charge blade has no charge or spirit level")
+check(V.scroll == "blue", "scroll from the HUD play state")
+hunter.calls.get_Mode = 1; hunter.fields._IsChainsawBuff = true
+check(sample().weapon_form == "cb_axe_buff", "charge blade: axe + red axe")
+hunter.fields = { _playerWeaponType = 0, _TameLv = 2 }
+check(sample().charge_level == 2 and Cnd.V.weapon_form == "normal", "great sword charge level")
+hunter.fields = { _playerWeaponType = 13 }
+hunter.calls.get_ChargeLv = { get_field = function(_, n) if n == "value__" then return 3 end end }
+check(sample().charge_level == 3, "bow charge level from a boxed enum")
+hunter.fields = { _playerWeaponType = 2 }
+check(sample().spirit_level == 0, "long sword spirit level unreadable -> 0")
+hunter.fields = { _playerWeaponType = 9, IsKijinKyouka = false, ["<DBState>k__BackingField"] = 1 }
+check(sample().weapon_form == "db_kijin", "dual blades demon mode")
+hunter.fields = { _playerWeaponType = 1, _BottleAwakeDurationTimer = 5.0 }
+check(sample().weapon_form == "sa_awakened", "switch axe amped")
+hud_state = "SOMETHING_ELSE"; hunter.calls = {}
+V = sample()
+check(V.scroll == nil and V.weapon_on == nil, "unreadable scroll and weapon_on stay nil")
+check(V.hp_pct == nil, "no HP source yet")
+sdk.get_managed_singleton = function(name)
+    if name == "snow.player.PlayerManager" then return { call = function() return nil end } end
+    return singleton(name)
+end
+Cnd.reset()
+check(Cnd.sample(frame_no + 1) == false, "no hunter: sample fails")
+sdk.get_managed_singleton = singleton
+
 print("RISE FAILS:", failures)

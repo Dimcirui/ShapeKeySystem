@@ -18,9 +18,11 @@
 --   blinking and the idle mouth opening in its default (fallback) mode; gaze follows from the
 --   missing eye joints.
 local B = require("ShapeKeySystem_Core.BoneSignals")
+local Cond = require("ShapeKeySystem_Games.Rise.Conditions")
 local A = {
     id = "mhrise",
     name = "Monster Hunter Rise",
+    conditions = Cond,
     terms = { primary = "猎人", part = "防具" },
     hash_names = true, hash_item_only = true,
     scene_search = false,
