@@ -47,12 +47,10 @@ function M.configured()return config~=nil end
 function M.read_driver(head, motion_context)
     if not head or not head.root then return nil end
     local root_go = R.call(head.root, 'get_GameObject')
-    if not root_go then return nil end
-    local driver = R.component(root_go, sdk.typeof('app.PlayerFacialAnimationDriver'))
-    if not driver then return nil end
+    local driver = root_go and R.component(root_go, sdk.typeof('app.PlayerFacialAnimationDriver'))
     
-    local cur_vowel = driver:get_field('_CurrentVowel')
-    local cur_vol = driver:get_field('_CurrentVolume') or 0.0
+    local cur_vowel = driver and driver:get_field('_CurrentVowel')
+    local cur_vol = driver and (driver:get_field('_CurrentVolume') or 0.0) or 0.0
     
     local jw = motion_context and Motion.deform_value(motion_context, Hash.hash('HeadSkinned_blendShape.JwOpn_00_L')) or 0.0
     local crn = motion_context and Motion.deform_value(motion_context, Hash.hash('HeadSkinned_blendShape.CrnPl_01_L')) or 0.0
@@ -65,22 +63,31 @@ function M.read_driver(head, motion_context)
     local vnum = tonumber(cur_vowel) or 0
     
     local vol = math.max(cur_vol or 0, jw or 0)
+    local has_driver_vowel = false
     if vstr:find('A') or vnum == 1 then
-        weights[1] = math.max(0.15, vol)
+        weights[1] = math.max(0.15, vol); has_driver_vowel = true
     elseif vstr:find('I') or vnum == 2 then
-        weights[2] = math.max(0.15, math.max(vol, crn or 0))
+        weights[2] = math.max(0.15, math.max(vol, crn or 0)); has_driver_vowel = true
     elseif vstr:find('U') or vnum == 3 then
-        weights[3] = math.max(0.15, math.max(vol, pkr or 0))
+        weights[3] = math.max(0.15, math.max(vol, pkr or 0)); has_driver_vowel = true
     elseif vstr:find('E') or vnum == 4 then
-        weights[4] = math.max(0.15, math.max(vol, upr or 0))
+        weights[4] = math.max(0.15, math.max(vol, upr or 0)); has_driver_vowel = true
     elseif vstr:find('O') or vnum == 5 then
-        weights[5] = math.max(0.15, math.max(vol, fnl or 0))
-    else
-        if jw and jw > 0.05 then
-            weights[1] = jw
+        weights[5] = math.max(0.15, math.max(vol, fnl or 0)); has_driver_vowel = true
+    end
+    
+    if not has_driver_vowel then
+        local any_deform = false
+        if jw and jw > 0.03 then weights[1] = jw; any_deform = true end
+        if crn and crn > 0.05 then weights[2] = crn; any_deform = true end
+        if pkr and pkr > 0.05 then weights[3] = pkr; any_deform = true end
+        if upr and upr > 0.05 then weights[4] = upr; any_deform = true end
+        if fnl and fnl > 0.05 then weights[5] = fnl; any_deform = true end
+        if not any_deform and not driver then
+            return nil
         end
     end
-    return weights, 'ok', {}, 'driver'
+    return weights, 'ok', {}, has_driver_vowel and 'driver' or 'deform'
 end
 
 function M.read(head,diagnostic,fallback,omitted,frame,motion_context)

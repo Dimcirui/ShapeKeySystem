@@ -24,16 +24,43 @@ end
 local function resolve(head)
     local current=R.find()
     if not current or current.identity~=head.identity then return nil,'head_changed' end
-    local go=R.call(current.face,'get_GameObject')
-    local motion=R.component(go,sdk.typeof('via.motion.Motion'))
-    if R.address(R.call(motion,'get_GameObject'))~=R.address(go)then return nil,'motion_owner_unverified'end
-    local address=R.address(motion)
-    local generation=R.call(motion,'get_SkeletonConstructCount')
-    local count=R.call(motion,'get_JointCount')
-    if not address or not R.integer(generation,0xFFFFFFFF)or not R.integer(count,8192)or count==0 then
-        return nil,'motion_unavailable'
+    local face_go=R.call(current.face,'get_GameObject')
+    local root_go=R.call(current.root,'get_GameObject')
+
+    local face_motion=face_go and R.component(face_go,sdk.typeof('via.motion.Motion'))
+    local root_motion=root_go and R.component(root_go,sdk.typeof('via.motion.Motion'))
+
+    local motion = face_motion or root_motion
+    if not motion then return nil,'motion_unavailable' end
+
+    local function has_deforms(comp)
+        if not comp then return false end
+        local dh = R.call(comp, "get_DeformNameHashes")
+        local len = dh and (R.call(dh, "get_Length") or R.call(dh, "get_Count")) or 0
+        return len > 0
     end
-    return {motion=motion,count=count,identity=head.identity..':'..address..':'..generation..':'..count}
+
+    local deform_motion = motion
+    if has_deforms(face_motion) then
+        deform_motion = face_motion
+    elseif has_deforms(root_motion) then
+        deform_motion = root_motion
+    end
+
+    local address=R.address(motion)
+    local generation=R.call(motion,'get_SkeletonConstructCount') or 1
+    local count=R.call(motion,'get_JointCount') or 0
+    if count == 0 and root_motion then
+        count = R.call(root_motion, 'get_JointCount') or 0
+    end
+
+    return {
+        motion=motion,
+        root_motion=root_motion,
+        deform_motion=deform_motion,
+        count=count,
+        identity=head.identity..':'..address..':'..generation..':'..count
+    }
 end
 function M.open(head,cache)
     local c,why=resolve(head)
@@ -50,6 +77,9 @@ local function index_of(c,name)
     local index=cache.indices[name]
     if index==nil then
         index=R.call(c.motion,'getJointIndexByNameHash(System.UInt32)',Hash.hash(name))
+        if not R.integer(index,c.count-1) and c.root_motion then
+            index=R.call(c.root_motion,'getJointIndexByNameHash(System.UInt32)',Hash.hash(name))
+        end
         cache.indices[name]=R.integer(index,c.count-1)and index or false
     end
     if R.integer(index,c.count-1)then return index end
@@ -57,11 +87,13 @@ end
 
 -- Read native RE9 FACS Deform track evaluated on via.motion.Motion
 function M.deform_value(c, hash)
-    if not c or not c.motion then return nil end
+    if not c then return nil end
+    local dm = c.deform_motion or c.motion
+    if not dm then return nil end
     local cache = c.cache
     if not cache.deform_indices then
         cache.deform_indices = {}
-        local dhashes = R.call(c.motion, "get_DeformNameHashes")
+        local dhashes = R.call(dm, "get_DeformNameHashes")
         local len = dhashes and (R.call(dhashes, "get_Length") or R.call(dhashes, "get_Count")) or 0
         for i = 0, len - 1 do
             local h = Hash.hash_at(dhashes, i, true)
@@ -71,7 +103,7 @@ function M.deform_value(c, hash)
     local idx = cache.deform_indices[hash]
     if not idx then return nil end
     if not c.deform_values then
-        c.deform_values = R.call(c.motion, "get_DeformValues")
+        c.deform_values = R.call(dm, "get_DeformValues")
     end
     if not c.deform_values then return nil end
     local val = R.call(c.deform_values, "get_Item", idx)
