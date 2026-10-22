@@ -388,73 +388,73 @@
   ],
   "bone_fallbacks": {
     "eyeBlinkLeft": {
-      "lo": 7.0,
-      "hi": 33.5,
+      "lo": 0.5,
+      "hi": 7.0,
       "terms": [
         {
           "bone": "L_UprLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            -1,
             0
           ],
           "weight": 1,
-          "motion_neutral": [
-            8.875462287026031e-06,
-            2.7590194766115462e-05,
-            4.3959240368166916e-05,
-            0.9999999986137964
+          "motion_neutral_position": [
+            0.0346,
+            0.0778,
+            0.0921
           ]
         },
         {
           "bone": "L_LwrLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            1,
             0
           ],
-          "weight": -1,
-          "motion_neutral": [
-            0.0006197776462371023,
-            0.00032102907080568306,
-            0.00010562279089880237,
-            0.9999997508298843
+          "weight": 1,
+          "motion_neutral_position": [
+            0.0346,
+            0.0684,
+            0.092
           ]
         }
       ]
     },
     "eyeBlinkRight": {
-      "lo": 12.0,
-      "hi": 34.0,
+      "lo": 0.5,
+      "hi": 7.0,
       "terms": [
         {
           "bone": "R_UprLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            -1,
             0
           ],
           "weight": 1,
-          "motion_neutral": [
-            -1.5925011193030298e-06,
-            -2.5771259939883035e-05,
-            -4.1341925631060626e-05,
-            0.9999999988120758
+          "motion_neutral_position": [
+            -0.0299,
+            0.0783,
+            0.095
           ]
         },
         {
           "bone": "R_LwrLdEdge_02",
+          "kind": "pos",
           "axis": [
-            1,
             0,
+            1,
             0
           ],
-          "weight": -1,
-          "motion_neutral": [
-            0.0006145792383334135,
-            -0.00032221784680661693,
-            -0.00010431334440614225,
-            0.9999997537933424
+          "weight": 1,
+          "motion_neutral_position": [
+            -0.0292,
+            0.0684,
+            0.0934
           ]
         }
       ]
@@ -491,6 +491,58 @@
     "jawOpen": [
       "HeadSkinned_blendShape.JwOpn_00_L",
       "HeadSkinned_blendShape.JwOpn_00_R"
+    ],
+    "mouthSmileLeft": [
+      "HeadSkinned_blendShape.CrnPl_01_L",
+      "HeadSkinned_blendShape.CrnPl_04_L"
+    ],
+    "mouthSmileRight": [
+      "HeadSkinned_blendShape.CrnPl_01_R",
+      "HeadSkinned_blendShape.CrnPl_04_R"
+    ],
+    "browDownLeft": [
+      "HeadSkinned_blendShape.BrInDn_00_L"
+    ],
+    "browDownRight": [
+      "HeadSkinned_blendShape.BrInDn_00_R"
+    ],
+    "browInnerUp": [
+      "HeadSkinned_blendShape.BrInRs_00_L",
+      "HeadSkinned_blendShape.BrInRs_00_R"
+    ],
+    "browOuterUpLeft": [
+      "HeadSkinned_blendShape.BrOutRs_00_L"
+    ],
+    "browOuterUpRight": [
+      "HeadSkinned_blendShape.BrOutRs_00_R"
+    ],
+    "eyeSquintLeft": [
+      "HeadSkinned_blendShape.Sqnt_03_L",
+      "HeadSkinned_blendShape.Sqnt_06_L"
+    ],
+    "eyeSquintRight": [
+      "HeadSkinned_blendShape.Sqnt_03_R",
+      "HeadSkinned_blendShape.Sqnt_06_R"
+    ],
+    "mouthPucker": [
+      "HeadSkinned_blendShape.Pkr_01_L",
+      "HeadSkinned_blendShape.Pkr_01_R"
+    ],
+    "mouthFunnel": [
+      "HeadSkinned_blendShape.Fnl_04_L",
+      "HeadSkinned_blendShape.Fnl_04_R"
+    ],
+    "mouthFrownLeft": [
+      "HeadSkinned_blendShape.CrnDprs_00_L"
+    ],
+    "mouthFrownRight": [
+      "HeadSkinned_blendShape.CrnDprs_00_R"
+    ],
+    "re9BrowInLeft": [
+      "HeadSkinned_blendShape.BrInDn_00_L"
+    ],
+    "re9BrowInRight": [
+      "HeadSkinned_blendShape.BrInDn_00_R"
     ]
   },
   "expression_fallbacks": {

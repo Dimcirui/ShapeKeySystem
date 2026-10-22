@@ -33,11 +33,18 @@ end
 function G.mesh_ready(mesh)
     if not call(M_READY, mesh) then return false, "MeshReady=false" end
     -- Engines without this flag still require MeshReady and allocated channel buffers below.
-    if M_BS_ON and not call(M_BS_ON, mesh) then return false, "BlendShapeEnable=false" end
+    if M_BS_ON and not call(M_BS_ON, mesh) then
+        pcall(mesh.call, mesh, "set_BlendShapeEnable", true)
+        if M_BS_ON and not call(M_BS_ON, mesh) then return false, "BlendShapeEnable=false" end
+    end
     if call(M_BS_REL, mesh) then return false, "BlendShapeReleasedBuffers" end
     local cn, wc = call(M_CN, mesh), call(M_WC, mesh)
     if not cn or not wc then return false, "channel count unreadable" end
-    if wc < cn then return false, "weight buffer not allocated" end
+    if wc < cn then
+        pcall(mesh.call, mesh, "set_BlendShapeChannelWeightCount", cn)
+        wc = call(M_WC, mesh) or wc
+        if wc < cn then return false, "weight buffer not allocated" end
+    end
     if W.adapter.strict_bounds and W.limit(mesh) < cn then return false, "weight list not allocated" end
     return true
 end

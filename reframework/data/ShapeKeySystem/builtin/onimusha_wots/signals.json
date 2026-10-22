@@ -309,6 +309,118 @@
       "raw": "bsControl_012.y",
       "note": "lipPressor（左右共用）",
       "guessed": true
+    },
+    {
+      "name": "jawDrop",
+      "raw": "bone.jawDrop",
+      "note": "骨骼：下巴下移（张嘴）。说话与战斗时约 12-15mm"
+    },
+    {
+      "name": "lowerLipDrop",
+      "raw": "bone.lowerLipDrop",
+      "note": "骨骼：下唇中下移（张嘴）。约 22mm"
+    },
+    {
+      "name": "mouthCornerUp.L",
+      "raw": "bone.mouthCornerUp.L",
+      "note": "骨骼：左嘴角上提（笑）。录像里几乎没有笑，幅度为推测",
+      "guessed": true
+    },
+    {
+      "name": "mouthCornerUp.R",
+      "raw": "bone.mouthCornerUp.R",
+      "note": "骨骼：右嘴角上提（笑）。幅度为推测",
+      "guessed": true
+    },
+    {
+      "name": "mouthCornerDown.L",
+      "raw": "bone.mouthCornerDown.L",
+      "note": "骨骼：左嘴角下拉。张嘴时也会下移，死区较大。约 5.8mm"
+    },
+    {
+      "name": "mouthCornerDown.R",
+      "raw": "bone.mouthCornerDown.R",
+      "note": "骨骼：右嘴角下拉。约 5.0mm"
+    },
+    {
+      "name": "mouthCornerOut.L",
+      "raw": "bone.mouthCornerOut.L",
+      "note": "骨骼：左嘴角外拉（嘴变宽）。约 5.2mm"
+    },
+    {
+      "name": "mouthCornerOut.R",
+      "raw": "bone.mouthCornerOut.R",
+      "note": "骨骼：右嘴角外拉（嘴变宽）。约 6.1mm"
+    },
+    {
+      "name": "browInnerDown.L",
+      "raw": "bone.browInnerDown.L",
+      "note": "骨骼：左眉头下压（皱眉）。约 4.5mm"
+    },
+    {
+      "name": "browInnerDown.R",
+      "raw": "bone.browInnerDown.R",
+      "note": "骨骼：右眉头下压（皱眉）。约 5.0mm"
+    },
+    {
+      "name": "browRaise.L",
+      "raw": "bone.browRaise.L",
+      "note": "骨骼：左眉上移。约 6.3mm"
+    },
+    {
+      "name": "browRaise.R",
+      "raw": "bone.browRaise.R",
+      "note": "骨骼：右眉上移。约 6.4mm"
+    },
+    {
+      "name": "browLower.L",
+      "raw": "bone.browLower.L",
+      "note": "骨骼：左眉下压。约 4.5mm"
+    },
+    {
+      "name": "browLower.R",
+      "raw": "bone.browLower.R",
+      "note": "骨骼：右眉下压。约 3.7mm"
+    },
+    {
+      "name": "cheekRaise.L",
+      "raw": "bone.cheekRaise.L",
+      "note": "骨骼：左脸颊上提。约 4.7mm"
+    },
+    {
+      "name": "cheekRaise.R",
+      "raw": "bone.cheekRaise.R",
+      "note": "骨骼：右脸颊上提。约 5.5mm"
+    },
+    {
+      "name": "eyeClose.L",
+      "raw": "bone.eyeClose.L",
+      "note": "骨骼：左上眼睑下移闭眼。游戏眨眼约 8.7mm（3 段录像的 1%）"
+    },
+    {
+      "name": "eyeClose.R",
+      "raw": "bone.eyeClose.R",
+      "note": "骨骼：右上眼睑下移闭眼。约 7.5mm"
+    },
+    {
+      "name": "eyeWiden.L",
+      "raw": "bone.eyeWiden.L",
+      "note": "骨骼：左上眼睑比待机更高（睁大眼）。约 2.8mm"
+    },
+    {
+      "name": "eyeWiden.R",
+      "raw": "bone.eyeWiden.R",
+      "note": "骨骼：右上眼睑比待机更高（睁大眼）。约 3.0mm"
+    },
+    {
+      "name": "lowerLidRaise.L",
+      "raw": "bone.lowerLidRaise.L",
+      "note": "骨骼：左下眼睑上提。约 3.4mm"
+    },
+    {
+      "name": "lowerLidRaise.R",
+      "raw": "bone.lowerLidRaise.R",
+      "note": "骨骼：右下眼睑上提。约 3.9mm"
     }
   ]
 }

@@ -24,8 +24,12 @@ check(a.state.sampled_frames == 7 and a.by_param[1].hits == 5 and a.by_param[7].
 a:seek(2)
 check(a.state.sampled_frames == 8 and a.by_param[7].hits == 5, "seek counts only the target frame")
 local sig = Profile.load_signals()
-local complete, seen = #sig.list == 200, {}
-for _, s in ipairs(sig.list) do seen[s.key] = true end
+local seen, fc = {}, 0
+for _, s in ipairs(sig.list) do
+    seen[s.key] = true
+    if s.key and s.key <= 200 then fc = fc + 1 end   -- bone signals are keyed above the fcParam range
+end
+local complete = fc == 200
 for n = 1, 200 do complete = complete and seen[n] == true end
 check(complete, "per-game dictionary retains every parameter from 1 through 200")
 local prog = assert(Profile.compile({ id = "analysis", name = "analysis", aliases = {}, channels = {
