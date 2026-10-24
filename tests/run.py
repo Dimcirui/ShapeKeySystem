@@ -84,6 +84,14 @@ if "--instances-only" in sys.argv:
     L.execute(open(os.path.join(HERE, "tests_actor_instances.lua"), encoding="utf-8").read())
     sys.exit(0)
 
+if "--re9-only" in sys.argv:
+    L, G, _ = boot(data)
+    L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+    L.execute(open(os.path.join(HERE, "tests_re9.lua"), encoding="utf-8").read())
+    I, _, _ = boot(data)
+    I.execute(open(os.path.join(HERE, "tests_re9_input.lua"), encoding="utf-8").read())
+    sys.exit(0)
+
 if "--re4r-only" in sys.argv:
     L, G, _ = boot(data)
     L.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
@@ -174,6 +182,13 @@ L6, G6, _ = boot(data6)
 L6.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 L6.execute(open(os.path.join(HERE, "tests_actor_instances.lua"), encoding="utf-8").read())
 sys.path.insert(0, HERE)
+data7 = tempfile.mkdtemp(prefix="sks_re9_")
+shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path.join(data7, "ShapeKeySystem", "builtin"))
+L7, G7, _ = boot(data7)
+L7.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
+L7.execute(open(os.path.join(HERE, "tests_re9.lua"), encoding="utf-8").read())
+I7, _, _ = boot(data7)
+I7.execute(open(os.path.join(HERE, "tests_re9_input.lua"), encoding="utf-8").read())
 from mm3ref import mm3
 want = mm3("eyeBlinkLeft".encode("utf-16-le"))
 print("murmur3 lua", G.MM3, "python", want, "ok" if G.MM3 == want else "FAIL")

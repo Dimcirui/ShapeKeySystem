@@ -1,0 +1,9 @@
+{
+  "schema": "sks.model_names/1",
+  "models": {
+    "leon": {
+      "zh": "里昂",
+      "en": "Leon"
+    }
+  }
+}

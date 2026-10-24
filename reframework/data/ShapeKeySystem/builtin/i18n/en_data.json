@@ -657,6 +657,17 @@
   "骨骼：左眉头下压（皱眉）。约 4.5mm": "Bone: left inner brow down (frown). About 4.5mm",
   "骨骼：左脸颊上提。约 4.7mm": "Bone: left cheek up. About 4.7mm",
   "骨骼：左脸颊上提（笑眼）。9-10mm": "Bone: left cheek up (smiling eyes). 9-10mm",
-  "鼓腮（推测 pout 是鼓腮）": "Cheek puff (pout guessed to be a cheek puff)"
+  "鼓腮（推测 pout 是鼓腮）": "Cheek puff (pout guessed to be a cheek puff)",
+  "RE9 最小表情": "RE9 Minimal",
+  "里昂左右眨眼和张嘴，优先原生修正权重，缺失时使用眼睑与下颌面骨。面骨范围为当前场景初始映射，尚未标定完整台词和大幅张嘴。": "Leon's left/right blinks and mouth opening. Native correction weights first; the eyelid and jaw face bones when those are missing. The face bone ranges are an initial mapping from current scenes; full dialogue and wide mouth opening are not calibrated yet.",
+  "RE9 原生面部输出整批映射；保留基础标定，按模型现有形态键匹配。": "Full mapping of RE9's native face outputs; keeps the basic calibration and matches the model's existing shape keys.",
+  "保留原下颌标定，非 A 口型优先时减弱基础张嘴以避免重复叠加": "Keeps the original jaw calibration; weakens the basic mouth opening while a non-A mouth shape leads, to avoid stacking twice",
+  "三路基础输入，来源依 RE9 输入模式选择，范围仍为初始标定": "One of the three basic inputs; the source follows the RE9 input mode, ranges are still the initial calibration",
+  "RE9 整批候选；取自本游戏面骨或原生输出的骨骼投影，缺失才按需读取 Motion": "RE9 batch candidate; a bone projection of this game's face bones or native outputs, reads Motion only when missing",
+  "扩展候选；在 re9_input.json 开启 extended 后生效，面骨优先、缺失才读取 Motion": "Extended candidate; active once extended is on in re9_input.json. Face bones first, Motion only when missing",
+  "第二组扩展候选，尚待画面验收；面骨优先，缺失才读取 Motion": "Second extended candidate group, not yet checked on screen; face bones first, Motion only when missing",
+  "本游戏尚未接入该信号": "This game does not provide this signal yet",
+  "RE9 原生口型基形投影；不是音频音素识别": "Projection onto RE9's native mouth shape basis; not audio phoneme recognition",
+  "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD": "Bone projection of an RE9 native correction output; includes combined corrections, not stacked onto MMD automatically"
  }
 }
