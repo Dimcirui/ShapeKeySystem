@@ -68,6 +68,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `profile` | `{id, name, source, extends}` | 当前表情配置。`source`：`builtin` / `mod` / `user` |
 | `coverage` | `{arkit_hit, arkit_total, extra, recommended}` | 覆盖率；`recommended` 是匹配通道最多的配置，供「自动匹配」使用 |
 | `binding_source` | string? | 配置是由哪个父预设指定的 |
+| `auto_source` | bool? | 配置是扫描自动匹配的（见第 5 节「自动匹配」） |
 | `no_signals` | bool | 适配器没有原始通道（`A.raw`），表情不读游戏信号；捏脸、预设和外部 API 照常 |
 | `master_gain` | number | 整体表情强度，0~2 |
 | `gaze_gain` | number | 视线强度，0~2 |
@@ -353,7 +354,8 @@ reframework/data/ShapeKeySystem/
 - 装备构建完成（`app.HunterCharacter.onEquipBuildEnd`）后，或部件名单发生变化时（每 5 帧检查一次），立即放掉引用，30 帧后重新扫描。
 - 每个网格要连续 60 帧处于就绪状态（MeshReady、BlendShapeEnable、缓冲区没有被释放、权重缓冲已分配）才开始写入；之后每帧再做两项快速检查。定期重扫时，同一个网格（按地址识别）保留之前的就绪计数和上次写入的值，所以不会停写，也不会重写。
 - 每帧只读网格上实际存在的通道要用到的 fcParam（引用也会追踪）。测试网格每帧的读取次数从 51 降到 10。`scene.rigs[i].reads` 显示这个数。
-- 扫描不会自行切换表情配置。命令 `auto_match_profile`（面板「自动匹配」按钮）切换到 `coverage.recommended`，效果等同手动 `set_profile`；已是最佳配置时返回 `{changed = false}`。
+- 扫描只在一种情况下自行切换表情配置：身上的部件没有父预设指定配置，玩家也没有为这套部件手动选过配置，而全局配置（`settings.profile`）在这些部件上一个通道都匹配不上。这时扫描临时换成匹配通道最多的配置（至少 2 个通道，同数时优先 ARKit），不写入 `settings.profile`，`auto_source = true`；换上全局配置能驱动的部件后恢复全局配置。没有部件的扫描（读盘、菜单）保留自动匹配的结果；映射有未保存的修改时不切换。手动选择（`set_profile`、新建或保存配置）记下当时的部件，之后穿着同一套部件时不再自动匹配。
+- 命令 `auto_match_profile`（面板「自动匹配」按钮）切换到 `coverage.recommended`，效果等同手动 `set_profile`；已是最佳配置时返回 `{changed = false}`。
 - 新增内置配置 `shinano.json`，对应 Shinano 原生的形态键名。
 - 开关 `cutscene_drive`（2026-10-09 起默认开启；跳过后仍在播放 90 帧会自动重新驱动，加载结束进入播放也视为新的一段）：过场播放中（IsBusy 为真、IsBusyLoad 为假）照常驱动猎人。分段靠 `app.DemoMediator` 的钩子，都是前置钩子，在游戏执行之前先放掉引用：
   - `onPlayStartTimeline(i)`：每一段开始时触发（Lua Bone System 也挂在这里）。触发后放掉所有引用，等 30 帧，然后**搜索整个场景**重新扫描（过场里显示的猎人通常是副本 `Pl000_00`，不是主角色），再经过 60 帧预热后写入。
