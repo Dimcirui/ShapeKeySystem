@@ -8,6 +8,7 @@ local I = require("ShapeKeySystem_UI.Input")
 local U = require("ShapeKeySystem_Core.Util")
 local Profile = require("ShapeKeySystem_Core.Profile")
 local Expression = require("ShapeKeySystem_Core.Expression")
+local L = require("ShapeKeySystem_Core.I18n")
 local E = {}
 local C = T.c
 local min, max = math.min, math.max
@@ -79,7 +80,7 @@ end
 local function mark(draft) draft.dirty = true end
 
 local function signal_title(sd)
-    local label = sd.no_signal and "本游戏没有" or sd.label
+    local label = sd.no_signal and L.tr("本游戏没有") or sd.label
     return sd.name == label and label or (sd.name .. " · " .. label)
 end
 
@@ -92,30 +93,32 @@ function E.summary(ctx, node)
         for _, sd in ipairs(ctx.st.mapping.signals or {}) do
             if sd.name == node.s then
                 label = signal_title(sd)
-                detail = sd.note .. (sd.guessed and "（推测）" or "")
+                detail = L.tr(sd.note) .. (sd.guessed and L.tr("（推测）") or "")
                 break
             end
         end
         if label == LABELS[2] then label = tostring(node.s) end
     elseif OPS[kind] then
-        label = label .. " · " .. #(node[kind] or {}) .. " 个输入"
+        label = L.f("%s · %d 个输入", L.tr(label), #(node[kind] or {}))
         local parts = {}
         for _, child in ipairs(node[kind] or {}) do
             local ck = E.node_type(child)
-            local value = child.s or child.ref or (child.const ~= nil and tostring(child.const)) or LABELS[index_of(TYPES, ck)]
+            local value = child.s or child.ref or (child.const ~= nil and tostring(child.const)) or L.tr(LABELS[index_of(TYPES, ck)])
             parts[#parts + 1] = value .. ((child.k and child.k ~= 1) and string.format(" ×%g", child.k) or "")
         end
         detail = table.concat(parts, kind == "sum" and " + " or " / ")
-    elseif kind == "ref" then detail = "引用：" .. (node.ref or "未选择")
-    elseif kind == "p" then label = (ctx.SKS and ctx.SKS.raw_label(node.p)) or ("原始通道 · " .. tostring(node.p))
-    elseif kind == "const" then label = "常量 · " .. tostring(node.const)
+    elseif kind == "ref" then detail = L.f("引用：%s", node.ref or L.tr("未选择"))
+    elseif kind == "p" then label = (ctx.SKS and ctx.SKS.raw_label(node.p)) or L.f("原始通道 · %s", tostring(node.p))
+    elseif kind == "const" then label = L.f("常量 · %s", tostring(node.const))
     elseif kind == "eye" then
-        label = (node.eye == "R" and "右眼" or "左眼") .. (node.axis == "pitch" and " · 垂直" or " · 水平")
+        label = L.tr(node.eye == "R" and "右眼" or "左眼") .. L.tr(node.axis == "pitch" and " · 垂直" or " · 水平")
         detail = (node.sign or 1) < 0 and "负方向" or "正方向"
     end
+    -- 标签和说明会拼进悬停提示，整串查不到翻译：追加系数和曲线前先翻译。
+    label = L.tr(label)
     if node.k and node.k ~= 1 then label = label .. string.format(" ×%g", node.k) end
-    if node.curve then label = label .. " · 曲线" end
-    return label, detail
+    if node.curve then label = label .. L.tr(" · 曲线") end
+    return label, L.tr(detail)
 end
 
 -- 草稿以节点对象定位选中项，插入/移除相邻输入时不会把编辑状态移到另一条信号。
@@ -126,10 +129,10 @@ function E.tree(ctx, draft)
         rows[#rows + 1] = { node = node, id = id, depth = depth, parent = parent, at = at, path = path }
         local kind = E.node_type(node)
         if OPS[kind] then
-            for i, child in ipairs(node[kind]) do visit(child, id .. ":" .. i, depth + 1, node, i, path .. " / 输入 " .. i) end
+            for i, child in ipairs(node[kind]) do visit(child, id .. ":" .. i, depth + 1, node, i, path .. L.f(" / 输入 %d", i)) end
         end
     end
-    visit(draft.entry, rootid, 0, nil, nil, "输出")
+    visit(draft.entry, rootid, 0, nil, nil, L.tr("输出"))
     local selected = rows[1]
     for _, row in ipairs(rows) do if row.node == draft.selected then selected = row end end
     draft.selected = selected.node
@@ -197,7 +200,7 @@ local function signal_picker(ctx, draft, node, id, x, y, w)
     local items = {}
     for _, sd in ipairs(signals) do
         items[#items + 1] = { value = sd.name,
-            label = string.format("%s · %s%s", signal_title(sd), sd.note, sd.guessed and "（推测）" or "") }
+            label = string.format("%s · %s%s", signal_title(sd), L.tr(sd.note), sd.guessed and L.tr("（推测）") or "") }
     end
     draft.search = draft.search or {}
     local changed, value, height = W.search_select(draft.search, "map_signal_search:" .. id, x, y, w,
@@ -209,10 +212,10 @@ local function signal_picker(ctx, draft, node, id, x, y, w)
     y = y + height
     if selected then
         local side = selected.name:match("%.([LR])$")
-        local purpose = "用途：" .. (selected.note ~= "" and selected.note or "用途尚未整理")
-        if side then purpose = purpose .. (side == "L" and " · 角色左侧" or " · 角色右侧") end
-        if selected.guessed then purpose = purpose .. " · 推测，需实测确认" end
-        if selected.no_signal then purpose = purpose .. " · 本游戏没有这个信号，值恒为 0" end
+        local purpose = L.f("用途：%s", L.tr(selected.note ~= "" and selected.note or "用途尚未整理"))
+        if side then purpose = purpose .. L.tr(side == "L" and " · 角色左侧" or " · 角色右侧") end
+        if selected.guessed then purpose = purpose .. L.tr(" · 推测，需实测确认") end
+        if selected.no_signal then purpose = purpose .. L.tr(" · 本游戏没有这个信号，值恒为 0") end
         y = line(purpose, x, y, w, (selected.guessed or selected.no_signal) and C.warn or C.muted)
         local value = ctx.live.signal[selected.slot] or 0
         D.text_mid("实时信号：", x, y, 22, C.signal, W.small(), 72)
@@ -243,9 +246,9 @@ local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
         local raw = ctx.st.mapping.raw
         local sl = raw and raw.slider
         if sl then
-            node.p, cy = slider(draft, "map_param:" .. id, raw.term .. " 编号", x, cy, w, tonumber(node.p) or sl.min, sl.min, sl.max, 1, sl.fmt)
+            node.p, cy = slider(draft, "map_param:" .. id, L.f("%s 编号", L.tr(raw.term)), x, cy, w, tonumber(node.p) or sl.min, sl.min, sl.max, 1, sl.fmt)
         else
-            cy = line(raw and ("原始通道：" .. tostring(node.p)) or "本游戏没有原始通道", x, cy, w, raw and C.muted or C.warn)
+            cy = line(raw and L.f("原始通道：%s", tostring(node.p)) or "本游戏没有原始通道", x, cy, w, raw and C.muted or C.warn)
         end
     elseif kind == "const" then
         node.const, cy = slider(draft, "map_const:" .. id, "固定数值", x, cy, w, node.const or 0, -5, 5, 0.01)
@@ -274,7 +277,7 @@ local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
         if node.full_deg then node.full_deg, cy = slider(draft, "map_full:" .. id, "满权重角度", x, cy, w, node.full_deg, 1, 90, 1, "%d°") end
     elseif OPS[kind] then
         local list = node[kind]
-        cy = line("包含 " .. #list .. " 个输入，点击映射树中的输入节点分别编辑。", x, cy, w)
+        cy = line(L.f("包含 %d 个输入，点击映射树中的输入节点分别编辑。", #list), x, cy, w)
         if kind ~= "sub" and depth < 16 then
             if W.button("＋ 添加输入", x, cy, 116, 26, { font = W.small() }) then
                 local child = { s = "blink.L" }
@@ -328,7 +331,7 @@ function E.draw_draft(ctx, x, y, w)
     if not draft then return 0 end
     local e, cy = draft.entry, y
     local id = "map:" .. (draft.original_name or "new")
-    local title = draft.original_name and ("编辑映射：" .. draft.original_name) or "新建形态键映射"
+    local title = draft.original_name and L.f("编辑映射：%s", draft.original_name) or "新建形态键映射"
     W.h2(title, x + 10, cy, w - 20)
     cy = cy + 32
     if W.button("应用映射", x + 10, cy, 100, 28, { kind = "primary", text_color = 0xFFFFFFFF, disabled = e.name == "" }) then
@@ -453,7 +456,7 @@ function E.toolbar(ctx, x, y, w)
     W.panel_box(x, cy, w, 44)
     if W.button("＋ 新建映射", x + 10, cy + 8, 116, 28) then E.open(ctx) end
     local function save_as()
-        W.start_text(s, "name_form", { title = "保存表情映射配置", text = profile.name .. " 自定义",
+        W.start_text(s, "name_form", { title = "保存表情映射配置", text = L.f("%s 自定义", profile.name),
             on_submit = function(name) if ctx.call("save_profile", { as_name = name }) then s.mapping_draft = nil end end })
     end
     if W.button("保存配置", x + 134, cy + 8, 100, 28, { kind = m.dirty and "primary" or nil }) then

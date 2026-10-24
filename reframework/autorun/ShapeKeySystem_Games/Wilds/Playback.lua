@@ -5,6 +5,7 @@
 local U = require("ShapeKeySystem_Core.Util")
 local Recording = require("ShapeKeySystem_Core.Recording")
 local Perf = require("ShapeKeySystem_Core.Perf")
+local L = require("ShapeKeySystem_Core.I18n")
 local clock = os.clock
 local A = { id = "mhwilds", name = "怪物猎人：荒野", final_unit = 0.01, raw_unit = 0.01 }
 local facial, app_type
@@ -106,7 +107,7 @@ function A.connect(clip)
     for param, column in pairs(clip.map) do
         local index = layer:call("getValueIndexByNameHash(System.UInt32)", clip.hashes[column])
         assert(Recording.finite(index, count - 1, true) and index >= 0 and not seen[index],
-            string.format("fcParam_%03d 在当前面部动画层不可用", param))
+            L.f("fcParam_%03d 在当前面部动画层不可用", param))
         assert(face:call("getJointByName(System.String)", string.format("fcParam_%03d", param)), "当前面部缺少录制参数关节")
         local baseline = layer:call("getExtraValue(System.Int32)", index)
         assert(Recording.finite(baseline, 1000), "当前面部输入基线无效")

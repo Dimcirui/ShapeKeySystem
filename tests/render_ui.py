@@ -33,6 +33,9 @@ def render(cmds, out, bg=(40, 52, 40, 255)):
         layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(layer)
         k = c[0]
+        # d2d draws nothing for an empty or negative box; PIL refuses it
+        if k in ("rect", "rrect", "outline") and (c[3] < 1 or c[4] < 1):
+            continue
         if k == "rect":
             _, x, y, w, h, cc = c
             d.rectangle([x, y, x + w - 1, y + h - 1], fill=col(cc))

@@ -1,6 +1,7 @@
 -- ShapeKeySystem: block RE4R mouse data and gameplay commands while the panel reads native input.
 -- Command dictionaries are cleared after mapping; native keyboard input remains available to
 -- REFramework and text fields. Closing waits for keyboard release before restoring commands.
+local L = require("ShapeKeySystem_Core.I18n")
 local I = {}
 local mouse_type, point_type, left_button
 local live, enabled, forced, last_error
@@ -297,6 +298,6 @@ function I.diagnostics()
         waiting_release = waiting_release, other_panel = other_panel() }
 end
 function I.status()
-    return string.format("鼠标拦截 %d 次 · 命令拦截 %d 次 · 错误 %d", counters.blocked, counters.command_updates or 0, counters.errors)
+    return L.f("鼠标拦截 %d 次 · 命令拦截 %d 次 · 错误 %d", counters.blocked, counters.command_updates or 0, counters.errors)
 end
 return I

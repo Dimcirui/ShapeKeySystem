@@ -4,6 +4,7 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
@@ -42,16 +43,16 @@ local function setup_lines(m, sc)
         -- usually sent from this PC and has no bridge script: only the native receiver takes it
         if not nv.available then return { "VMC 需要游戏内接收插件 ShapeKeySystem_Mocap.dll。" } end
         local port = nv.port > 0 and nv.port or 39539
-        return { "让支持 VMC 协议的软件发到 127.0.0.1、端口 " .. port .. "，游戏内直接接收。",
+        return { L.f("让支持 VMC 协议的软件发到 127.0.0.1、端口 %s，游戏内直接接收。", port),
                  "ARKit 52 个名字（Perfect Sync）按表情配置驱动；其他表情名直接写入同名形态键。",
-                 "其他表情名：正在写入 " .. (m.extra_n or 0) .. " 个" }
+                 L.f("其他表情名：正在写入 %s 个", m.extra_n or 0) }
     end
-    if not nv.available then return { "手机打开 " .. sc.name .. "，并启用相应的收发程序。" } end
+    if not nv.available then return { L.f("手机打开 %s，并启用相应的收发程序。", L.tr(sc.name)) } end
     local d = DEST[sc.id] or { "发送地址", 0 }
     local port = nv.port > 0 and nv.port or d[2]
-    local ips = #nv.ips > 0 and table.concat(nv.ips, "、") or "（未取到）"
-    return { "在 " .. sc.name .. " 里把 " .. d[1] .. " 设为本机 IP、端口 " .. port .. "，游戏内直接接收。",
-             "本机 IP：" .. ips }, 2
+    local ips = #nv.ips > 0 and table.concat(nv.ips, L.tr("、")) or L.tr("（未取到）")
+    return { L.f("在 %s 里把 %s 设为本机 IP、端口 %s，游戏内直接接收。", L.tr(sc.name), L.tr(d[1]), port),
+             L.f("本机 IP：%s", ips) }, 2
 end
 
 local function scheme_box_h(m, sc) return 60 + 22 * #setup_lines(m, sc) end
@@ -63,7 +64,7 @@ local function scheme_box(ctx, m, sc, x, y, w)
     D.outline(x, y, w, h, 3, 1, C.line)
     local rx, rw = x + 10, w - 20
     local ry = y + 8
-    D.text("基础配置 · " .. sc.name, rx, ry, C.text, W.small(), rw); ry = ry + 24
+    D.text(L.f("基础配置 · %s", L.tr(sc.name)), rx, ry, C.text, W.small(), rw); ry = ry + 24
     local lines, ip_line = setup_lines(m, sc)
     for i, line in ipairs(lines) do
         local lw = D.text(line, rx, ry, C.faint, W.small(), rw)
@@ -75,18 +76,18 @@ local function scheme_box(ctx, m, sc, x, y, w)
     end
     local input
     if m.age == nil then input = "还没有收到数据"
-    elseif m.live then input = string.format("接收中 %.0f Hz", m.rx_hz)
-    else input = string.format("%.1f 秒没有新数据", m.age) end
+    elseif m.live then input = L.f("接收中 %.0f Hz", m.rx_hz)
+    else input = L.f("%.1f 秒没有新数据", m.age) end
     local nv, line = m.native, nil
     if nv.available then
         if nv.running then
-            line = string.format("%s · 游戏内接收，UDP %d%s", input, nv.port,
-                nv.sender ~= "" and (" · 来自 " .. nv.sender) or "")
+            line = L.f("%s · 游戏内接收，UDP %d%s", L.tr(input), nv.port,
+                nv.sender ~= "" and L.f(" · 来自 %s", nv.sender) or "")
         else
-            line = string.format("游戏内接收没有启动（错误 %d，端口可能被占用）", nv.error or 0)
+            line = L.f("游戏内接收没有启动（错误 %d，端口可能被占用）", nv.error or 0)
         end
     else
-        line = string.format("%s · 读取 %.2f 毫秒/帧", input, m.read_ms)
+        line = L.f("%s · 读取 %.2f 毫秒/帧", L.tr(input), m.read_ms)
     end
     D.text(line, rx, ry, m.live and C.signal or C.muted, W.small(), rw)
     return h
@@ -116,7 +117,7 @@ local function face_card(ctx, x, y, w)
     ry = ry + 36
     ry = ry + scheme_box(ctx, m, sc, rx, ry, rw) + 12
 
-    D.text(string.format("%s · 淡入 %d%% · 当前部件能接住 %d / 52 个 ARKit 通道", m.status,
+    D.text(L.f("%s · 淡入 %d%% · 当前部件能接住 %d / 52 个 ARKit 通道", L.tr(m.status),
         math.floor(m.fade * 100 + 0.5), m.resolved), rx, ry, m.live and C.signal or C.muted, W.small(), rw)
     ry = ry + 28
 
@@ -168,7 +169,7 @@ local function head_card(ctx, x, y, w)
     D.text_mid(m.head_status or "-", rx + 120, ry, 28, C.muted, W.small(), rw - 120)
     ry = ry + 34
     local ho = m.head_out
-    D.text(string.format("原始 %.1f / %.1f / %.1f  →  俯仰 %.1f°  左右转 %.1f°  歪头 %.1f°",
+    D.text(L.f("原始 %.1f / %.1f / %.1f  →  俯仰 %.1f°  左右转 %.1f°  歪头 %.1f°",
         m.head_raw[1], m.head_raw[2], m.head_raw[3], ho.pitch, ho.yaw, ho.roll), rx, ry, C.faint, W.small(), rw)
     ry = ry + 26
 

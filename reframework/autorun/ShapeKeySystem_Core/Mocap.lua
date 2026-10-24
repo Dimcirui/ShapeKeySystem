@@ -16,6 +16,7 @@
 --   neutral pose are personal to one phone and one face.
 
 local U     = require("ShapeKeySystem_Core.Util")
+local I18n  = require("ShapeKeySystem_Core.I18n")
 local Names = require("ShapeKeySystem_Core.Names")
 local Ext   = require("ShapeKeySystem_Core.External")
 local Derived = require("ShapeKeySystem_Core.MocapDerived")
@@ -296,7 +297,7 @@ function M.tick(dt, ctx)
         local sc = M.scheme()
         if not n and not sc.bridge then view.status = "需要 ShapeKeySystem_Mocap.dll"
         elseif st.last_rx >= 0 then view.status = "数据中断"
-        else view.status = "等待 " .. (n and sc.name or sc.bridge) .. " 的数据" end
+        else view.status = I18n.f("等待 %s 的数据", I18n.tr(n and sc.name or sc.bridge)) end
         return release()
     end
     view.status = f < 1 and "淡入淡出中" or "面捕驱动中"
@@ -477,7 +478,7 @@ function M.update_motion(root, jbn)
     if not st.chain then
         st.body = root
         st.chain = build_chain(root, jbn)
-        view.head_status = st.chain and string.format("头部骨骼链：%d 节", #st.chain) or "找不到 Head 骨骼"
+        view.head_status = st.chain and I18n.f("头部骨骼链：%d 节", #st.chain) or "找不到 Head 骨骼"
         if not st.chain then return end
     end
     local ho, f = view.head_out, view.fade

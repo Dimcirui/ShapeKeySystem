@@ -10,19 +10,22 @@ local Games = require("ShapeKeySystem_Games.Registry")
 local D = require("ShapeKeySystem_UI.Draw")
 local Faces = require("ShapeKeySystem_UI.Faces")
 local Panel = require("ShapeKeySystem_UI.Panel")
+local L = require("ShapeKeySystem_Core.I18n")
 
 -- an unsupported game (or an adapter whose types are gone after a game update) only gets a line
 -- in the REFramework menu: no hooks, no callbacks, the data folder is not touched
 local game = Games.game_name()
 local Game = Games.pick(game)
-local ok, why = false, "暂不支持当前游戏（" .. tostring(game) .. "）"
+local ok, why = false, nil
 -- also installs the adapter's hooks (write safety: release on cutscene skip / stop, rescan after
 -- equipment rebuilds and menus)
 if Game then ok, why = SKS.init(Game) end
 if not ok then
+    -- translated while drawing: the interface language can change after load
     re.on_draw_ui(function()
         if imgui.tree_node("ShapeKeySystem") then
-            imgui.text("ShapeKeySystem 没有启动：" .. tostring(why))
+            local reason = Game and L.tr(tostring(why)) or L.f("暂不支持当前游戏（%s）", tostring(game))
+            imgui.text(L.f("ShapeKeySystem 没有启动：%s", reason))
             imgui.tree_pop()
         end
     end)
@@ -42,7 +45,7 @@ end
 -- after the animation has posed the joints (same slot as Lua Bone System): mocap head turn
 re.on_application_entry("UpdateMotion", function()
     local ok, err = pcall(SKS.update_motion)
-    if not ok then SKS.state.mocap.head_status = "头部错误：" .. tostring(err) end
+    if not ok then SKS.state.mocap.head_status = L.f("头部错误：%s", tostring(err)) end
 end)
 
 re.on_application_entry("LateUpdateBehavior", function()

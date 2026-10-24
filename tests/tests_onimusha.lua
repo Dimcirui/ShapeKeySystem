@@ -93,7 +93,7 @@ local values = {}
 A.read(handle, values, 100)
 check(count == 3 and values[0] == 0.2 and values[1] == 0.4 and values[2] == 0.6 and values[405] == nil,
     "all three axes normalised, missing joints skipped")
-check(A.is_face(ARMOR) and A.face_rank(ARMOR) == 1 and A.face_rank(ROOT) == 0, "Head supplies the driver joints")
+check(A.is_face(ARMOR) and A.face_rank(ARMOR) == 2 and A.face_rank(ROOT) == 0, "Head supplies the driver joints")
 local npc_path = ARMOR._mesh.getMesh
 ARMOR._mesh.getMesh = function() return { call = function() return "Art/Model/Character/ch0/ch034_00/10/ch034_00_10.mesh" end } end
 check(not A.is_face(ARMOR), "an NPC head with bsControl is not a face")
@@ -113,8 +113,60 @@ local keep_addr = ARMOR._mesh.get_address
 ARMOR._mesh.get_address = function() return 0x2000 end
 check(Scene.children_signature(ROOT) ~= sig, "a rebuilt Head mesh changes the children signature")
 ARMOR._mesh.get_address = keep_addr
-check(A.is_part("Head") and A.is_part("Body") and not A.is_part("OniHead") and not A.is_part("Gm800_00"),
-    "only supported normal-form parts are selected")
+check(A.is_part("Head") and A.is_part("Body") and A.is_part("OniHead") and A.is_part("OniBody")
+    and not A.is_part("Gm800_00") and A.model_of("OniHead") == "musashi", "normal and demon form parts are selected")
+-- the demon form: OniHead / OniBody hang hidden on the player until it turns
+do
+    local go = ARMOR.get_GameObject
+    ARMOR.get_GameObject = function(self)
+        local g = go(self)
+        local call = g.call
+        g.call = function(o, m, ...)
+            if m == "get_DrawSelf" then return not self._hidden end
+            return call(o, m, ...)
+        end
+        return g
+    end
+    local shown = Scene.children_signature(ROOT)
+    ARMOR._hidden = true
+    check(A.face_rank(ARMOR) == 1 and Scene.children_signature(ROOT) ~= shown,
+        "a hidden head ranks below a drawn one and hiding it changes the children signature")
+    ARMOR._name = "OniHead"; ARMOR._hidden = false
+    check(A.is_face(ARMOR) and A.face_rank(ARMOR) == 2, "a drawn OniHead is the face")
+    ARMOR._name = "Head"
+end
+-- a head mod that reuses the body skeleton: no bsControl, face_joint* bones read as bone signals
+do
+    local keep = ARMOR._joints.bsControl_000
+    ARMOR._joints.bsControl_000 = nil
+    ARMOR._joints.face_joint340 = {}
+    check(A.is_face(ARMOR), "a head with face_joint340 and no bsControl is a face")
+    ARMOR._name = "Body"
+    check(not A.is_face(ARMOR), "the body sharing that skeleton is not a face")
+    ARMOR._name = "Head"
+    local ID = { w = 1, x = 0, y = 0, z = 0 }
+    local d = 0
+    local head = { get_Name = function() return "Head" end, get_Position = function() return { x = 0, y = 0, z = 0 } end,
+                   get_Rotation = function() return ID end }
+    local base = { x = 0.03, y = 0.05, z = 0.07 }
+    ARMOR._joints.Head = head
+    ARMOR.get_address = function() return 0xA11 end
+    ARMOR._joints.face_joint343 = { get_Name = function() return "face_joint343" end, get_Parent = function() return head end,
+        get_BaseLocalPosition = function() return base end, get_BaseLocalRotation = function() return ID end,
+        get_BaseLocalScale = function() return { x = 1, y = 1, z = 1 } end,
+        get_Position = function() return { x = base.x, y = base.y + d / 1000, z = base.z } end }
+    local key = A.raw.parse("bone.eyeClose.L")
+    check(key and key > 407 and A.raw.label(key) == "bone.eyeClose.L", "bone signals parse above the bsControl keys")
+    local h, n = A.bind(ARMOR, { key, 0 })
+    local P = {}
+    d = -0.8 - 8 * (0.05 + 0.95 * 0.5)   -- rest -0.8 mm, lid down, half past the deadzone
+    A.read(h, P, 100)
+    check(n == 1 and math.abs((P[key] or -1) - 0.5) < 1e-6, "face_joint upper lid reads eyeClose.L in the head's frame")
+    local sig = require("ShapeKeySystem_Core.Profile").signals.by_name["eyeClose.L"]
+    check(sig and sig.key == key and not sig.no_signal, "the dictionary wires eyeClose.L to the face_joint bone")
+    ARMOR._joints.bsControl_000, ARMOR._joints.face_joint340 = keep, nil
+    ARMOR._joints.Head, ARMOR._joints.face_joint343 = nil, nil
+end
 local names = NameHash.names_of(ARMOR._mesh, #CHANNELS, NameHash.table({ "eye_close", "mouth_a1", "Waist_thin" }))
 check(names and names[1] == "eye_close" and names[2] == "mouth_a1" and names[4] == NameHash.label(HASH("Mystery_key")),
     "userdata container and boxed UInt32 hashes resolve names and preserve unknown hashes")

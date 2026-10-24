@@ -153,11 +153,11 @@ local st1o = exact0("1")
 if st1o then MOUSE.x, MOUSE.y = st1o.x - 8, st1o.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 check(Panel.ui.page_state.cond.closed[1] == false and find("＋ 添加条件") ~= nil, "a collapsed state expands")
 check(find("实时条件") ~= nil or true, "live values section")
-SNAPS[#SNAPS + 1] = { name = "条件规则", cmds = CMDS }
+SNAP("条件规则", frame)
 local add = find("＋ 添加条件")
 if add then MOUSE.x, MOUSE.y = add.x + 4, add.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 check(find("添加") ~= nil and find("页面出错") == nil, "add-condition form opens")
-SNAPS[#SNAPS + 1] = { name = "条件规则-添加", cmds = CMDS }
+SNAP("条件规则-添加", frame)
 Panel.ui.page_state.cond.form = nil
 local function click(d) MOUSE.x, MOUSE.y = d.x + 4, d.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 local function exact(s2) for _, dd in ipairs(DRAWS) do if dd.s == s2 then return dd end end end

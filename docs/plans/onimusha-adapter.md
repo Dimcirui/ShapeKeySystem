@@ -21,6 +21,15 @@
 - 输入屏蔽（`Onimusha/Input.lua`）：面板打开时借用原生光标控制器 `app.GUI090000` 的菜单优先级让鼠标自由，
   并固定相机旋转；关闭和重载时恢复。
 
+已实现，还没在游戏里试过（2026-10-21，移植自 `origin/onimusha-port`，见 2.5）：
+
+- 沿用身体骨架的头部 mod：没有 bsControl，只有 `face_joint*`。`Head` / `OniHead` 上有 `face_joint340` 就算脸，
+  信号来自 `builtin/onimusha_wots/face.json` 的 22 个骨骼信号（`Core/BoneReads.lua`，字典里 `raw` 写 `bone.<名字>`）。
+  这些名字和荒野的骨骼信号同名（`eyeClose.L`、`mouthCornerUp.L` ……），只有用到它们的配置（目前是 Maya）会动；
+  通用 ARKit 名字（`blink.L` 等）在这种头上读 0。
+- 鬼化：`OniHead` / `OniBody` 算部件；`face_rank` 让正在绘制（`DrawSelf`）的头当脸，`child_tag` 给隐藏的头加
+  `~hidden`，变身时签名改变、Core 重扫。
+
 用户的测试数据在游戏目录，不进仓库：`mods/names/`（测试 mod 的名字表）、`mods/sculpt/ShinanoOC.json`、
 `mods/profiles/ShinanoOC_Onimusha.json`、`mods/default.json`。
 
@@ -115,6 +124,23 @@
 - `setBlendShapeChannelWeightParam(idx, v)` 写进去能读回来（Pre LateUpdate 写 1 和 10 都读回原值）。
   画面上看不出变化，原因见 1.4，没有排除「游戏在同一帧后面又覆盖了」。
 
+### 2.5 `onimusha-port` 分支的实测（kevin，Maya + Bunny Heart Sailor 替换武藏，2026-10-14）
+
+- 头部 mod 沿用身体骨架时，`Head` 的骨架里没有 bsControl，只有 `Face`、`Head_end`、`teeth_base`、`eye_Lt`、
+  `eye_Rt` 和 206 个 `face_joint*`（父关节 `Head_end` / `Face`，`Head_end` 和 `Head` 朝向相同）。
+- 面部动画（待机、说话、战斗、过场）只**平移** `face_joint*`，旋转一直是绑定姿势，约 200 个在动。在 Head 坐标系里
+  （+x = 脸的左侧，+y 上，+z 前）的典型行程：上眼睑每次眨眼 8~9 mm，大张嘴时下巴 13 mm、下唇 22 mm，
+  眉 4~6 mm，嘴角 5~6 mm。`face.json` 的标定来自 3 分钟待机、武藏过场说话和一场 boss 战的录制：
+  `rest_mm` = 待机中位数，`full_mm` = 到第 1 / 99 百分位的行程。录制里几乎没有笑，`mouthCornerUp` 的范围是猜的。
+- 眼球转动的轴向和荒野相同，但幅度更大（原始 yaw 可到约 ±35°）。武藏待机眨眼频繁且慢：3 分钟 66 次，中位 0.3 秒。
+- Maya 的 29 个形态键都在 `Head` 网格上，按哈希全部反查成功；Pre LateUpdateBehavior 写入后 349 帧里 349 帧保持、
+  画面生效。`Head` 上的 `app.FacialController` 不碰它不认识的通道。
+- NPC 的脸是纯形态键脸（400+ 通道、`app.FacialController`、没有 face_joint），游戏每帧重写权重，写了不显示。
+- 读盘时玩家会短暂消失（没有 controlling player）；`Head` / `OniHead` 可能被换成同名新对象，靠 `child_tag` 的
+  mesh 地址发现。
+- 鬼武者用的带形态键 mod 由 RE-Mesh-Editor-BlendShape 导出（`ONIWOTS`，Keep Custom Normals），已在游戏里验证。
+- 没移植：分支的 `browInnerUp.L/R` 骨骼信号。字典里这两个名字已经接到 bsControl，一个名字只能对应一个来源。
+
 ## 3. 待查和待确认
 
 1. **写入是否被覆盖。** 打开探针的写入测试，只写 mod 头部的一个明显形状（如 `eye_close`），Pre 写 1、同帧 Post 读回，
@@ -124,12 +150,15 @@
    说话、受击、过场的张嘴等轴还没采样，不能由待机推断。
 3. **换装和鬼化。** `child_tag` 能发现 mesh 被换掉，但还没在游戏里换过装。再看换装时 `PlayerManager.changePlayerModel`
    之类的方法是否触发、是否值得挂成 `events.rebuilt`（让 Core 立即放手，不用等 5 帧一次的签名检查）。
-   鬼化形态（`OniHead` / `OniBody`）目前不驱动。
+   鬼化（`OniHead` / `OniBody`）已按 `DrawSelf` 切换（第 0 节），待游戏里确认：变身时 `DrawSelf` 是否真的翻转、
+   `OniHead` 的 mesh 路径是否含 `/ch001_`（不含就不算脸，鬼化时仍由隐藏的 `Head` 提供信号）、`OniHead` 有没有 bsControl。
 4. **暂停和菜单。** `app.PauseManager:get_IsPaused()`，以及打开菜单、回标题时玩家对象是否还在。
 5. **眼球方向。** Core 的约定是 +yaw = 脸自己的右侧、+pitch = 向上；画面上的方向还没核对。记忆
    `sks-gaze-yaw-convention` 写的是 yaw +1 = 角色的左边，和代码注释矛盾，核对时一并确认哪个对。
 6. **输入屏蔽的副作用。** 只借用光标控制器的优先级、固定相机旋转，没改命令掩码、鼠标操纵模式和原始输入缓存。
    面板打开时角色是否仍会响应键盘、手柄，还没系统测过。
+7. **face_joint 头部。** 骨骼信号的位置平时取世界坐标换算到 Head 坐标系（FaceHold 接管时改用保存的局部姿势逐级合成）；用沿用身体骨架的 mod 实测一次，
+   看眨眼、张嘴、眉、嘴角的读数是否和 2.5 的行程一致。
 
 ## 4. 适配器实施计划
 
@@ -154,13 +183,13 @@ tests/tests_onimusha.lua                                           -- 独立运�
 | `primary_root` | `PlayerManager:getControllingPlayer():get_Object():get_Transform()`，全程 pcall |
 | `primary_ready` | `isPlayerReady(false)`，且 `getControllingPlayer()` 的 `get_Valid` / `get_CharacterValid` |
 | `gate(frame)` | 过场加载 → `"load"`；过场播放 → `"playing"`（交给 Core 的过场驱动）；玩家没就绪 → 不碰，不给 kind |
-| `is_face(tr)` | 有 `bsControl_000`，且 mesh 路径含 `/ch001_`（NPC 的头也有 bsControl） |
-| `face_rank(tr)` | GameObject 名是 `Head` 给 1，其余 0 |
-| `is_part(name)` | `Head`、`Body`、`Cloak`、`Gauntlet`、`Amulet`，或过场副本按 mesh 命名的 `ch001_NN_NN*` |
+| `is_face(tr)` | 有 `bsControl_000`（或名为 `Head` / `OniHead` 且有 `face_joint340`），且 mesh 路径含 `/ch001_`（NPC 的头也有 bsControl） |
+| `face_rank(tr)` | `Head` / `OniHead`：正在绘制给 2，隐藏给 1；其余 0 |
+| `is_part(name)` | `Head`、`Body`、`Cloak`、`Gauntlet`、`Amulet`、`OniHead`、`OniBody`，或过场副本按 mesh 命名的 `ch001_NN_NN*` |
 | `child_tag(tr, name)` | 部件的 mesh 地址，见 4.3 |
 | `eye_joints(face)` | `{ L = eye_Lt, R = eye_Rt }` |
 | `raw` | `term = "bsControl"`；key = 关节号 × 3 + 轴（x=0、y=1、z=2）；`parse` 接受 `"bsControl_012.y"` 和 `"012.y"`；不给 `slider` |
-| `bind` / `read` | 按 key 找 `bsControl_%03d`，每帧取 `get_LocalPosition()` 的对应轴乘 `inv_full` |
+| `bind` / `read` | 按 key 找 `bsControl_%03d`，每帧取 `get_LocalPosition()` 的对应轴乘 `inv_full`；`bone.<名字>` 的 key 在 1000 以上，由 `BoneReads` 读 |
 | `model_of` / `representative_of` / `slot_names` | 所有部件归 `musashi`，见 4.3 |
 | `input` | `Onimusha/Input.lua` |
 | `conditions`, `probe`, `model_names` | 不给 |

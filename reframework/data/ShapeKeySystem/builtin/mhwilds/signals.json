@@ -1001,6 +1001,116 @@
       "name": "fcParam_200",
       "raw": 200,
       "note": "相关部位尚未确定"
+    },
+    {
+      "name": "jawDrop",
+      "raw": "bone.jawDrop",
+      "note": "骨骼：下巴下移（张嘴）。动作表情 22-27mm，待机 ≤6mm"
+    },
+    {
+      "name": "lowerLipDrop",
+      "raw": "bone.lowerLipDrop",
+      "note": "骨骼：下唇下移（张嘴）。开心 2 的笑声下巴几乎不动、下唇下移约 6.4mm；大张嘴 16-27mm。待机漂移 ≤2mm"
+    },
+    {
+      "name": "mouthCornerUp.L",
+      "raw": "bone.mouthCornerUp.L",
+      "note": "骨骼：左嘴角上提（笑）。笑的动作表情 8-11mm"
+    },
+    {
+      "name": "mouthCornerUp.R",
+      "raw": "bone.mouthCornerUp.R",
+      "note": "骨骼：右嘴角上提（笑）"
+    },
+    {
+      "name": "mouthCornerDown.L",
+      "raw": "bone.mouthCornerDown.L",
+      "note": "骨骼：左嘴角下拉（撇嘴、吼叫）。8-13mm"
+    },
+    {
+      "name": "mouthCornerDown.R",
+      "raw": "bone.mouthCornerDown.R",
+      "note": "骨骼：右嘴角下拉（撇嘴、吼叫）"
+    },
+    {
+      "name": "mouthCornerOut.L",
+      "raw": "bone.mouthCornerOut.L",
+      "note": "骨骼：左嘴角外拉（嘴变宽）。8-10mm"
+    },
+    {
+      "name": "mouthCornerOut.R",
+      "raw": "bone.mouthCornerOut.R",
+      "note": "骨骼：右嘴角外拉（嘴变宽）"
+    },
+    {
+      "name": "browInnerDown.L",
+      "raw": "bone.browInnerDown.L",
+      "note": "骨骼：左眉头下压（皱眉）。6-7mm"
+    },
+    {
+      "name": "browInnerDown.R",
+      "raw": "bone.browInnerDown.R",
+      "note": "骨骼：右眉头下压（皱眉）"
+    },
+    {
+      "name": "browRaise.L",
+      "raw": "bone.browRaise.L",
+      "note": "骨骼：左眉上移。8mm"
+    },
+    {
+      "name": "browRaise.R",
+      "raw": "bone.browRaise.R",
+      "note": "骨骼：右眉上移"
+    },
+    {
+      "name": "browLower.L",
+      "raw": "bone.browLower.L",
+      "note": "骨骼：左眉下压。5-6mm"
+    },
+    {
+      "name": "browLower.R",
+      "raw": "bone.browLower.R",
+      "note": "骨骼：右眉下压"
+    },
+    {
+      "name": "cheekRaise.L",
+      "raw": "bone.cheekRaise.L",
+      "note": "骨骼：左脸颊上提（笑眼）。9-10mm"
+    },
+    {
+      "name": "cheekRaise.R",
+      "raw": "bone.cheekRaise.R",
+      "note": "骨骼：右脸颊上提（笑眼）"
+    },
+    {
+      "name": "eyeClose.L",
+      "raw": "bone.eyeClose.L",
+      "note": "骨骼：左上眼睑转动闭眼。动作表情里闭眼只靠眼睑骨骼，眨眼 fcParam 为 0；约 30 度看上去已全闭（Maya 的闭眼键 0.8 时还留缝）"
+    },
+    {
+      "name": "eyeClose.R",
+      "raw": "bone.eyeClose.R",
+      "note": "骨骼：右上眼睑转动闭眼"
+    },
+    {
+      "name": "eyeWiden.L",
+      "raw": "bone.eyeWiden.L",
+      "note": "骨骼：左上眼睑比待机更睁开（睁大眼）。仙人掌转圈约 13 度（满值），战吼瞪眼约 6 度"
+    },
+    {
+      "name": "eyeWiden.R",
+      "raw": "bone.eyeWiden.R",
+      "note": "骨骼：右上眼睑比待机更睁开（睁大眼）"
+    },
+    {
+      "name": "lowerLidRaise.L",
+      "raw": "bone.lowerLidRaise.L",
+      "note": "骨骼：左下眼睑上提。开心 1 的笑眼约 4.4 度；战吼眯眼时也会上提"
+    },
+    {
+      "name": "lowerLidRaise.R",
+      "raw": "bone.lowerLidRaise.R",
+      "note": "骨骼：右下眼睑上提"
     }
   ]
 }

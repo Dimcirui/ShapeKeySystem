@@ -8,6 +8,10 @@ local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
+local L = require("ShapeKeySystem_Core.I18n")
+
+-- width of a small text button, for right-aligned row actions (labels differ by language)
+local function tbw(label) return D.measure(W.small(), label) + 22 end
 
 local Page = {}
 local C = T.c
@@ -47,15 +51,17 @@ end
 
 local function cond_text(st, c)
     local d = def_of(st, c.type)
-    if not d then return "未知条件 " .. tostring(c.type) end
-    if d.kind == "bool" then return d.label .. (c.value == false and " ＝ 否" or "") end
+    if not d then return L.f("未知条件 %s", tostring(c.type)) end
+    -- labels of the game's condition defs are translated here: they are joined into one line
+    local dl = L.tr(d.label)
+    if d.kind == "bool" then return c.value == false and L.f("%s ＝ 否", dl) or dl end
     if d.kind == "enum" then
         local label = tostring(c.value)
-        for _, o in ipairs(d.options or {}) do if o.value == c.value then label = o.label end end
-        return string.format("%s %s %s", d.label, c.op == "~=" and "≠" or "＝", label)
+        for _, o in ipairs(d.options or {}) do if o.value == c.value then label = L.tr(o.label) end end
+        return string.format("%s %s %s", dl, c.op == "~=" and "≠" or "＝", label)
     end
-    local s = string.format("%s %s %s", d.label, c.op or "<=", tostring(c.value))
-    if (tonumber(c.band) or 0) > 0 then s = s .. string.format("（回差 %s）", tostring(c.band)) end
+    local s = string.format("%s %s %s", dl, c.op or "<=", tostring(c.value))
+    if (tonumber(c.band) or 0) > 0 then s = s .. L.f("（回差 %s）", tostring(c.band)) end
     return s
 end
 
@@ -63,9 +69,9 @@ local function live_text(st, live, id)
     local v = live.cond and live.cond.values[id]
     local d = def_of(st, id)
     if v == nil then return "—" end
-    if type(v) == "boolean" then return v and "是" or "否" end
+    if type(v) == "boolean" then return L.tr(v and "是" or "否") end
     if d and d.kind == "enum" then
-        for _, o in ipairs(d.options or {}) do if o.value == v then return o.label end end
+        for _, o in ipairs(d.options or {}) do if o.value == v then return L.tr(o.label) end end
     end
     if type(v) == "number" then return string.format("%.1f", v) end
     return tostring(v)
@@ -79,11 +85,11 @@ local function top_bar(ctx, x, y, w)
     W.panel_box(x, y, w, 44)
     local labels, ids, idx = { "（不使用）" }, { "" }, 1
     for _, e in ipairs(cs.sets or {}) do
-        labels[#labels + 1] = string.format("%s（%s）", e.name, SOURCE[e.source] or e.source) .. W.default_suffix(ctx, e.id, cs.binding_name)
+        labels[#labels + 1] = L.f("%s（%s）", e.name, L.tr(SOURCE[e.source] or e.source)) .. W.default_suffix(ctx, e.id, cs.binding_name)
         ids[#ids + 1] = e.id
         if cur and cur.id == e.id then idx = #ids end
     end
-    if cur and idx == 1 then labels[#labels + 1] = cur.name .. "（未保存）"; ids[#ids + 1] = cur.id; idx = #ids end
+    if cur and idx == 1 then labels[#labels + 1] = L.f("%s（未保存）", cur.name); ids[#ids + 1] = cur.id; idx = #ids end
     D.text_mid("配置", x + 10, y + 8, 28, C.muted, W.small())
     local sw = min(260, w * 0.36)
     local ch, i = W.select("cond_set", x + 46, y + 8, sw, 28, labels, idx)
@@ -129,7 +135,7 @@ local function top_bar(ctx, x, y, w)
     local h = 52
     if pd and pd.kind == "conditions" then
         D.rrect(x, y + 52, w, 36, 3, C.ink); D.outline(x, y + 52, w, 36, 3, 1, C.warn)
-        D.text_mid("删除条件规则配置「" .. pd.name .. "」？", x + 10, y + 56, 28, C.warn, W.body(), w - 200)
+        D.text_mid(L.f("删除条件规则配置「%s」？", pd.name), x + 10, y + 56, 28, C.warn, W.body(), w - 200)
         if W.button("删除", x + w - 160, y + 56, 70, 28, { kind = "danger" }) then call("confirm_delete") end
         if W.button("取消", x + w - 82, y + 56, 70, 28, { kind = "ghost" }) then call("cancel_delete") end
         h = 96
@@ -199,11 +205,11 @@ local function rules_text(st, rules)
     for _, r in ipairs(rules) do
         local cs = {}
         for _, c in ipairs(r.conditions) do cs[#cs + 1] = cond_text(st, c) end
-        local t = #cs == 0 and "空规则" or table.concat(cs, r.logic == "OR" and " 或 " or " 且 ")
-        if #cs > 1 and #rules > 1 then t = "（" .. t .. "）" end
+        local t = #cs == 0 and L.tr("空规则") or table.concat(cs, L.tr(r.logic == "OR" and " 或 " or " 且 "))
+        if #cs > 1 and #rules > 1 then t = L.f("（%s）", t) end
         parts[#parts + 1] = t
     end
-    return #parts == 0 and "没有规则" or table.concat(parts, "  或者  ")
+    return #parts == 0 and L.tr("没有规则") or table.concat(parts, L.tr("  或者  "))
 end
 
 -- section title that folds its section; click_w leaves room for buttons drawn on the right
@@ -222,7 +228,7 @@ local function states_section(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
     local data = st.conditions.current.data
     local cy = y
-    local open = section_head(s, "states", "状态", string.format("%d 个", #data.states), x, cy, w)
+    local open = section_head(s, "states", "状态", L.f("%d 个", #data.states), x, cy, w)
     cy = cy + 28
     if not open then return cy + 4 - y end
     D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效；组合选「-」可临时停用", x, cy, C.faint, W.small(), w); cy = cy + 24
@@ -288,12 +294,12 @@ local function states_section(ctx, x, y, w)
                     ry = ry + 22
                 end
                 D.rect(x + 12, ry, w - 24, 1, C.line)
-                D.text_mid("规则 " .. ri, x + 14, ry + 4, 26, C.muted, W.small())
+                D.text_mid(L.f("规则 %d", ri), x + 14, ry + 4, 26, C.muted, W.small())
                 D.text_mid("条件结束后保持", x + 80, ry + 4, 26, C.muted, W.small())
                 local c6, v6 = W.slider("hold" .. si .. "_" .. ri, x + 180, ry + 4, min(180, w - 300), 26, r.hold or 0, 0, 5,
                     { step = 0.1, fmt = "%.1fs", value_w = 44 })
                 if c6 then edit(ctx, function(d) d.states[si].rules[ri].hold = v6 end) end
-                if W.tbutton("删除规则", x + w - 80, ry + 6, { kind = "danger" }) then
+                if W.tbutton("删除规则", x + w - tbw("删除规则") - 10, ry + 6, { kind = "danger" }) then
                     edit(ctx, function(d) table.remove(d.states[si].rules, ri) end)
                 end
                 ry = ry + 34
@@ -303,8 +309,8 @@ local function states_section(ctx, x, y, w)
                         edit(ctx, function(d) local rr = d.states[si].rules[ri]; rr.logic = (rr.logic == "OR") and "AND" or "OR" end)
                     end
                     D.text_mid(cond_text(st, c), x + 44, ry, 24, C.text, W.small(), w * 0.55)
-                    D.text_mid("当前：" .. live_text(st, live, c.type), x + w * 0.62, ry, 24, C.faint, W.small(), w * 0.25)
-                    if W.tbutton("移除", x + w - 56, ry + 1) then
+                    D.text_mid(L.f("当前：%s", live_text(st, live, c.type)), x + w * 0.62, ry, 24, C.faint, W.small(), w * 0.25)
+                    if W.tbutton("移除", x + w - tbw("移除") - 10, ry + 1) then
                         edit(ctx, function(d) table.remove(d.states[si].rules[ri].conditions, ci2) end)
                     end
                     ry = ry + 26
@@ -340,7 +346,7 @@ local function clips_section(ctx, x, y, w)
     local ids = {}
     for id in pairs(data.clips) do ids[#ids + 1] = id end
     table.sort(ids)
-    local open_all = section_head(s, "clips", "形态键配置组合", string.format("%d 个", #ids), x, cy, w - 120)
+    local open_all = section_head(s, "clips", "形态键配置组合", L.f("%d 个", #ids), x, cy, w - 120)
     if W.button("＋ 新建组合", x + w - 110, cy - 2, 110, 26, { font = W.small() }) then
         W.start_text(s, "clip_form", { title = "新建形态键配置组合", on_submit = function(name)
             if name == "" then return end
@@ -365,7 +371,7 @@ local function clips_section(ctx, x, y, w)
         local h = 44 + (open and (40 + #keys * 30 + 40) or 0)
         if visible(cy, h) then
             W.panel_box(x, cy, w, h, playing == id)
-            local clicked = W.header(id, x + 8, cy + 9, min(260, w * 0.35), open, string.format("%d 个形态键", #keys))
+            local clicked = W.header(id, x + 8, cy + 9, min(260, w * 0.35), open, L.f("%d 个形态键", #keys))
             if clicked then
                 if open then s.open_clip = nil else s.open_clip = id end
             end
@@ -395,7 +401,7 @@ local function clips_section(ctx, x, y, w)
                     D.text_mid(k, x + 20, oy, 28, C.text, W.small(), w * 0.3)
                     local c3, v3 = W.slider("kv_" .. id .. k, x + w * 0.34, oy, w * 0.45, 28, c.values[k], 0, 1, { step = 0.01, fmt = "%.2f" })
                     if c3 then edit(ctx, function(d) d.clips[id].values[k] = v3 end) end
-                    if W.tbutton("移除", x + w - 56, oy + 3) then edit(ctx, function(d) d.clips[id].values[k] = nil end) end
+                    if W.tbutton("移除", x + w - tbw("移除") - 10, oy + 3) then edit(ctx, function(d) d.clips[id].values[k] = nil end) end
                     oy = oy + 30
                 end
                 if #key_names > 0 then

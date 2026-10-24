@@ -5,6 +5,8 @@ local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Faces = require("ShapeKeySystem_UI.Faces")
 local Version = require("ShapeKeySystem_Core.Version")
+local I18n = require("ShapeKeySystem_Core.I18n")
+local L = I18n
 
 local Page = { want_signals = true }
 local C = T.c
@@ -53,7 +55,17 @@ local function ui_settings_card(ctx, x, y, w)
     local img = D.images()
     local combo = se.hotkey_combo == true
     local unblocked = se.block_input == false
-    local c, h = card(x, y, w, "界面设置", (img and 5 or 4) + (combo and 1 or 0), 2, unblocked and 22 or 0)
+    local c, h = card(x, y, w, "界面设置", (img and 6 or 5) + (combo and 1 or 0), 2, unblocked and 22 or 0)
+    c.row("语言 / Language", function(sx, sw)
+        -- each language in its own script, whatever the interface language is
+        local labels, cur = {}, 1
+        for i, k in ipairs(I18n.LANGS) do
+            labels[i] = I18n.LANG_NAMES[k]
+            if k == (se.language or "zh") then cur = i end
+        end
+        local ch, i = W.select("language", sx, c.y, min(160, sw), 28, labels, cur)
+        if ch then setting(ctx, "language", I18n.LANGS[i]) end
+    end)
     local cc, vc = W.toggle("启用组合快捷键", c.x, c.y, combo)
     if cc then setting(ctx, "hotkey_combo", vc) end
     c.y = c.y + 34
@@ -81,8 +93,8 @@ local function ui_settings_card(ctx, x, y, w)
         for i, k in ipairs(D.BACKENDS) do if k == se.ui_backend then cur = i end end
         -- the closed select shows what is actually drawing (auto, or a wanted backend that is missing)
         local now = D.backend == "imgui" and "ImGui" or "d2d"
-        if cur == 1 then labels[1] = "自动：" .. now
-        elseif D.BACKENDS[cur] ~= D.backend then labels[cur] = labels[cur] .. "（缺失，用 " .. now .. "）" end
+        if cur == 1 then labels[1] = L.f("自动：%s", now)
+        elseif D.BACKENDS[cur] ~= D.backend then labels[cur] = L.f("%s（缺失，用 %s）", L.tr(labels[cur]), now) end
         local ch, i = W.select("ui_backend", sx, c.y, min(260, sw), 28, labels, cur)
         if ch then setting(ctx, "ui_backend", D.BACKENDS[i]) end
     end)
@@ -147,8 +159,8 @@ local function perf_card(ctx, x, y, w)
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
-    W.h2("性能", rx, cy)
-    D.text(string.format("写入 %.1f / 跳过 %.1f 每帧", a.writes or 0, a.skipped or 0), rx + 60, cy + 3, C.muted, W.small(), rw - 60)
+    local hw = W.h2("性能", rx, cy) + 12
+    D.text(L.f("写入 %.1f / 跳过 %.1f 每帧", a.writes or 0, a.skipped or 0), rx + hw, cy + 3, C.muted, W.small(), rw - hw)
     cy = cy + 30
     local total = max(0.3, a.total or 0)
     for _, k in ipairs({ { "read", "读取" }, { "compute", "计算" }, { "write", "写入" }, { "scan", "扫描读取" }, { "total", "完整更新" } }) do
@@ -173,7 +185,7 @@ local function perf_card(ctx, x, y, w)
             D.text_mid(item[2], rx, cy, 22, C.text, W.small(), 82)
             local text = string.format("%.3f / %.3f / %.3f", metric.avg or 0, metric.max or 0, metric.p95 or 0)
             D.text_mid(text, rx + 86, cy, 22, C.text, W.mono(), rw - 86)
-            W.tooltip(item[2] .. "：" .. text .. " ms。分类存在重叠，不相加；P95 每 60 次调用更新。", rx, cy, rw, 22)
+            W.tooltip(L.f("%s：%s ms。分类存在重叠，不相加；P95 每 60 次调用更新。", L.tr(item[2]), text), rx, cy, rw, 22)
             cy = cy + 24
         end
     end
@@ -186,28 +198,28 @@ local function scene_card(ctx, x, y, w)
     local lines = {}
     local ls = sc.last_scan
     if ls then
-        lines[#lines + 1] = string.format("最近扫描 %s · %.1f ms · 脸 %d（缓存跳过 %d）%s", os.date("%H:%M:%S", ls.time or 0),
-            ls.ms or 0, ls.faces or 0, ls.cached_skip or 0, ls.preview and " · 名片" or "")
+        lines[#lines + 1] = L.f("最近扫描 %s · %.1f ms · 脸 %d（缓存跳过 %d）%s", os.date("%H:%M:%S", ls.time or 0),
+            ls.ms or 0, ls.faces or 0, ls.cached_skip or 0, ls.preview and L.tr(" · 名片") or "")
     end
     for _, r in ipairs(sc.rigs or {}) do
         local t = {}
-        for _, x2 in ipairs(r.targets or {}) do t[#t + 1] = string.format("%s（%d 通道）", x2.display or x2.name, x2.channels) end
-        lines[#lines + 1] = (r.primary and "★ " or "   ") .. r.label .. "：" .. table.concat(t, "，")
+        for _, x2 in ipairs(r.targets or {}) do t[#t + 1] = L.f("%s（%d 通道）", x2.display or x2.name, x2.channels) end
+        lines[#lines + 1] = L.f("%s%s：%s", r.primary and "★ " or "   ", L.tr(r.label), table.concat(t, L.tr("，")))
     end
     local additional = sc.additional or {}
     for _, actor in ipairs(additional.instances or {}) do
-        lines[#lines + 1] = string.format("实例 %s · Profile %s · %d 通道 · %s", actor.label,
-            actor.profile, actor.channels, actor.ready and "驱动中" or "等待网格就绪")
-        if actor.binding then lines[#lines + 1] = "  绑定 " .. actor.binding end
+        lines[#lines + 1] = L.f("实例 %s · Profile %s · %d 通道 · %s", actor.label,
+            actor.profile, actor.channels, L.tr(actor.ready and "驱动中" or "等待网格就绪"))
+        if actor.binding then lines[#lines + 1] = L.f("  绑定 %s", actor.binding) end
         for _, warning in ipairs(actor.warnings or {}) do lines[#lines + 1] = "  " .. warning end
     end
-    for _, message in ipairs(additional.errors or {}) do lines[#lines + 1] = "实例：" .. message end
+    for _, message in ipairs(additional.errors or {}) do lines[#lines + 1] = L.f("实例：%s", message) end
     for _, p in ipairs(sc.parts or {}) do
-        lines[#lines + 1] = string.format("部件 %s · %d 通道 · 指纹 %s%s", p.display ~= p.id and p.display and (p.display .. "（" .. p.id .. "）") or p.id, p.channels, tostring(p.fingerprint),
-            p.binding and (" · 绑定 " .. p.binding) or "")
+        lines[#lines + 1] = L.f("部件 %s · %d 通道 · 指纹 %s%s", p.display ~= p.id and p.display and L.f("%s（%s）", p.display, p.id) or p.id, p.channels, tostring(p.fingerprint),
+            p.binding and L.f(" · 绑定 %s", p.binding) or "")
         if p.weights then
-            lines[#lines + 1] = string.format("  权重数量 %s / 通道 %d · 列表长度 %s",
-                tostring(p.weights.count or "不可读"), p.weights.channels, tostring(p.weights.length or "不可读"))
+            lines[#lines + 1] = L.f("  权重数量 %s / 通道 %d · 列表长度 %s",
+                tostring(p.weights.count or L.tr("不可读")), p.weights.channels, tostring(p.weights.length or L.tr("不可读")))
         end
     end
     local h = 50 + max(1, #lines) * 20
@@ -246,14 +258,14 @@ local function native_card(ctx, x, y, w)
         bx = bx + 108
     end
     cy = cy + 34
-    D.text(string.format("骨骼 %d · 原生通道 %d · 缺失 %d · %.1f 秒 / %d 帧",
+    D.text(L.f("骨骼 %d · 原生通道 %d · 缺失 %d · %.1f 秒 / %d 帧",
         ns.joints or 0, ns.taps or 0, ns.missing or 0, ns.elapsed or 0, ns.samples or 0), rx, cy, C.text, W.small(), rw)
     cy = cy + 22
     D.text(ctx.state.native_error or ns.status or "", rx, cy, C.muted, W.small(), rw); cy = cy + 22
     D.text("相对当前中立位：位移 mm / 旋转 °（峰值）", rx, cy, C.muted, W.small(), rw); cy = cy + 22
     for i = 1, shown do
         local row = rows[i]
-        D.text(string.format("%s  %.3f / %.2f（%.3f / %.2f）", row.name, row.mm, row.deg, row.peak_mm, row.peak_deg),
+        D.text(L.f("%s  %.3f / %.2f（%.3f / %.2f）", row.name, row.mm, row.deg, row.peak_mm, row.peak_deg),
             rx, cy, C.text, W.small(), rw)
         cy = cy + 20
     end
@@ -326,11 +338,11 @@ local function about_card(ctx, x, y, w, h)
     local cy = y + 10
     W.h2("关于", rx, cy)
     cy = cy + 30
-    D.text(string.format("%s v%s · 作者 %s", Version.name, Version.number, Version.author), rx, cy, C.muted, W.small(), rw)
+    D.text(L.f("%s v%s · 作者 %s", Version.name, Version.number, Version.author), rx, cy, C.muted, W.small(), rw)
     cy = cy + 22
     for i, parts in ipairs(shown) do
         local e = Version.history[i]
-        D.text(string.format("%s v%s", i == 1 and "本版" or "上一版", e.version), rx, cy, i == 1 and C.brass or C.faint, W.small(), 110)
+        D.text(string.format("%s v%s", L.tr(i == 1 and "本版" or "上一版"), e.version), rx, cy, i == 1 and C.brass or C.faint, W.small(), 110)
         if #parts == 0 then cy = cy + 22 end
         for _, part in ipairs(parts) do
             D.text(part, rx + 110, cy, i == 1 and C.text or C.muted, W.small(), rw - 110)

@@ -267,6 +267,14 @@ _d.circle = function(x, y, r, t, c) rec("circle", x, y, r, t, c) end
 _d.fill_quad = function(x1, y1, x2, y2, x3, y3, x4, y4, c) rec("quad", x1, y1, x2, y2, x3, y3, x4, y4, c) end
 _d.image = function(img, x, y, w, h, a) DRAWN_IMAGES[#DRAWN_IMAGES + 1] = img.path; rec("image", img.path, x, y, w, h, a or 1) end
 SNAPS = {}
+-- a page screenshot for --shots; with SHOT_LANG (run.py, SKS_LANG) redraw() runs once in that
+-- interface language for the screenshot and once more in Chinese for the checks that follow
+function SNAP(name, redraw)
+    local API = SHOT_LANG and require("ShapeKeySystem_Core.API")
+    if API then API.call("set_setting", { key = "language", value = SHOT_LANG }); redraw() end
+    SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
+    if API then API.call("set_setting", { key = "language", value = "zh" }); redraw() end
+end
 
 
 -- mock app.HunterCharacter for the condition layer (Conditions.lua)

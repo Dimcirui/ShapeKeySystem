@@ -68,6 +68,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `profile` | `{id, name, source, extends}` | 当前表情配置。`source`：`builtin` / `mod` / `user` |
 | `coverage` | `{arkit_hit, arkit_total, extra, recommended}` | 覆盖率；`recommended` 是匹配通道最多的配置，供「自动匹配」使用 |
 | `binding_source` | string? | 配置是由哪个父预设指定的 |
+| `auto_source` | bool? | 配置是扫描自动匹配的（见第 5 节「自动匹配」） |
 | `no_signals` | bool | 适配器没有原始通道（`A.raw`），表情不读游戏信号；捏脸、预设和外部 API 照常 |
 | `master_gain` | number | 整体表情强度，0~2 |
 | `gaze_gain` | number | 视线强度，0~2 |
@@ -169,7 +170,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 
 `scene_search_available` 由适配器的 `scene_search` 提供；适配器设为 `false` 时，两个面板均隐藏全场景搜索开关。该字段属于运行能力，不写入设置文件。
 
-`hotkey`、`hotkey_combo`（bool，默认 false：开启后需同时按住 `hotkey_mod`）、`hotkey_mod`（`Ctrl` / `Shift` / `Alt`，默认 `Ctrl`）、`ui_scale`、`font_scale`（0.8–1.6，默认 1：只放大文字，不改布局；ImGui 后端需要支持动态字号的 REFramework）、`block_input`（bool，默认 true：面板打开时屏蔽游戏操控；关闭后游戏照常操控）、`language`、`scene_search_always`（bool，默认 true：每次扫描都搜索整个场景）、`periodic_scan_sec`（0–120 秒，默认 5，0 = 不定期重扫）、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
+`hotkey`、`hotkey_combo`（bool，默认 false：开启后需同时按住 `hotkey_mod`）、`hotkey_mod`（`Ctrl` / `Shift` / `Alt`，默认 `Ctrl`）、`ui_scale`、`font_scale`（0.8–1.6，默认 1：只放大文字，不改布局；ImGui 后端需要支持动态字号的 REFramework）、`block_input`（bool，默认 true：面板打开时屏蔽游戏操控；关闭后游戏照常操控）、`language`（`zh` / `en`，默认 `zh`：界面语言，见「界面语言」一节）、`scene_search_always`（bool，默认 true：每次扫描都搜索整个场景）、`periodic_scan_sec`（0–120 秒，默认 5，0 = 不定期重扫）、`write_epsilon`、`translate_keys`（bool，默认 false：形态键显示中文译名，只在 `language = "zh"` 时生效）、`ui_backend`（`auto` / `d2d` / `imgui`：面板绘制方式，`auto` = 装了 d2d 就用 d2d，否则 ImGui；想要的后端不存在时自动用另一个）、`window = {x, y, w, h}`、`expression_enabled`（bool，默认 true：关闭后游戏表情不再写入形态键，捏脸、条件规则、面部互动和其他插件的值照常写入）、`hold_face_bones`（bool，默认 false：禁用骨骼驱动的表情，只用形态键控制，见 3.8a）。修改后立即持久化。
 
 `hold_available` 表示当前适配器提供 `expression_joints` 与 `face_layers`；`hold_status` 是禁用骨骼表情的当前状态文字。二者属于运行能力，不写入设置文件。
 
@@ -353,7 +354,8 @@ reframework/data/ShapeKeySystem/
 - 装备构建完成（`app.HunterCharacter.onEquipBuildEnd`）后，或部件名单发生变化时（每 5 帧检查一次），立即放掉引用，30 帧后重新扫描。
 - 每个网格要连续 60 帧处于就绪状态（MeshReady、BlendShapeEnable、缓冲区没有被释放、权重缓冲已分配）才开始写入；之后每帧再做两项快速检查。定期重扫时，同一个网格（按地址识别）保留之前的就绪计数和上次写入的值，所以不会停写，也不会重写。
 - 每帧只读网格上实际存在的通道要用到的 fcParam（引用也会追踪）。测试网格每帧的读取次数从 51 降到 10。`scene.rigs[i].reads` 显示这个数。
-- 扫描不会自行切换表情配置。命令 `auto_match_profile`（面板「自动匹配」按钮）切换到 `coverage.recommended`，效果等同手动 `set_profile`；已是最佳配置时返回 `{changed = false}`。
+- 扫描只在一种情况下自行切换表情配置：身上的部件没有父预设指定配置，玩家也没有为这套部件手动选过配置，而全局配置（`settings.profile`）在这些部件上一个通道都匹配不上。这时扫描临时换成匹配通道最多的配置（至少 2 个通道，同数时优先 ARKit），不写入 `settings.profile`，`auto_source = true`；换上全局配置能驱动的部件后恢复全局配置。没有部件的扫描（读盘、菜单）保留自动匹配的结果；映射有未保存的修改时不切换。手动选择（`set_profile`、新建或保存配置）记下当时的部件，之后穿着同一套部件时不再自动匹配。
+- 命令 `auto_match_profile`（面板「自动匹配」按钮）切换到 `coverage.recommended`，效果等同手动 `set_profile`；已是最佳配置时返回 `{changed = false}`。
 - 新增内置配置 `shinano.json`，对应 Shinano 原生的形态键名。
 - 开关 `cutscene_drive`（2026-10-09 起默认开启；跳过后仍在播放 90 帧会自动重新驱动，加载结束进入播放也视为新的一段）：过场播放中（IsBusy 为真、IsBusyLoad 为假）照常驱动猎人。分段靠 `app.DemoMediator` 的钩子，都是前置钩子，在游戏执行之前先放掉引用：
   - `onPlayStartTimeline(i)`：每一段开始时触发（Lua Bone System 也挂在这里）。触发后放掉所有引用，等 30 帧，然后**搜索整个场景**重新扫描（过场里显示的猎人通常是副本 `Pl000_00`，不是主角色），再经过 60 帧预热后写入。
@@ -745,3 +747,13 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 | `mocap_calibrate` | `{what}` | `face`：把手机当前各通道值记为放松时的基准（之后按 `(v − 基准) / (1 − 基准)` 换算）；`head`：把当前头部角度记为正前方；`clear`：清除面部基准 | `user/mocap.json` |
 
 `state.mocap`：`native = {available, running, error, sender, packets, rejected, port, ips}`（游戏内接收的状态）、`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
+
+## 界面语言
+
+- 界面文字在代码里写中文，中文原文就是翻译表的键。`builtin/i18n/en.json` 放脚本里的文字，`en_data.json` 放内置数据的文字（配置名、配置说明、通道备注、信号备注、立绘风格名、录制名）。格式：
+  `{ "schema": "sks.i18n/1", "lang": "en", "strings": { "<中文>": "<English>" }, "untranslated": [ "<不翻译的中文：id、日志、语言名>" ] }`。
+- 面板的绘制层（`Draw.lua`）对每段量宽和绘制的文字调用 `I18n.tr`，固定的中文字面量只要有条目即可。由几部分拼成的文字必须写成一个模板：`I18n.f("已删除：%s", name)`；作为参数插入的中文消息自己先 `I18n.tr`。不经过 Draw 的文字（REFramework 菜单的 imgui 调试树、交给游戏的文字）在调用处翻译。
+- 只翻译显示。存进文件或用来比较的值（设置值、条件 id、形态键名、录制结束原因）保持中文原样。
+- 没有条目的文字原样显示中文。离线测试 `tests/i18n_check.py` 检查每条中文字面量和每条内置数据文字都有条目（或在 `untranslated` 里），并且译文的格式符与原文一致。
+- `SKS_LANG=en python run.py --shots`：页面截图用英文，检查排版。
+- 拼好的通知和状态行在生成时定下语言，切换语言后已经显示的这些文字要等重新生成才换。

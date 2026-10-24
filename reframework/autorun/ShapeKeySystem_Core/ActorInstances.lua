@@ -3,6 +3,7 @@
 -- The player's editable profile stays in API.lua. Additional actors own their compiled program,
 -- smoothing, eye settings and sculpt bases. Lifecycle events discard handles before actor teardown.
 local U = require("ShapeKeySystem_Core.Util")
+local L = require("ShapeKeySystem_Core.I18n")
 local Scene = require("ShapeKeySystem_Core.Scene")
 local Names = require("ShapeKeySystem_Core.Names")
 local Profile = require("ShapeKeySystem_Core.Profile")
@@ -105,7 +106,7 @@ local function build(raw, options, old)
     local binding, bindings, warnings = binding_of(raw.parts)
     local id = binding and binding.data.profile or options.profile
     local resolved, _, message = Profile.resolve(id)
-    if not resolved then error("实例 Profile " .. tostring(id) .. "：" .. tostring(message), 0) end
+    if not resolved then error(L.f("实例 Profile %s：%s", tostring(id), L.tr(tostring(message))), 0) end
     local program, _, why = Profile.compile(resolved, {})
     if not program then error(why, 0) end
     local e, eyes, gains = tuning(program, binding, options)

@@ -5,6 +5,7 @@
 -- An adapter with `native_export` converts the take into its playback format instead of the
 -- diagnostic file and keeps it running through gaps; `native_sample` trims what each sample keeps.
 local U = require("ShapeKeySystem_Core.Util")
+local L = require("ShapeKeySystem_Core.I18n")
 local N = {}
 N.state = { available = false, recording = false, samples = 0, elapsed = 0, rows = {}, status = "" }
 local state = N.state
@@ -50,7 +51,7 @@ function N.finish(reason)
     if export then
         local ok, converted, folder = pcall(export, r)
         -- a take that cannot be converted cannot be retried either
-        if not ok then N.unsaved = nil; state.status = "录制无法转换：" .. tostring(converted):gsub("^.-:%d+: ", ""); return false end
+        if not ok then N.unsaved = nil; state.status = L.f("录制无法转换：%s", (tostring(converted):gsub("^.-:%d+: ", ""))); return false end
         data, dir, prefix = converted, folder, r.game
     end
     local function name()
@@ -62,7 +63,7 @@ function N.finish(reason)
     -- Existing files are preserved even when a script reset restarts the sequence.
     while U.file_exists(path) do sequence = sequence + 1; path = name() end
     local ok = U.save_json(path, data)
-    state.status = ok and ((export and "已保存，可在面部动画测试中播放：" or "已保存：") .. path) or "保存失败，可点击重试保存"
+    state.status = ok and L.f(export and "已保存，可在面部动画测试中播放：%s" or "已保存：%s", path) or "保存失败，可点击重试保存"
     if ok then state.file, N.unsaved = path, nil else N.unsaved = r end
     if ok and export and N.on_export then N.on_export() end
     return ok
@@ -119,13 +120,13 @@ function N.tick(adapter, stable, context)
         if adapter.native_export and cmd and cmd.action == "start" then begin(adapter, cmd); cmd = nil end
         if recording and export then
             pending = cmd
-            append(now, nil, "录制中 · " .. (stable == "hold" and "等待过场片段稳定" or "角色暂不可用") .. "，此段记为 0")
+            append(now, nil, L.f("录制中 · %s，此段记为 0", L.tr(stable == "hold" and "等待过场片段稳定" or "角色暂不可用")))
             return
         end
     end
     if stable == "hold" then
         pending = cmd
-        if recording or cmd then state.status = (recording and "录制中 · " or "") .. "等待过场片段稳定" end
+        if recording or cmd then state.status = recording and L.f("录制中 · %s", L.tr("等待过场片段稳定")) or "等待过场片段稳定" end
         return
     end
     if not stable then
@@ -143,7 +144,7 @@ function N.tick(adapter, stable, context)
     if not ok or not snapshot then
         local reason = tostring(ok and why or snapshot)
         state.ready = false
-        if recording and export then append(now, nil, "录制中 · 暂无信号，此段记为 0：" .. reason); return end
+        if recording and export then append(now, nil, L.f("录制中 · 暂无信号，此段记为 0：%s", L.tr(reason))); return end
         N.finish("采样中断")
         state.status = reason
         return
@@ -162,7 +163,7 @@ function N.tick(adapter, stable, context)
         local path = U.path("native_snapshot_" .. adapter.id .. "_" .. os.date("%Y%m%d_%H%M%S") .. "_" .. sequence .. ".json")
         while U.file_exists(path) do sequence = sequence + 1; path = path:gsub("_%d+%.json$", "_" .. sequence .. ".json") end
         local saved = U.save_json(path, {schema = "sks.native-snapshot/1", game = adapter.id, snapshot = snapshot})
-        state.status = saved and ("已保存：" .. path) or "快照保存失败"
+        state.status = saved and L.f("已保存：%s", path) or "快照保存失败"
         if saved then state.file = path end
     end
     if recording and now >= next_sample then

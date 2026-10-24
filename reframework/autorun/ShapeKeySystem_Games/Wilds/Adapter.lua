@@ -14,7 +14,9 @@ local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
 local Recorder = require("ShapeKeySystem_Games.Wilds.Recorder")
 local B = require("ShapeKeySystem_Core.BoneSignals")
+local BoneReads = require("ShapeKeySystem_Core.BoneReads")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
+local L = require("ShapeKeySystem_Core.I18n")
 
 local A = {
     id = "mhwilds",
@@ -73,6 +75,18 @@ function A.face_rank(tr) return go_name(tr):find("Player_Face", 1, true) == 1 an
 -- NPC faces carry fcParam too: only hunter armour (ch02 / ch03) is driven
 function A.is_part(name) return (name:find("ch02", 1, true) or name:find("ch03", 1, true)) ~= nil end
 
+-- Only faces and armour parts count: the game hangs props and effects on the hunter during
+-- emotes, and a signature that changed with them dropped and re-armed the rigs every few frames.
+function A.signature(root)
+    local parts, c = {}, root:call("get_Child")
+    while c do
+        local name = go_name(c)
+        if name:find("Player_Face", 1, true) == 1 or A.is_part(name) then parts[#parts + 1] = name end
+        c = c:call("get_Next")
+    end
+    return table.concat(parts, "|")
+end
+
 function A.eye_joints(face)
     return { L = jbn(face, "L_EyeJ_LOD02"), R = jbn(face, "R_EyeJ_LOD02") }
 end
@@ -117,17 +131,24 @@ end
 
 -- ---------------------------------------------------------------- signals
 -- Raw channels are fcParam numbers 0..200; a channel's value is the z of its fcParam_NNN joint's
--- local position, normalised by the dictionary's `full`.
+-- local position, normalised by the dictionary's `full`. `bone.<name>` names a bone signal
+-- (BoneReads), keyed above the fcParam range.
+local bone_sigs
+
 A.raw = {
     term = "fcParam",
     slider = { min = 0, max = 200, fmt = "%03d" },
     parse = function(v)
+        local key, why = BoneReads.parse(bone_sigs, v)
+        if key or why then return key, why end
         local n = tonumber(v)
         if not n or n ~= n or n == math.huge or n == -math.huge then return nil, "p 必须是有限数值" end
         if n < 0 or n > 200 then return nil, "fcParam out of range: " .. tostring(v) end
         return math.floor(n)
     end,
-    label = function(n) return string.format("fcParam_%03d", n) end,
+    label = function(n)
+        return BoneReads.label(bone_sigs, n) or string.format("fcParam_%03d", n)
+    end,
 }
 
 local M_LPOS, M_LROT
@@ -142,7 +163,10 @@ local bones
 local function load_bones()
     local ok, data = pcall(json.load_file, "ShapeKeySystem/builtin/mhwilds/face.json")
     if not ok or type(data) ~= "table" then return nil, "荒野面部骨骼标定文件无法读取" end
-    local valid, why = B.validate(data, { label = "荒野" })
+    local sigs, sig_why = BoneReads.load(data.signals, L.tr("荒野"))
+    bone_sigs = sigs
+    if not sigs then return nil, sig_why end
+    local valid, why = B.validate(data, { label = L.tr("荒野") })
     if not valid then return nil, why end
     local names = {}
     for id, spec in pairs(data.joints) do names[#names + 1] = spec.bone or id end
@@ -192,17 +216,18 @@ local function bind_bones(face, keys)
 end
 
 -- Returns { n1, joint1, n2, joint2, ... } and the number of joints found; missing joints are skipped.
--- `bones` rides on the same handle (a hash field, so #handle still counts fcParam pairs).
+-- `bones` and `signals` ride on the same handle (hash fields, so #handle still counts fcParam pairs).
 function A.bind(face, keys)
     M_LPOS = M_LPOS or sdk.find_type_definition("via.Joint"):get_method("get_LocalPosition")
     M_LROT = M_LROT or sdk.find_type_definition("via.Joint"):get_method("get_LocalRotation")
     local out = {}
     for _, n in ipairs(keys) do
-        local j = jbn(face, string.format("fcParam_%03d", n))
+        local j = n <= 200 and jbn(face, string.format("fcParam_%03d", n))
         if j then out[#out + 1] = n; out[#out + 1] = j end
     end
     out.bones = bind_bones(face, keys)
-    return out, #out // 2
+    out.signals = BoneReads.bind(face, keys, bone_sigs, jbn)
+    return out, #out // 2 + (out.signals and #out.signals.list or 0)
 end
 
 function A.read(handle, P, inv_full)
@@ -210,6 +235,7 @@ function A.read(handle, P, inv_full)
         local p = M_LPOS:call(handle[k + 1])
         P[handle[k]] = p and p.z * inv_full or 0
     end
+    if handle.signals then BoneReads.read(handle.signals, P) end
     local b = handle.bones
     if not b then return end
     -- bone values are already 0..1, the same scale as P (fcParam z normalised by full)
@@ -291,7 +317,7 @@ local REQUIRED = { "app.PlayerManager" }
 
 function A.init(events)
     for _, t in ipairs(REQUIRED) do
-        if not sdk.find_type_definition(t) then return false, "找不到类型 " .. t .. "（游戏更新后改名了？）" end
+        if not sdk.find_type_definition(t) then return false, L.f("找不到类型 %s（游戏更新后改名了？）", t) end
     end
     local T_DEMO = sdk.find_type_definition("app.DemoMediator")
     M_DEMO_BUSY = T_DEMO and T_DEMO:get_method("get_IsBusy")
