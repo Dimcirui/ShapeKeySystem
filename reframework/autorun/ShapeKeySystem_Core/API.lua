@@ -922,7 +922,8 @@ local function update_coverage(parts)
     local fps = {}
     for _, p in ipairs(parts) do fps[#fps + 1] = p.id .. ":" .. p.fingerprint end
     table.sort(fps)
-    local key = table.concat(fps, "|") .. "#" .. (C.prog and C.prog.id or "")
+    C.outfit = table.concat(fps, "|")
+    local key = C.outfit .. "#" .. (C.prog and C.prog.id or "")
     if key == C.cov_key then return end
     C.cov_key = key
     local all, ark = {}, {}
@@ -942,12 +943,36 @@ local function update_coverage(parts)
         end
     end
     local best, best_n = C.prog and C.prog.id, -1
+    local hits = {}
     for _, e in ipairs(Profile.list) do
         local n = Profile.match_count(e.id, all, Names)
+        hits[e.id] = n
         if n > best_n or (n == best_n and C.prog and e.id == C.prog.id) then best, best_n = e.id, n end
     end
+    C.cov_hits = hits
     state.expression.coverage = { arkit_hit = arkit_hit, arkit_total = #Names.ARKIT52, extra = extra,
                                   recommended = (#parts > 0) and best or nil, recommended_hits = best_n }
+end
+
+-- Automatic match for an outfit without a binding profile: only when the global profile drives
+-- none of the worn channels, so it never overrides a profile that works. Below 2 channels a
+-- match is too likely a coincidence of generic names ("blink"); ties go to ARKit.
+local AUTO_MIN_HITS = 2
+local function auto_profile()
+    local hits = C.cov_hits
+    if not hits or C.outfit == "" then return nil end
+    if (hits[cfg.profile] or 0) > 0 and Profile.registry[cfg.profile] then return nil end
+    local best, best_n = nil, AUTO_MIN_HITS - 1
+    for _, e in ipairs(Profile.list) do
+        local n = hits[e.id] or 0
+        if n > best_n or (n == best_n and e.id == "arkit") then best, best_n = e.id, n end
+    end
+    return best
+end
+
+-- a profile picked by hand; `outfit` keeps automatic matching off while those parts stay worn
+local function mark_manual(id)
+    C.profile_manual = { id = id, hit = C.binding and C.binding.hit or nil, outfit = C.outfit }
 end
 
 -- hash -> name for engines that only keep channel-name hashes: every name SKS knows (ARKit, the
@@ -1048,29 +1073,40 @@ local function do_scan()
         want = nil
     end
     state.expression.binding_source = want and b.hit or nil
+    -- without one, an outfit the global profile cannot drive gets the best matching profile, unless
+    -- the user picked a profile for these parts. A scan without parts (loading, menus) keeps it.
+    local auto
+    if not want and not (man and man.outfit == C.outfit) then
+        auto = auto_profile()
+        if not auto and C.outfit == "" and C.auto_profile == C.prog.id then auto = C.auto_profile end
+    end
+    local pick = want or auto
     -- 未保存的映射修改优先：换装或绑定不切换配置，提示一次，保存或恢复后下次扫描再切换。
-    local switch = (want and want ~= C.prog.id) or
-        (not want and C.profile_from_binding and C.prog.id ~= cfg.profile and Profile.registry[cfg.profile])
+    local switch = (pick and pick ~= C.prog.id) or
+        (not pick and C.profile_override and C.prog.id ~= cfg.profile and Profile.registry[cfg.profile])
     if switch and state.mapping.dirty then
-        if not C.unsaved_switch_noticed then
+        if want and not C.unsaved_switch_noticed then
             C.unsaved_switch_noticed = true
             notice("warn", "映射修改未保存，暂不切换到绑定的表情配置：先保存或恢复配置")
         end
-        want = nil
+        pick, auto = nil, nil
     elseif not state.mapping.dirty then
         C.unsaved_switch_noticed = nil
     end
-    if want and want ~= C.prog.id then
-        if apply_profile(want, false) then
-            C.profile_from_binding = true
-            log("profile %s from %s", want, b.hit)
+    C.auto_profile = auto
+    state.expression.auto_source = auto ~= nil or nil
+    -- C.profile_override: the profile in effect came from a binding or the automatic match, not cfg.profile
+    if pick and pick ~= C.prog.id then
+        if apply_profile(pick, false) then
+            C.profile_override = true
+            if want then log("profile %s from %s", want, b.hit) else log("profile %s matched automatically", auto) end
             return
         end
-    elseif not want and not state.mapping.dirty and C.profile_from_binding and C.prog.id ~= cfg.profile and Profile.registry[cfg.profile] then
-        C.profile_from_binding = false
+    elseif not pick and not state.mapping.dirty and C.profile_override and C.prog.id ~= cfg.profile and Profile.registry[cfg.profile] then
+        C.profile_override = false
         if apply_profile(cfg.profile, false) then return end
     end
-    if want then C.profile_from_binding = true end
+    if pick then C.profile_override = true end
     apply_tuning(false)
     C.select_conditions()
     rebuild_sculpt()
@@ -1599,7 +1635,7 @@ function cmds.preview_profile(a)
 end
 
 -- 「自动匹配」: the profile with the most channels on the worn parts (coverage.recommended); scans
--- never switch on their own
+-- switch on their own only when the global profile drives none of them (auto_profile)
 function cmds.auto_match_profile()
     local cov = state.expression.coverage
     local id = cov and cov.recommended
@@ -1619,7 +1655,7 @@ function cmds.set_profile(a)
     cfg.profile = a.id; save_soon()
     -- a choice made by hand wins over the parent preset's profile while that preset stays in effect
     -- (before, the rescan after apply_profile switched straight back to the preset's profile)
-    C.profile_manual = { id = a.id, hit = C.binding and C.binding.hit or nil }
+    mark_manual(a.id)
     return true
 end
 
@@ -1874,7 +1910,7 @@ function cmds.create_profile(a)
     local ok, code, msg = apply_profile(id, false)
     if not ok then return false, code, msg end
     cfg.profile = id; save_soon()
-    C.profile_manual = { id = id, hit = C.binding and C.binding.hit or nil }
+    mark_manual(id)
     notice("info", I18n.f("已新建表情配置：%s", a.name))
     return true, nil, nil, { id = id }
 end
@@ -1906,7 +1942,7 @@ function cmds.save_profile(a)
     local ok, code, msg = apply_profile(id, true)
     if not ok then return false, code, msg end
     cfg.profile = id; save_soon()
-    C.profile_manual = { id = id, hit = C.binding and C.binding.hit or nil }
+    mark_manual(id)
     notice("info", I18n.f("已保存表情配置：%s", name))
     return true, nil, nil, { id = id }
 end

@@ -370,14 +370,32 @@ check(true, "debug UI drew sculpt + preset sections")
 WEIGHTS[i_waist], WEIGHTS[i_other] = nil, nil
 end
 
--- Shinano-native mesh: the current profile drives nothing; scans keep it, 自动匹配 picks shinano
+-- Shinano-native mesh: the global profile drives nothing, so the scan matches shinano on its own
+-- (without changing the global profile); a manual pick for these parts turns that off
 SKS.call("set_profile", { id = "arkit" }); ticks(2)
 for i = 1, #CHANNELS do CHANNELS[i] = nil end
 for i, n in ipairs({ "blendShape1.eye_close_L", "blendShape1.eye_close_R", "blendShape1.mouth_a1",
                      "blendShape1.mouth_smile_L", "blendShape1.option_jaw_narrow", "blendShape1.eye_look_up" }) do CHANNELS[i] = n end
 SKS.call("rescan"); ticks(5)
-check(st.expression.profile.id == "arkit" and st.expression.coverage.recommended == "shinano",
-    "a scan keeps the chosen profile and only recommends shinano")
+check(st.expression.profile.id == "shinano" and st.expression.auto_source,
+    "no binding and arkit drives nothing: the scan picks shinano")
+local part_name0 = ARMOR._name
+ARMOR._name = "xx_not_a_part"; ticks(130)
+check(st.expression.profile.id == "shinano", "a scan without parts keeps the automatic match")
+ARMOR._name = part_name0; ticks(130)
+local shinano_names = {}
+for i, n in ipairs(CHANNELS) do shinano_names[i] = n end
+CHANNELS[1], CHANNELS[2] = "blendShape1.eyeBlinkLeft", "blendShape1.eyeBlinkRight"
+SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == "arkit" and not st.expression.auto_source,
+    "parts the global profile can drive: back to arkit (the global profile was left alone)")
+for i, n in ipairs(shinano_names) do CHANNELS[i] = n end
+SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == "shinano" and st.expression.auto_source, "shinano parts again: matched again")
+SKS.call("set_profile", { id = "arkit" }); ticks(2)
+SKS.call("rescan"); ticks(5)
+check(st.expression.profile.id == "arkit" and not st.expression.auto_source and st.expression.coverage.recommended == "shinano",
+    "a manual pick for these parts stands; the scan only recommends shinano")
 local okm, _, _, rm = SKS.call("auto_match_profile", {}); ticks(5)
 print("profile now:", st.expression.profile.id, st.runtime.notices[#st.runtime.notices].text)
 check(okm and rm.changed and st.expression.profile.id == "shinano", "自动匹配 switches to shinano")

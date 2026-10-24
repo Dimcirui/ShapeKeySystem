@@ -604,6 +604,7 @@
   "条件规则配置不存在：%s": "Condition rule set not found: %s",
   "来源: %s": "Source: %s",
   "来自绑定": "from binding",
+  "已自动匹配": "auto matched",
   "标定缺少来源": "Calibration has no source",
   "标定轴无效": "Calibration axis invalid",
   "校准正前方": "Calibrate forward",
