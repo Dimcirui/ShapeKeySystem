@@ -9,6 +9,7 @@ local Motion = require("ShapeKeySystem_Games.RE9.Motion")
 local Names = require("ShapeKeySystem_Core.Names")
 local Vowels = require('ShapeKeySystem_Games.RE9.Vowels')
 local Eyes = require('ShapeKeySystem_Games.RE9.Eyes')
+local L = require("ShapeKeySystem_Core.I18n")
 local S = {}
 local labels = {"eyeBlinkLeft", "eyeBlinkRight", "jawOpen"}
 local keys = {eyeBlinkLeft = 1, eyeBlinkRight = 2, jawOpen = 3}
@@ -63,7 +64,7 @@ function S.configure(data,mode,expanded)
     for _, label in ipairs(labels) do
         local list = data.taps[label]
         if list==nil then list={}end
-        if type(list) ~= "table" then return false, "RE9 原生表情来源无效：" .. label end
+        if type(list) ~= "table" then return false, L.f("RE9 原生表情来源无效：%s", label) end
         configured[label] = {}
         for _, name in ipairs(list) do
             if type(name) ~= "string" or not names[Hash.hash(name)] then return false, "RE9 来源不属于原生通道" end

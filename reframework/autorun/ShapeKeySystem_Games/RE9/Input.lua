@@ -1,6 +1,7 @@
 -- ShapeKeySystem: reset RE9 command conditions while the shared panel reads physical input.
 -- Hook references stay in per-thread call stacks. Native HID devices remain readable by the
 -- panel's virtual cursor and hotkeys; commands resume only after held mouse/keyboard keys lift.
+local L = require("ShapeKeySystem_Core.I18n")
 local I = {}
 local installed, live, enabled, failed = false, false
 local provider_type, condition_type, conditions_field, mouse_type, point_type, left_button
@@ -171,6 +172,6 @@ function I.diagnostics()
         enabled = live and enabled() == true, other_panel = other_panel(), cursor = 'shared_virtual'}
 end
 function I.status()
-    return string.format('命令重置 %d 次 · 错误 %d', counters.resets, counters.errors)
+    return L.f('命令重置 %d 次 · 错误 %d', counters.resets, counters.errors)
 end
 return I
