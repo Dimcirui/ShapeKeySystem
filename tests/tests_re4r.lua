@@ -153,7 +153,41 @@ check(#ada_parts==2 and not includes_player, "secondary actor parts never includ
 local ah=A.bind(ada_face,{A.raw.parse("jawOpen")})
 check(ah.calibration.joints.L_U_Eyelid03~=nil, "secondary Ada handle selects Ada calibration rather than player's Leon calibration")
 check(type(HOOKS.changeEventPhase)=="function" and type(HOOKS.unload)=="function", "RE4R phase and unload hooks register reference release")
-SCENE=old_scene;ARMOR.get_address=saved_address
+check(A.is_face(node("Leon costume","/Character/cha005/10/cha005_10.mesh.221108797"))
+    and A.is_face(node("Leon variant","/Character/cha006/10/cha006_10_TU1.mesh.221108797"))
+    and not A.is_face(node("Ashley head","/Character/cha100/10/cha100_10.mesh.221108797")),
+    "Leon costume head groups are faces; characters without a calibration are not")
+-- model viewer figure: controller -> mesh-less ..._Body (Motion) -> Body / Head / Hair / prop
+local fig_root=node("FigureModel_Figure00_010")
+local fig_body=node("Figure00_010_Body")
+local fig_skin=node("Body","/Character/cha002/00/cha002_00.mesh.221108797")
+local fig_head=node("Head","/Character/cha000/10/cha000_10.mesh.221108797")
+local fig_hair=node("Hair","/Character/cha000/20/cha000_20.mesh.221108797")
+local fig_prop=node("Figure02_010_Body","/Weapon/wp4000/wp4000_00.mesh.221108797")
+fig_root.child=fig_body; fig_body.parent=fig_root
+fig_body.child=fig_skin; fig_skin.next=fig_head; fig_head.next=fig_hair; fig_hair.next=fig_prop
+for _,c in ipairs({fig_skin,fig_head,fig_hair,fig_prop}) do c.parent=fig_body end
+local function array(list)
+    return {call=function(_, method,i) if method=="get_Length" then return #list else return list[i+1] end end}
+end
+SCENE={call=function(_, _, ty)
+    if ty=="chainsaw.FigureModelController" then return array({{call=function()return fig_root:get_GameObject() end}}) end
+    return array({{call=function()return fig_body:get_GameObject() end}})
+end}
+current=false
+check(not A.primary_ready() and A.instances_ready(true), "a model viewer figure makes instances ready without a player")
+extra=A.additional_faces()
+check(#extra==1 and extra[1]==fig_head, "the figure's Head child is found though only its mesh-less parent has a Motion")
+check(A.face_root(fig_head, nil)==fig_body, "a skin body of another group still marks the figure's actor root")
+local fig_parts=A.parts(fig_body,fig_head)
+check(#fig_parts==4, "figure parts: body, head, hair and the prop mesh")
+local fh=A.bind(fig_head,{A.raw.parse("jawOpen")})
+check(fh.calibration.joints.L_U_Eyelid03==nil, "a Leon figure binds the Leon calibration")
+SCENE={call=function() return array({}) end}
+local t_wait=os.clock()+0.55; while os.clock()<t_wait do end
+check(not A.instances_ready(true), "without a player, cutscene or figure, instances stay off")
+current=true
+SCENE=old_scene;ARMOR.get_address=saved_address or function() return "player head" end
 
 
 local spec={kind="pos",neutral={0,0,0,0,0,0,1},axis={0,1,0}}
