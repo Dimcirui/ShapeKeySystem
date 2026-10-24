@@ -191,7 +191,8 @@ local function draw_controls(ctx, x, y, w)
     local matched, match_w = W.button("自动匹配", mx, cy, nil, 28)
     W.tooltip("切换到与当前部件匹配度最高的表情配置", mx, cy, match_w, 28)
     if matched then call("auto_match_profile", {}) end
-    if ex.binding_source then W.chip("来自绑定", mx + match_w + 10, cy + 5, C.brass) end
+    if ex.binding_source then W.chip("来自绑定", mx + match_w + 10, cy + 5, C.brass)
+    elseif ex.auto_source then W.chip("已自动匹配", mx + match_w + 10, cy + 5, C.brass) end
     cy = cy + 40
 
     -- selected region
