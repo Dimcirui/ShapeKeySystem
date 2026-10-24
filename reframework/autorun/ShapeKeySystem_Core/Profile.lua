@@ -49,8 +49,9 @@ function P.load_signals(data)
         if v == nil then v = e.param end
         local key
         if v ~= nil and raw then key = raw.parse(v) end
-        -- a value the game cannot parse drops the entry; a game without raw channels has no signal at all
-        if type(e.name) == "string" and (v == nil or key ~= nil or not raw) then
+        -- a value the game cannot parse (an input this install has no source for) keeps the name with no
+        -- signal, so every shared profile still compiles; a game without raw channels has no signal at all
+        if type(e.name) == "string" then
             -- P holds raw / full; (raw - lo) / (hi - lo) = P * a + b
             local lo, hi = tonumber(e.lo) or 0, tonumber(e.hi) or s.full
             local a, b = 1, 0
