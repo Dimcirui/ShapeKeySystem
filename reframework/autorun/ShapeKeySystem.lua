@@ -42,14 +42,24 @@ if Game.prepare_mesh and re.on_pre_application_entry then
     end
 end
 
+-- runs fn inside the adapter's lookup cache (cache_begin / cache_end, optional): the primary
+-- character is resolved once per callback, and the window closes even when fn fails
+local function cached(fn)
+    local A = SKS.adapter
+    if A and A.cache_begin then A.cache_begin() end
+    local ok, err = pcall(fn)
+    if A and A.cache_end then A.cache_end() end
+    return ok, err
+end
+
 -- after the animation has posed the joints (same slot as Lua Bone System): mocap head turn
 re.on_application_entry("UpdateMotion", function()
-    local ok, err = pcall(SKS.update_motion)
+    local ok, err = cached(SKS.update_motion)
     if not ok then SKS.state.mocap.head_status = L.f("头部错误：%s", tostring(err)) end
 end)
 
 re.on_application_entry("LateUpdateBehavior", function()
-    local ok, err = pcall(SKS.tick)
+    local ok, err = cached(SKS.tick)
     if not ok then SKS.state.debug.status = "tick error: " .. tostring(err) end
 end)
 

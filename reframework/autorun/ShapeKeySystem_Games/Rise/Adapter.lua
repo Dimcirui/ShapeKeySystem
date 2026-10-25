@@ -59,8 +59,14 @@ local function go_name(tr)
     return ok and name or nil
 end
 
+local NAMED_FACE = {}
+for _, name in ipairs(FACE_NAMES) do NAMED_FACE[name] = true end
+
+-- face_base and DummyFace are faces by name (2 engine calls); any other transform needs the joint
+-- signature (up to 6 getJointByName calls), which made every search over a root's children costly
 function A.is_face(tr)
     if not tr or not M_JBN then return false end
+    if NAMED_FACE[go_name(tr)] then return true end
     for _, bone in ipairs(FACE_SIG) do
         local ok, joint = pcall(M_JBN.call, M_JBN, tr, bone)
         if not ok or joint == nil then return false end
@@ -70,13 +76,17 @@ end
 
 function A.face_rank(tr) return A.is_face(tr) and 1 or 0 end
 
+-- two passes over the children: a face named face_base / DummyFace first, the joint signature only
+-- when no child carries one of those names
 local function face_of(root)
     if not root then return nil end
     local ok, face = pcall(function()
-        local c, n = root:call("get_Child"), 0
-        while c and n < 64 do
-            if A.is_face(c) then return c end
-            c, n = c:call("get_Next"), n + 1
+        for pass = 1, 2 do
+            local c, n = root:call("get_Child"), 0
+            while c and n < 64 do
+                if pass == 1 and NAMED_FACE[go_name(c)] or pass == 2 and A.is_face(c) then return c end
+                c, n = c:call("get_Next"), n + 1
+            end
         end
     end)
     return ok and face or nil
@@ -142,9 +152,18 @@ local function from_player_list()
     return nil
 end
 
+-- One engine callback (tick, update_motion) asks for the primary character many times: between
+-- cache_begin and cache_end the first answer is reused. Outside that window every call resolves
+-- again, so no transform is held past the callback that found it.
+local cache = { on = false, src = nil, hit = false }
+function A.cache_begin() cache.on, cache.src, cache.hit = true, nil, false end
+function A.cache_end() cache.on, cache.src, cache.hit = false, nil, false end
+
 local function source()
+    if cache.on and cache.hit then return cache.src end
     local src = from_event() or from_master() or from_player_list()
     A.primary_source = src and src.kind or nil
+    if cache.on then cache.src, cache.hit = src, true end
     return src
 end
 

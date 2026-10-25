@@ -64,6 +64,28 @@ check(A.primary_root() == ROOT and A.primary_ready(), "master player resolved")
 check(A.is_face(face) and A.face_rank(face) == 1 and not A.is_part("face_base"),
     "face_base anchors the rig and is not a part")
 check(not A.is_face(ARMOR) and A.face_rank(ARMOR) == 0, "a mod head with only Head_00 is not a face")
+-- a face named face_base / DummyFace needs no joint lookups; other names still need the joints
+local named = { _joints = {}, call = function(self, m, ...) return self[m](self, ...) end,
+    get_GameObject = function() return { call = function(_, m) if m == "get_Name" then return "DummyFace" end end } end }
+local jbn_calls = 0
+named.getJointByName = function() jbn_calls = jbn_calls + 1 end
+check(A.is_face(named) and jbn_calls == 0, "a DummyFace transform is a face by its name alone")
+-- one engine callback resolves the master player once; outside it every call resolves again
+local lookups, singleton_now = 0, sdk.get_managed_singleton
+sdk.get_managed_singleton = function(name)
+    if name == "snow.player.PlayerManager" then lookups = lookups + 1 end
+    return singleton_now(name)
+end
+A.cache_begin()
+for _ = 1, 5 do A.primary_root(); A.primary_ready() end
+local inside = lookups
+A.cache_end()
+lookups = 0
+for _ = 1, 3 do A.primary_root() end
+sdk.get_managed_singleton = singleton_now
+check(inside > 0 and inside <= 2 and lookups >= 3, "the player is looked up once per callback, fresh outside it ("
+    .. inside .. " inside, " .. lookups .. " outside)")
+check(A.primary_root() == ROOT, "the cache leaves nothing behind")
 check(A.primary_source == "master", "no cutscene: the master player drives")
 check(A.is_part("f_body279") and A.is_part("m_helm001") and not A.is_part("f_hair033")
     and not A.is_part("B_Bow014") and not A.is_part("PlHeadMessage"), "armor slots are parts, hair and weapons are not")
