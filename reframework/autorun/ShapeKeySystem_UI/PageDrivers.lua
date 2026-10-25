@@ -136,20 +136,34 @@ function Page.draw(ctx, x, y, w)
     local c1, on, tw = W.toggle("启用驱动", x, cy, dv.cfg.enabled == true)
     if c1 then call("drivers", { op = "patch", patch = { enabled = on } }) end
     local full = #dv.cfg.items >= (dv.max_items or 32)
+    -- with several characters the page lists the edited character's drivers; the others keep running
+    local ac = ctx.st.actors
+    local actor = ac and ac.enabled and ac.selected or nil
     if W.button("添加驱动", x + tw + 24, cy, nil, 28, { kind = "primary", disabled = full }) then
-        call("drivers", { op = "add" })
+        call("drivers", { op = "add", actor = actor })
     end
     cy = cy + 36
     D.text("每条驱动让一个形态键按波形或公式随时间变化，优先于表情和捏脸；面捕或其他插件正在控制的形态键会先让给它们。",
         x, cy, C.muted, W.small(), w)
     cy = cy + 28
-    if #dv.cfg.items == 0 then
-        D.text("还没有驱动。点「添加驱动」，选一个形态键和波形即可。", x, cy, C.faint, W.small(), w)
-        return cy + 24 - y
-    end
+    local shown, others = 0, 0
     for i, it in ipairs(dv.cfg.items) do
-        local v = dv.items[i] or {}
-        cy = cy + driver_card(ctx, i, it, v, x, cy, w) + 10
+        local mine = not actor or ((it.actor ~= nil and it.actor ~= "") and it.actor or ac.player_id) == actor
+        if mine then
+            local v = dv.items[i] or {}
+            cy = cy + driver_card(ctx, i, it, v, x, cy, w) + 10
+            shown = shown + 1
+        else
+            others = others + 1
+        end
+    end
+    if shown == 0 then
+        D.text("还没有驱动。点「添加驱动」，选一个形态键和波形即可。", x, cy, C.faint, W.small(), w)
+        cy = cy + 24
+    end
+    if others > 0 then
+        D.text(L.f("其他角色还有 %s 条驱动，切换到那个角色可查看", others), x, cy, C.faint, W.small(), w)
+        cy = cy + 24
     end
     return cy - y
 end

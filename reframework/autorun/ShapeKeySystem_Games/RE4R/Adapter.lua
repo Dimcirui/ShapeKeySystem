@@ -126,9 +126,14 @@ function A.instance_root(face)
     return face
 end
 
-function A.face_root(face, root)
-    return face == head() and root or A.instance_root(face)
+-- the player's head groups under the player's root even while another character is edited
+-- (Core then passes that character's root as `root`)
+function A.face_root(face)
+    return face == head() and A.primary_root() or A.instance_root(face)
 end
+
+-- the person a head belongs to (Core/Actors.lua): "leon" / "ada"
+function A.actor_of(face) return actor_of_path(path(face)) end
 
 -- components of a type in the current scene, or nil
 local function components(type_name)

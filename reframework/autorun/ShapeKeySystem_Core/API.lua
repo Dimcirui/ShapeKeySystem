@@ -27,6 +27,7 @@ local ActorInstances = require("ShapeKeySystem_Core.ActorInstances")
 local Proc    = require("ShapeKeySystem_Core.Procedural")
 local Mocap   = require("ShapeKeySystem_Core.Mocap")
 local Drivers = require("ShapeKeySystem_Core.Drivers")
+local Actors  = require("ShapeKeySystem_Core.Actors")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
 local Version = require("ShapeKeySystem_Core.Version")
@@ -165,6 +166,10 @@ state.scene.additional = ActorInstances.state
 NativeSignals.on_export = function() Playback.refresh() end
 state.mocap = Mocap.view
 state.drivers = Drivers.view
+-- characters by person (Actors.lua): list = {{id, name, player, copies}}, selected (being edited),
+-- wanted (picked in the panel, may be absent), player_id (the player's character), enabled (the
+-- game tells people apart)
+state.actors = { rev = 0, list = {}, selected = "", wanted = nil, player_id = "", enabled = false }
 
 
 -- ---------------------------------------------------------------- internal
@@ -258,6 +263,8 @@ local QUICK_RESCAN = 2
 
 local function drop_rigs(reason, rescan_after)
     ActorInstances.release(reason)
+    -- the character faces go with the rigs; they are collected again before the rescan
+    Actors.clear(); Scene.override = nil; C.actors_at = C.frame
     Playback.stop(false, I18n.f("角色或场景变化，录制播放已停止：%s", tostring(reason)))
     if #C.rigs > 0 or #C.pending_zero > 0 then log("released rigs: %s", reason) end
     -- warm-up by mesh address only (numbers, no engine references); the next scan consumes it
@@ -1363,6 +1370,17 @@ end
 C.mocap_ctx = { resolve = function(name) return C.resolve_slot(name) end, reaches = mocap_reaches,
                 expr = live.weight }
 
+-- Collects the characters again; the edited one's faces become the primary scan
+local function refresh_actors()
+    local changed = Actors.refresh(armor_name)
+    Scene.override = Actors.override()
+    Drivers.current_actor, Drivers.default_actor = Actors.selected, Actors.player
+    local a = state.actors
+    a.list, a.selected, a.wanted, a.player_id, a.enabled = Actors.list, Actors.selected, Actors.wanted, Actors.player, true
+    bump("actors")
+    if changed then request_rescan(1) end
+end
+
 local function tick()
     Playback.tick(false)
     C.frame = C.frame + 1
@@ -1418,6 +1436,10 @@ local function tick()
     -- (rigs are dropped at each segment start), so the take waits instead of ending
     local face = C.rigs[1] and C.rigs[1].face
     NativeSignals.tick(SKS.adapter, (face or not cutscene) and true or "hold", { face = face })
+    if Actors.enabled() and f >= (C.actors_at or 0) then
+        C.actors_at = f + 60
+        refresh_actors()
+    end
     local fallback_expression, fallback_eyes = fallback_tuning()
     ActorInstances.tick(f, { enabled = cfg.enabled, cutscene_drive = cfg.cutscene_drive,
         profile = cfg.profile, expression = fallback_expression, eyes = fallback_eyes,
@@ -1766,6 +1788,22 @@ function cmds.mocap_calibrate(a)
     elseif a.what == "clear" then Mocap.cfg.neutral = {}
     else return false, "E_BAD_ARGS", "what: face / head / clear" end
     if not Mocap.save() then return false, "E_IO", "mocap.json save failed" end
+    return true
+end
+
+-- character to edit (Actors.lua): id from state.actors.list. Refused while sculpt, mapping or
+-- tuning edits are unsaved: they belong to the character being edited now.
+function cmds.select_actor(a)
+    if not Actors.enabled() then return false, "E_BAD_ARGS", "this game has one character" end
+    if type(a.id) ~= "string" or not Actors.has(a.id) then return false, "E_NOT_FOUND", "no such character" end
+    if a.id == Actors.selected then Actors.wanted = a.id; return true end
+    if Sculpt.is_dirty() or state.mapping.dirty or (C.tuning and C.tuning.dirty) then
+        return false, "E_UNSAVED", "当前角色有未保存的修改，请先保存或撤销"
+    end
+    Actors.wanted = a.id
+    Trail.event("edit character %s", a.id)
+    drop_rigs("character switched", QUICK_RESCAN)
+    refresh_actors()
     return true
 end
 
@@ -2312,6 +2350,8 @@ function SKS.init(adapter)
     local saved = U.load_json(SETTINGS_PATH)
     if type(saved) == "table" then I18n.set(saved.language) end
     ActorInstances.init(adapter)
+    Actors.init(adapter)
+    if Actors.enabled() then ActorInstances.faces = Actors.instance_faces end
     if adapter.init then
         local ok, why = adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
                                        menu = SKS.on_menu, preview = SKS.on_preview })
@@ -2402,6 +2442,7 @@ end
 
 function SKS.on_rebuilt()
     ActorInstances.release("actor lifecycle changed")
+    Actors.clear(); Scene.override = nil; C.actors_at = C.frame
     Trail.event("hook rebuilt (rigs %d)", #C.rigs)
     if #C.rigs > 0 then drop_rigs("equipment rebuilt", Guard.SETTLE_FRAMES)
     else request_rescan(Guard.SETTLE_FRAMES) end
