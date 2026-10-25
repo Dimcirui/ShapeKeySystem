@@ -1020,7 +1020,12 @@
   "添加驱动": "Add driver",
   "每条驱动让一个形态键按波形或公式随时间变化，优先于表情和捏脸；面捕或其他插件正在控制的形态键会先让给它们。": "Each driver moves one shape key over time by a waveform or a formula, above expression and sculpt; keys that face mocap or another plugin controls are left to them.",
   "还没有驱动。点「添加驱动」，选一个形态键和波形即可。": "No drivers yet. Click \"Add driver\" and pick a shape key and a waveform.",
-  "驱动": "Drivers"
+  "驱动": "Drivers",
+  "当前角色有未保存的修改，请先保存或撤销": "The current character has unsaved changes: save or undo them first",
+  "其他角色还有 %s 条驱动，切换到那个角色可查看": "Other characters have %s more drivers; switch to that character to see them",
+  "编辑：%s": "Editing: %s",
+  "%s（玩家）": "%s (player)",
+  "捏脸、表情配置和驱动都作用于这里选中的角色": "Sculpt, expression config and drivers apply to the character selected here"
  },
  "untranslated": [
   "Ag国",

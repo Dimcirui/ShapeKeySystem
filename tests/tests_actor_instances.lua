@@ -130,12 +130,27 @@ check(a.mesh.writes == previous and #M.state.instances == 0, "skip/removal relea
 actors = {a.face, b.face}
 for frame = 131, 230 do M.tick(frame, options) end
 check(#M.state.instances == 2, "new scene actors rebuild after lifecycle settling")
+-- drivers of a character not being edited (Drivers.actor_values) land on that character's rigs
+local Dr = require("ShapeKeySystem_Core.Drivers")
+local norm = require("ShapeKeySystem_Core.External").norm
+adapter.actor_of = function(face) return face.parent == a and "leon" or "ada" end
+M.release("actor ids")
+for frame = 300, 400 do M.tick(frame, options) end
+Dr.actor_values.ada = { [norm("B_mouth")] = {name = "B_mouth", value = .3}, [norm("B_size")] = {name = "B_size", value = .7} }
+for frame = 401, 440 do M.tick(frame, options) end
+check(math.abs(b.mesh.values[0] - .3) < 1e-6 and math.abs(a.mesh.values[0] - .1) < 1e-6,
+    "a driven profile channel overrides only its own character's computed value")
+check(math.abs((b.mesh.values[3] or 0) - .7) < 1e-6, "a driven channel outside the profile is written directly")
+Dr.actor_values.ada = nil
+for frame = 441, 445 do M.tick(frame, options) end
+check(math.abs(b.mesh.values[0] - .8) < 1e-6 and b.mesh.values[3] == 0, "without the driver both channels return to their own values")
+adapter.actor_of = nil
 options.enabled = false
-M.tick(231, options)
+M.tick(446, options)
 check(a.mesh.values[0] == 0 and b.mesh.values[0] == 0, "disable clears only valid owned weights in update")
 check(#M.state.instances == 0, "disable releases independent instances")
 M.init({id = "other_game"})
-M.tick(232, options)
+M.tick(447, options)
 check(#M.state.instances == 0, "adapters without the capability do not scan or drive extra actors")
 print("ACTOR INSTANCE ASSERTIONS:", assertions)
 print("ACTOR INSTANCE FAILS:", 0)

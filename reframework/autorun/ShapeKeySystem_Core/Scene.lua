@@ -14,6 +14,9 @@ local M_CN = W.M_CN
 local clock = os.clock
 
 S.no_targets = {}   -- parent transform -> children signature known to hold no hunter mesh
+-- { root, faces } of the character the panel edits (Actors.override), or nil for the adapter's
+-- own primary character; API sets and clears it together with its rigs
+S.override = nil
 
 function S.go_name(transform)
     local ok, n = pcall(function() return transform:call("get_GameObject"):call("get_Name") end)
@@ -21,6 +24,7 @@ function S.go_name(transform)
 end
 
 function S.primary_root()
+    if S.override then return S.override.root end
     local f = S.adapter.primary_root
     return f and f() or nil
 end
@@ -60,6 +64,10 @@ local function find_faces(root, scene_search)
         if tr and not seen[tr] and A.is_face(tr) then
             seen[tr] = true; faces[#faces + 1] = tr
         end
+    end
+    if S.override then
+        for _, face in ipairs(S.override.faces) do add(face) end
+        return faces
     end
     if root and A.faces then
         for _, face in ipairs(A.faces(root)) do add(face) end

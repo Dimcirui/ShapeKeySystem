@@ -110,7 +110,8 @@ local function draw_titlebar(st, x, y, w)
     D.rect(x, y, w, 2, C.brass_dim)
     D.rect(x, y + h - 1, w, 1, C.line)
     local bw = D.text_mid("SHAPEKEYSYSTEM", x + 14, y, h, C.brass, D.font(T.font.title, true))
-    D.text_mid("形态键系统", x + 22 + bw, y + 1, h, C.muted, W.small())
+    local sw = D.text_mid("形态键系统", x + 22 + bw, y + 1, h, C.muted, W.small())
+    local left = x + 22 + bw + sw + 16
     -- right side, right to left
     local rx = x + w - 12 - 26
     if W.close_button(rx, y + 7, 26) then Panel.set_open(false) end
@@ -144,6 +145,22 @@ local function draw_titlebar(st, x, y, w)
         ch, v = W.toggle("翻译形态键", rx, y + 6, st.settings.translate_keys == true)
         if ch then call("set_setting", { key = "translate_keys", value = v }) end
         W.tooltip("形态键显示中文译名，悬停可看原名；只影响显示", rx, y + 6, tw, 28)
+    end
+    -- the character every page edits; shown once the scene holds more than one
+    local ac = st.actors
+    if ac and ac.enabled and #ac.list > 1 then
+        local labels, cur = {}, 1
+        for i, a in ipairs(ac.list) do
+            labels[i] = L.f("编辑：%s", a.player and L.f("%s（玩家）", L.tr(a.name)) or L.tr(a.name))
+            if a.id == ac.selected then cur = i end
+        end
+        local aw = min(240, rx - 16 - left)
+        if aw >= 120 then
+            local c, i = W.select("actor", left, y + 7, aw, 26, labels, cur)
+            if c and ac.list[i] then call("select_actor", { id = ac.list[i].id }) end
+            W.tooltip("捏脸、表情配置和驱动都作用于这里选中的角色", left, y + 7, aw, 26)
+            left = left + aw + 10
+        end
     end
     return rx - 10   -- right end of the drag area
 end

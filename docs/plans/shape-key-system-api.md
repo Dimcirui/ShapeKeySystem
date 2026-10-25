@@ -700,6 +700,16 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 `lacking`（`blink.L`、`blink.R`、`jawOpen` 是否按「缺失」处理；`gaze` 按主角色有没有眼球关节或适配器的声明，每次扫描后更新）。
 「表情详情」页的「自动表情」区提供总开关、合成方式，眨眼的开关、频率和速度，视线微动的开关和幅度，微微张嘴的开关和幅度，每行右侧是当前值。
 
+## 多角色编辑
+
+设计见 [multi-actor.md](multi-actor.md)。适配器提供 `actor_of` 与 `additional_faces` 时，场景里的角色按人分组，标题栏的角色下拉选择当前编辑的角色；所选角色成为主角色，其余角色（包括玩家，当玩家不是所选角色时）由额外角色流程按各自的绑定驱动。
+
+| 命令 | 参数 | 作用 |
+|---|---|---|
+| `select_actor` | `{id}` | 切换当前编辑的角色。捏脸、映射或调参有未保存修改时返回 `E_UNSAVED`；角色不在场景里时返回 `E_NOT_FOUND` |
+
+`state.actors`：`enabled`（游戏能区分角色）、`list = {{id, name, player, copies}}`（玩家所在的角色在前）、`selected`（实际在编辑的角色）、`wanted`（用户选的角色，可能不在场）、`player_id`。
+
 ## 额外角色诊断
 
 `state.scene.additional` 提供 `rev`、`instances`、`errors` 与释放时的 `reason`。实例行包含角色标识、显示名、Profile、绑定、通道数、就绪状态、眼睛参数、增益及提示，不暴露引擎对象。
@@ -758,12 +768,12 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 
 | 命令 | 参数 | 作用 | 持久化 |
 |---|---|---|---|
-| `drivers` | `{op = "add", key?}` | 新增一条驱动（默认正弦、周期 2 秒、0–1），最多 32 条 | `user/drivers.json` |
+| `drivers` | `{op = "add", key?, actor?}` | 新增一条驱动（默认正弦、周期 2 秒、0–1），最多 32 条；`actor` 是所属角色 | `user/drivers.json` |
 | `drivers` | `{op = "remove", index}` | 删除第 index 条 | 同上 |
 | `drivers` | `{op = "patch", index, patch}` | 修改一条：`enabled`、`key`、`wave`、`period`（0.05–120）、`lo` / `hi`（0–5）、`phase`（0–1）、`expr` | 同上 |
 | `drivers` | `{op = "patch", patch = {enabled}}` | 总开关 | 同上 |
 
-`user/drivers.json`：`{"schema": "sks.drivers/1", "enabled": true, "items": [{enabled, key, wave, period, lo, hi, phase, expr}]}`。读取时缺失或类型不对的字段取默认值，数值按上表范围截断。拖动滑块时 0.5 秒后才写文件。
+`user/drivers.json`：`{"schema": "sks.drivers/1", "enabled": true, "items": [{enabled, key, wave, period, lo, hi, phase, expr, actor}]}`。`actor` 为空表示玩家所在的角色。当前编辑角色的驱动以外部值写入；其他角色的驱动写到它们自己的网格上（表情配置里的通道覆盖该槽位，其他同名形态键直接写入，驱动停止后恢复原值）。驱动页只列出当前编辑角色的驱动。读取时缺失或类型不对的字段取默认值，数值按上表范围截断。拖动滑块时 0.5 秒后才写文件。
 
 `state.drivers`：`cfg`（上面的设置）、`items[i] = {value, formula, err, owner, dup}`（当前值、实际执行的公式、公式错误 `{模板, 参数...}`、占用该键的其他所有者、与之重复的第一条驱动的序号）、`waves` / `wave_names`、`max_items`。
 

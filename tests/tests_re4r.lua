@@ -155,6 +155,38 @@ check(A.face_root(ada_face, ROOT)==ada_root, "secondary face is grouped under it
 local ada_parts=A.parts(ada_root,ada_face)
 local includes_player=false;for _,tr in ipairs(ada_parts) do includes_player=includes_player or tr==ARMOR end
 check(#ada_parts==2 and not includes_player, "secondary actor parts never include the player's head")
+-- characters by person: the player Leon and the cutscene Ada; editing switches the primary scan
+local Actors=require("ShapeKeySystem_Core.Actors")
+local Scene=require("ShapeKeySystem_Core.Scene")
+local Dr=require("ShapeKeySystem_Core.Drivers")
+local function tick_n(n) for _=1,n do CB.tick() end end
+tick_n(2)
+local al=SKS.state.actors
+check(al.enabled and #al.list==2 and al.list[1].id=="leon" and al.list[1].player and al.list[2].id=="ada"
+    and al.selected=="leon", "characters: the player's Leon first, then Ada")
+check(al.list[1].name=="里昂" and al.list[2].name=="艾达", "character names from character_names.json")
+check(Scene.primary_root()==ROOT, "editing the player's character keeps the player's root")
+local ok_sel=SKS.call("select_actor",{id="ada"})
+check(ok_sel and al.selected=="ada" and Scene.primary_root()==ada_root, "editing Ada makes her root the primary scan")
+local inst=Actors.instance_faces()
+check(#inst==1 and inst[1]==ARMOR, "the player's head goes to the additional actors while Ada is edited")
+local _,err_sel=SKS.call("select_actor",{id="ashley"})
+check(err_sel=="E_NOT_FOUND", "a character not in the scene cannot be edited")
+Dr.load({items={{key="SK__arkit.eyeBlinkLeft",wave="expr",expr="0.4",actor="leon"},
+                {key="Other",wave="expr",expr="0.6"}}})
+tick_n(1)
+local lv=Dr.actor_values.leon
+check(lv and lv[require("ShapeKeySystem_Core.External").norm("SK__arkit.eyeBlinkLeft")]
+    and require("ShapeKeySystem_Core.External").get("SK__arkit.eyeBlinkLeft")==nil,
+    "a driver of a character not being edited goes to its rigs, not to a lease")
+check(Dr.actor_values.leon and Dr.actor_values.leon["other"]~=nil,
+    "a driver without a character belongs to the player's character")
+SKS.call("select_actor",{id="leon"})
+tick_n(1)
+check(Scene.primary_root()==ROOT and al.selected=="leon" and require("ShapeKeySystem_Core.External").get("Other")~=nil,
+    "back to Leon: the player's root again, his drivers take leases")
+Dr.load({})
+tick_n(1)
 local ah=A.bind(ada_face,{A.raw.parse("jawOpen")})
 check(ah.calibration.joints.L_U_Eyelid03~=nil, "secondary Ada handle selects Ada calibration rather than player's Leon calibration")
 check(type(HOOKS.changeEventPhase)=="function" and type(HOOKS.unload)=="function", "RE4R phase and unload hooks register reference release")

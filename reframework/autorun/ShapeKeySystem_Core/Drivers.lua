@@ -14,6 +14,9 @@
 --   another plugin) is left to that owner; the driver resumes once the key is free.
 -- - The clock advances by API's tick dt (at most 0.1 s), so a long hitch does not jump the phase.
 -- - Settings live in user/drivers.json, not settings.json.
+-- - A driver belongs to a character (`actor`, Core/Actors.lua; "" = the player's character). Only
+--   the edited character's drivers take leases; the others' values go to `D.actor_values`, which
+--   ActorInstances writes on that character's rigs.
 
 local U   = require("ShapeKeySystem_Core.Util")
 local Ext = require("ShapeKeySystem_Core.External")
@@ -25,7 +28,8 @@ D.MAX_FORMULA = 200
 -- "expr" = the item's own formula; the others are waveforms over one cycle (see FUNCS)
 D.WAVES = { "osc", "tri", "saw", "square", "noise", "expr" }
 D.WAVE_NAMES = { osc = "正弦", tri = "三角", saw = "锯齿", square = "方波", noise = "随机平滑", expr = "自定义公式" }
-D.ITEM_DEFAULTS = { enabled = true, key = "", wave = "osc", period = 2.0, lo = 0.0, hi = 1.0, phase = 0.0, expr = "" }
+D.ITEM_DEFAULTS = { enabled = true, key = "", wave = "osc", period = 2.0, lo = 0.0, hi = 1.0, phase = 0.0, expr = "",
+    actor = "" }
 -- lo / hi up to Sculpt.MAX_LIMIT; tick clamps the value to the current sculpt_max
 D.LIMITS = { period = { 0.05, 120 }, lo = { 0, 5 }, hi = { 0, 5 }, phase = { 0, 1 } }
 
@@ -38,6 +42,8 @@ local st = { save_at = nil, held = {} }   -- held: norm key -> name, leases set 
 -- owner = another owner holding the key, dup = index of the driver that already holds it }
 D.view = { cfg = cfg, items = {}, time = 0, waves = D.WAVES, wave_names = D.WAVE_NAMES, max_items = D.MAX_ITEMS }
 D.time = 0
+D.current_actor, D.default_actor = "", ""   -- the edited character, the player's character (API)
+D.actor_values = {}   -- actor id -> norm key -> { name, value }, other characters' drivers this tick
 local compiled = {}   -- index -> closure(t) or false
 
 -- ---------------------------------------------------------------- formula
@@ -224,6 +230,7 @@ local function sanitize_item(src)
     if type(src) ~= "table" then return it end
     if type(src.enabled) == "boolean" then it.enabled = src.enabled end
     if type(src.key) == "string" then it.key = src.key end
+    if type(src.actor) == "string" then it.actor = src.actor end
     if D.WAVE_NAMES[src.wave] then it.wave = src.wave end
     if type(src.expr) == "string" then it.expr = src.expr:sub(1, D.MAX_FORMULA) end
     for k, lim in pairs(D.LIMITS) do
@@ -280,6 +287,7 @@ function D.command(a)
         if #items >= D.MAX_ITEMS then return false, "E_BAD_ARGS", "too many drivers" end
         local it = U.copy(D.ITEM_DEFAULTS)
         if type(a.key) == "string" then it.key = a.key end
+        if type(a.actor) == "string" then it.actor = a.actor end
         items[#items + 1] = it
         recompile(#items)
     elseif a.op == "remove" then
@@ -336,6 +344,7 @@ local now_held = {}
 function D.tick(dt, hi, writable)
     if st.save_at and clock() >= st.save_at then D.save() end
     local items = cfg.items
+    for k in pairs(D.actor_values) do D.actor_values[k] = nil end
     if not cfg.enabled or #items == 0 then
         for _, v in pairs(D.view.items) do v.value, v.owner, v.dup = 0, nil, nil end
         return release_all()
@@ -344,8 +353,9 @@ function D.tick(dt, hi, writable)
     D.view.time = D.time
     local t = D.time
     for k in pairs(now_held) do now_held[k] = nil end
-    local first = {}   -- norm key -> index of the first driver naming it
+    local first = {}   -- actor id -> norm key -> index of the first driver naming it
     for i, it in ipairs(items) do
+        local actor = D.actor_of(it)
         local v = D.view.items[i]
         v.owner, v.dup = nil, nil
         local fn = compiled[i]
@@ -360,13 +370,20 @@ function D.tick(dt, hi, writable)
             if x ~= x or x == math.huge or x == -math.huge then x = 0 end
             x = U.clamp(x, 0, hi)
             v.value = x
+            local seen = first[actor] or {}
+            first[actor] = seen
             local _, owner = Ext.get(key)
-            if first[n] then
-                v.dup = first[n]
+            if seen[n] then
+                v.dup = seen[n]
+            elseif actor ~= D.current_actor then
+                seen[n] = i
+                local values = D.actor_values[actor] or {}
+                D.actor_values[actor] = values
+                values[n] = { name = key, value = x + 0.0 }
             elseif owner and owner ~= D.OWNER then
                 v.owner = owner
             else
-                first[n] = i
+                seen[n] = i
                 Ext.set(D.OWNER, key, x + 0.0, Ext.DEFAULT_TTL)
                 now_held[n] = key
             end
@@ -382,6 +399,11 @@ function D.tick(dt, hi, writable)
     end
     for n, name in pairs(now_held) do st.held[n] = name end
     return released or next(now_held) ~= nil
+end
+
+-- the character a driver belongs to; "" (older files, games with one character) is the player's
+function D.actor_of(it)
+    return (it.actor ~= nil and it.actor ~= "") and it.actor or D.default_actor
 end
 
 function D.config() return cfg end

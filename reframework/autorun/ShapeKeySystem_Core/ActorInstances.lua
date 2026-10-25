@@ -2,6 +2,8 @@
 --
 -- The player's editable profile stays in API.lua. Additional actors own their compiled program,
 -- smoothing, eye settings and sculpt bases. Lifecycle events discard handles before actor teardown.
+-- With Core/Actors.lua the faces are every character but the edited one (`M.faces`), and the
+-- drivers of a rig's character (`Drivers.actor_values`) override its channels.
 local U = require("ShapeKeySystem_Core.Util")
 local L = require("ShapeKeySystem_Core.I18n")
 local Scene = require("ShapeKeySystem_Core.Scene")
@@ -12,7 +14,10 @@ local X = require("ShapeKeySystem_Core.Expression")
 local Guard = require("ShapeKeySystem_Core.Guard")
 local Writer = require("ShapeKeySystem_Core.Writer")
 local Sculpt = require("ShapeKeySystem_Core.Sculpt")
+local Drivers = require("ShapeKeySystem_Core.Drivers")
+local Ext = require("ShapeKeySystem_Core.External")
 local M = { state = { rev = 0, instances = {}, errors = {} } }
+M.faces = nil   -- function returning the faces to drive (API sets it with Core/Actors.lua)
 local adapter, rigs, frame, next_scan = nil, {}, 0, 0
 local RANK = { global = 3, own = 2, model = 1, default = 0 }
 
@@ -118,6 +123,8 @@ local function build(raw, options, old)
     raw.expression, raw.eye_settings, raw.gains = e, eyes, gains
     raw.P, raw.W, raw.V, raw.forced = {}, {}, {}, {}
     local index = Names.build_index(program.names, resolved.aliases, resolved.channels)
+    raw.index, raw.driven = index, {}
+    raw.actor = adapter.actor_of and adapter.actor_of(raw.face) or nil
     raw.targets, raw.manual = {}, {}
     local slots = {}
     for _, part in ipairs(raw.parts) do
@@ -171,7 +178,7 @@ end
 local function scan(options)
     local old = {}
     for _, rig in ipairs(rigs) do old[rig.id] = rig end
-    local result = Scene.scan({faces = adapter.additional_faces(), include_empty = true,
+    local result = Scene.scan({faces = M.faces and M.faces() or adapter.additional_faces(), include_empty = true,
         index = Names.build_index({}), known = options.known, min_hits = 1})
     local found, errors = {}, {}
     for _, raw in ipairs(result.rigs) do
@@ -185,6 +192,37 @@ local function scan(options)
         end
     end
     rigs, M.state.errors = found, errors
+end
+
+-- Where a driven key lands on this rig: { slot } for a profile channel, { mesh, idx } for another
+-- channel of the same name, false when the rig has neither. Cached per rig.
+local function driver_target(rig, norm, name)
+    local hit = rig.driven[norm]
+    if hit ~= nil then return hit end
+    local slot = rig.prog.slot_of[name]
+    if not slot then
+        local ok, m = pcall(Names.match, rig.index, name)
+        slot = ok and m or nil
+    end
+    if slot then hit = { slot = slot }
+    else
+        hit = false
+        for _, part in ipairs(rig.parts) do
+            for i, n in ipairs(part.names) do
+                if n ~= "" and Ext.norm(n) == norm then hit = { mesh = part.mesh, idx = i - 1, name = n, stable = 0, base = 0 }; break end
+            end
+            if hit then break end
+        end
+    end
+    if hit and hit.mesh then
+        for _, m in ipairs(rig.manual) do
+            if m.mesh == hit.mesh then
+                for _, v in ipairs(m.values) do if v.idx == hit.idx then hit.base = v.value end end
+            end
+        end
+    end
+    rig.driven[norm] = hit
+    return hit
 end
 
 local function valid(rig)
@@ -205,10 +243,26 @@ local function drive(rig, options)
         for slot = 1, rig.prog.n do rig.O[slot] = 0 end
         out = rig.O
     end
+    -- this character's drivers: a profile channel is overridden (not mixed with its sculpt base),
+    -- another channel is written directly; one no driver holds any more goes back to its base once
+    local skip, raws = nil, nil
+    local values = rig.actor and Drivers.actor_values[rig.actor]
+    if values then
+        for norm, e in pairs(values) do
+            local hit = driver_target(rig, norm, e.name)
+            if hit and hit.slot then
+                if out ~= rig.O then rig.O = rig.O or {}; for s = 1, rig.prog.n do rig.O[s] = out[s] end; out = rig.O end
+                out[hit.slot] = e.value
+                skip = skip or {}; skip[hit.slot] = true
+            elseif hit then
+                raws = raws or {}; raws[hit] = e.value
+            end
+        end
+    end
     for _, target in ipairs(rig.targets) do
         if not Guard.mesh_ready(target.mesh) then target.stable = 0
         elseif target.stable < Guard.STABLE_FRAMES then target.stable = target.stable + 1
-        else Writer.write_target(target, out, false, options.epsilon, target.base, Sculpt.mix) end
+        else Writer.write_target(target, out, false, options.epsilon, target.base, Sculpt.mix, skip) end
     end
     for _, target in ipairs(rig.manual) do
         if not Guard.mesh_ready(target.mesh) then target.stable = 0
@@ -222,6 +276,19 @@ local function drive(rig, options)
                         target.last[value.idx] = value.value
                     end
                 end
+            end
+        end
+    end
+    -- after the sculpt values, every frame: those are rewritten while active on some games
+    for _, hit in pairs(rig.driven) do
+        if hit and hit.mesh then
+            local v = raws and raws[hit]
+            local restore = v == nil and hit.held
+            if restore then v = hit.base end
+            if v ~= nil then
+                if not Guard.mesh_ready(hit.mesh) then hit.stable = 0
+                elseif hit.stable < Guard.STABLE_FRAMES then hit.stable = hit.stable + 1
+                elseif Writer.set_weight(hit.mesh, hit.idx, v, hit.name) then hit.held = not restore end
             end
         end
     end
