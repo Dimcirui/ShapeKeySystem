@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.9.0"
+V.number = "1.9.1"
 V.author = "谛听, MK, Funnyguyz"
 
 V.history = {
+    { version = "1.9.1", notes = "崛起减少掉帧" },
     { version = "1.9.0", notes = "新增形态键驱动、RE9 实验性支持等" },
     { version = "1.8.0", notes = "新增英文界面；鬼武者支持鬼化形态" },
     { version = "1.7.0", notes = "崛起支持条件规则" },
