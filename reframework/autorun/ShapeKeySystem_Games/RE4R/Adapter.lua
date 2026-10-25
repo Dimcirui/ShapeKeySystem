@@ -2,6 +2,13 @@
 --
 -- The current player's head selects its calibration. Objects are resolved per call;
 -- rig handles are released when the topology changes.
+--
+-- A head's identity is the group of its mesh file name (`cha000_10` -> `cha000`): mods replace the
+-- file contents, not the logical path, and costume groups reuse the base head.
+--
+-- Without a player context the figure shown in the model viewer is the primary character:
+-- `FigureGuiManager.get_ModelController()` gives it each frame, its head is the descendant named
+-- `Head`, and its root is the mesh-less `..._Body` node that holds the Motion.
 local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
 local NativeFace = require("ShapeKeySystem_Games.RE4R.NativeFace")
 local BoneHold = require("ShapeKeySystem_Games.RE4R.BoneHold")
@@ -32,17 +39,46 @@ local function path(tr)
     local p = call(call(mesh(tr), "getMesh"), "get_ResourcePath")
     return type(p) == "string" and p:gsub("\\", "/"):lower() or ""
 end
+local function figure_head()
+    local manager = call(sdk.get_managed_singleton("chainsaw.BonusContentsGuiManager"), "get_FigureManager")
+    local root = transform(call(call(manager, "get_ModelController"), "get_GameObject"))
+    local function find(tr, depth)
+        local c, seen = call(tr, "get_Child"), {}
+        while c and not seen[c] do
+            seen[c] = true
+            local name = call(call(c, "get_GameObject"), "get_Name")
+            if type(name) == "string" and name:lower() == "head" then return c end
+            local hit = depth < 6 and find(c, depth + 1)
+            if hit then return hit end
+            c = call(c, "get_Next")
+        end
+    end
+    return root and find(root, 1) or nil
+end
 local function head()
     local ctx = context()
+    if not ctx then return figure_head() end
     local go = call(call(call(ctx, "get_BodyUpdater"), "get_HeadMotion"), "get_GameObject")
         or call(ctx, "get_HeadGameObject")
     return transform(go)
 end
+-- head groups of the actors with a calibration
+local ACTORS = { cha000 = "leon", cha005 = "leon", cha006 = "leon", cha500 = "leon",
+    cha200 = "ada", cha800 = "ada", cha801 = "ada", cha803 = "ada" }
+-- head groups of other characters: their meshes mark another actor in `A.instance_root`
+local OTHERS = { cha100 = "ashley", cha102 = "ashley", cha300 = "luis", chi100 = "luis",
+    chb700 = "krauser", chi200 = "krauser", cha600 = "wesker", chj000 = "wesker", chi300 = "hunk" }
+local function group_of(p)
+    local base = p:match("([^/]+)$")
+    return base and base:match("^(ch%a%d%d%d)_") or nil
+end
+local function character_of_path(p)
+    local g = group_of(p)
+    return g and (ACTORS[g] or OTHERS[g]) or nil
+end
 local function actor_of_path(p)
-    if p:find("/cha000/", 1, true) then return "leon" end
-    for _, id in ipairs({"cha200", "cha800", "cha801", "cha803"}) do
-        if p:find("/" .. id .. "/", 1, true) then return "ada" end
-    end
+    local g = group_of(p)
+    return g and ACTORS[g] or nil
 end
 
 function A.bind(face, keys)
@@ -51,12 +87,16 @@ end
 
 function A.primary_root()
     local ctx = context()
+    if not ctx then
+        local h = figure_head()
+        return h and A.instance_root(h) or nil
+    end
     return transform(call(ctx, "get_BodyGameObject") or call(ctx, "get_GameObject"))
 end
 function A.is_face(tr)
     local p = path(tr)
     -- Head identity follows its actor and mesh slot; replacement rigs may omit individual face joints.
-    return actor_of_path(p) ~= nil and p:match("/cha%d%d%d_1[01]%.mesh") ~= nil
+    return actor_of_path(p) ~= nil and p:match("/cha%d%d%d_1[01][_%w]*%.mesh") ~= nil
 end
 function A.primary_ready()
     local h = head()
@@ -72,9 +112,11 @@ function A.instance_root(face)
         local seen = {}
         while child and not seen[child] do
             seen[child] = true
-            local p, who = path(child), actor_of_path(path(child))
+            local p = path(child)
+            local who = character_of_path(p)
             if who and who ~= actor then foreign = true end
-            if who == actor and p:match("/cha%d%d%d_00%.mesh") then body = true end
+            -- a skin's body has a group of its own (a figure's cha002_00 under a cha000 head)
+            if (who == actor or who == nil) and p:match("/cha%d%d%d_00[_%w]*%.mesh") then body = true end
             child = call(child, "get_Next")
         end
         if foreign then break end
@@ -88,6 +130,14 @@ function A.face_root(face, root)
     return face == head() and root or A.instance_root(face)
 end
 
+-- components of a type in the current scene, or nil
+local function components(type_name)
+    local scene = sdk.call_native_func(sdk.get_native_singleton("via.SceneManager"),
+        sdk.find_type_definition("via.SceneManager"), "get_CurrentScene")
+    local t = sdk.typeof(type_name)
+    return scene and t and call(scene, "findComponents(System.Type)", t) or nil
+end
+
 function A.additional_faces()
     local result, seen = {}, {}
     local player = head()
@@ -96,12 +146,9 @@ function A.additional_faces()
     if root then
         for _, part in ipairs(A.parts(root)) do owned[part:get_address()] = true end
     end
-    local scene = sdk.call_native_func(sdk.get_native_singleton("via.SceneManager"),
-        sdk.find_type_definition("via.SceneManager"), "get_CurrentScene")
-    local components = scene and scene:call("findComponents(System.Type)", sdk.typeof("via.motion.Motion"))
-    if not components then return result end
-    for i = 0, components:call("get_Length") - 1 do
-        local component = components:call("GetValue(System.Int32)", i)
+    local list = components("via.motion.Motion")
+    for i = 0, (list and call(list, "get_Length") or 0) - 1 do
+        local component = list:call("GetValue(System.Int32)", i)
         local tr = transform(call(component, "get_GameObject"))
         if tr and tr ~= player and not owned[tr:get_address()] and not seen[tr] and A.is_face(tr) then
             seen[tr] = true
@@ -116,7 +163,7 @@ function A.instances_ready(cutscene_drive)
     if playing and cutscene_drive == false then return false end
     return A.primary_ready() or playing == true
 end
-function A.face_rank(face) return path(face):match("_10%.mesh") and 2 or 1 end
+function A.face_rank(face) return path(face):match("_10[_%w]*%.mesh") and 2 or 1 end
 function A.is_part() return false end
 function A.parts(root, face)
     local out, seen = {}, {}
@@ -145,7 +192,7 @@ A.slot_names = { ["00"] = "身体", ["10"] = "头部", ["20"] = "头发" }
 function A.model_of(part)
     if part == "leon" or part == "ada" then return part end
     local id = part:match("^(cha%d%d%d)_")
-    local actor = id and actor_of_path("/" .. id .. "/") or actor_of_path(path(head()))
+    local actor = id and ACTORS[id] or actor_of_path(path(head()))
     local slot = part:match("^cha%d%d%d_(%d%d)$")
     return actor or "leon", A.slot_names[slot] and slot or part
 end
@@ -241,6 +288,12 @@ function A.init(events)
                 Signals.release_deforms()
                 events.rebuilt()
             end, nil) end
+        end
+        -- the model viewer swaps its figure through these; references go before the old one is destroyed
+        local figures = sdk.find_type_definition("chainsaw.BonusContentsGuiManager.FigureGuiManager")
+        for _, name in ipairs({"requestInstantiateModel", "requestDestroyInstantiatedModel"}) do
+            local method = figures and figures:get_method(name)
+            if method then sdk.hook(method, function() events.rebuilt() end, nil) end
         end
     end
     Conditions.init()
