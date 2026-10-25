@@ -100,8 +100,8 @@ local function sculpt_values(part, binding)
     local preset = Presets.find_sculpt(data.sculpt, binding and binding.folder)
     local values = {}
     if not preset then return values end
-    if preset.target_part and preset.target_part ~= part.id then return values end
-    if preset.channel_hash and preset.channel_hash ~= part.fingerprint then return values end
+    -- `target` names the part the preset was made on, not the only part it applies to: like
+    -- Sculpt.rebuild for the edited character, its values reach every part of the binding's model
     for name, value in pairs(preset.values) do values[Sculpt.key_of(name)] = value end
     for name, value in pairs(preset.overrides[part.id] or {}) do values[Sculpt.key_of(name)] = value end
     return values
