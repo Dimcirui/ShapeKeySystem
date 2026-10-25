@@ -418,4 +418,6 @@ RE4R（游戏没装，现成的参考实现是 [RE4R-ShapeKey-System](https://gi
 
 RE4R 提供 `additional_faces()` 和 `instances_ready(cutscene_drive)`，由 Core 的 ActorInstances 独立扫描和驱动额外角色。`parts(root, face)` 可显式指定所属头部；Scene 的 `faces`、`include_empty` 扫描参数与 `build_target` 支持按角色编译目标。
 
+`actor_of(face)` 返回头部所属的人（RE4R：`leon`、`ada`），与 `additional_faces` 一起启用多角色编辑（[multi-actor.md](multi-actor.md)）：所选角色的头部经 `Scene.override` 进入主角色扫描，`face_root(face, root)` 的 `root` 此时是所选角色的根，适配器要把玩家自己的头部归到玩家的根上。
+
 `scoped_bindings = true` 启用用户来源优先与模型指纹匹配选择。绑定可设置 `eyes.neutral.L/R.yaw/pitch`，每个实例独立使用。未提供这些能力的适配器沿用原有流程。
