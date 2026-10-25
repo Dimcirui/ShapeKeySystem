@@ -26,6 +26,7 @@ local NativeSignals = require("ShapeKeySystem_Core.NativeSignals")
 local ActorInstances = require("ShapeKeySystem_Core.ActorInstances")
 local Proc    = require("ShapeKeySystem_Core.Procedural")
 local Mocap   = require("ShapeKeySystem_Core.Mocap")
+local Drivers = require("ShapeKeySystem_Core.Drivers")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
 local Version = require("ShapeKeySystem_Core.Version")
@@ -163,6 +164,7 @@ state.native_signals = NativeSignals.state
 state.scene.additional = ActorInstances.state
 NativeSignals.on_export = function() Playback.refresh() end
 state.mocap = Mocap.view
+state.drivers = Drivers.view
 
 
 -- ---------------------------------------------------------------- internal
@@ -1372,10 +1374,12 @@ local function tick()
     local ext_rev = Ext.rev
     local mc = C.mocap_ctx
     mc.prog, mc.gen = C.prog, state.scene.rev
-    if Mocap.tick(dt, mc) then
+    -- mocap first: a key it holds this tick is left alone by the drivers
+    local held_changed = Mocap.tick(dt, mc)
+    if Drivers.tick(dt, Sculpt.RANGE[2], SKS.adapter.channel_writable) then held_changed = true end
+    if held_changed then
         Sculpt.mark_dirty()
         if Ext.rev ~= ext_rev then C.build_external_state() end
-
     end
     Sculpt.frame = f
     -- The gate pauses nothing: loading, rebuilds and cutscenes keep driving whatever rigs exist.
@@ -1763,6 +1767,11 @@ function cmds.mocap_calibrate(a)
     else return false, "E_BAD_ARGS", "what: face / head / clear" end
     if not Mocap.save() then return false, "E_IO", "mocap.json save failed" end
     return true
+end
+
+-- shape key drivers (Drivers.lua): add / remove / patch; user/drivers.json is written shortly after
+function cmds.drivers(a)
+    return Drivers.command(a)
 end
 
 function cmds.set_procedural(a)
@@ -2333,6 +2342,7 @@ function SKS.init(adapter)
     Names.load_aliases()
     Labels.load()
     Mocap.load()
+    Drivers.load()
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
     for _, s in ipairs(sig.list) do
@@ -2440,6 +2450,7 @@ function SKS.shutdown()
     zero_sculpt()
     if C.save_at then save_now() end
     Mocap.flush()
+    Drivers.flush()
 end
 
 -- Optional pre-animation/render preparation uses the current scan only; it keeps no second

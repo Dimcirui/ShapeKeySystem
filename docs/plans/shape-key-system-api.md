@@ -748,6 +748,25 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 
 `state.mocap`：`native = {available, running, error, sender, packets, rejected, port, ips}`（游戏内接收的状态）、`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
 
+## 驱动
+
+进阶「驱动」页（`Drivers.lua`）。每条驱动让一个形态键的值随时间变化：选一种波形（正弦 `osc`、三角 `tri`、锯齿 `saw`、方波 `square`、随机平滑 `noise`），设周期、相位和最低 / 最高值；或选「自定义公式」自己写。波形驱动也按公式执行，等价于 `lerp(最低, 最高, 波形(t / 周期 + 相位))`，页面上显示这条公式，「改为公式」把它复制成自定义公式再改。
+
+写入：驱动值作为外部值（`External.lua`，所有者 `drivers`）每帧续租，覆盖表情和捏脸、走同一套写入保护；值限制在 0 到 `sculpt_max`。面捕或其他插件正在控制的形态键先让给它们（API 每帧先跑面捕，再跑驱动），对方放开后下一帧接回。同一个形态键有多条驱动时只有第一条生效。关掉、删除或改名的驱动当帧放开原来的键。时钟按 API 每帧的 dt 累加（单帧最多 0.1 秒），游戏卡顿时相位不跳。
+
+公式：数字、`t`（秒）、`pi`、`tau`；运算 `+ - * / % ^` 和括号（`^` 右结合，一元负号低于 `^`；除以 0 和负数的非整数次方得 0）。函数：`sin cos abs floor frac sqrt smoothstep`（1 个参数）、`min max pulse(x, 占空比)`（2 个）、`clamp(x, lo, hi) lerp(a, b, k)`（3 个），以及以 1 为一个周期、输出 0–1 的 `osc tri saw square noise`（`osc` / `tri` 在整周期为 0、半周期为 1，`square` 前半周期为 1）。公式由 `Drivers.lua` 自己解析成闭包，不经过 Lua 的 `load`；最长 200 个字符，括号最多嵌套 32 层。出错时该驱动不写入，页面显示原因。
+
+| 命令 | 参数 | 作用 | 持久化 |
+|---|---|---|---|
+| `drivers` | `{op = "add", key?}` | 新增一条驱动（默认正弦、周期 2 秒、0–1），最多 32 条 | `user/drivers.json` |
+| `drivers` | `{op = "remove", index}` | 删除第 index 条 | 同上 |
+| `drivers` | `{op = "patch", index, patch}` | 修改一条：`enabled`、`key`、`wave`、`period`（0.05–120）、`lo` / `hi`（0–5）、`phase`（0–1）、`expr` | 同上 |
+| `drivers` | `{op = "patch", patch = {enabled}}` | 总开关 | 同上 |
+
+`user/drivers.json`：`{"schema": "sks.drivers/1", "enabled": true, "items": [{enabled, key, wave, period, lo, hi, phase, expr}]}`。读取时缺失或类型不对的字段取默认值，数值按上表范围截断。拖动滑块时 0.5 秒后才写文件。
+
+`state.drivers`：`cfg`（上面的设置）、`items[i] = {value, formula, err, owner, dup}`（当前值、实际执行的公式、公式错误 `{模板, 参数...}`、占用该键的其他所有者、与之重复的第一条驱动的序号）、`waves` / `wave_names`、`max_items`。
+
 ## 界面语言
 
 - 界面文字在代码里写中文，中文原文就是翻译表的键。`builtin/i18n/en.json` 放脚本里的文字，`en_data.json` 放内置数据的文字（配置名、配置说明、通道备注、信号备注、立绘风格名、录制名）。格式：
