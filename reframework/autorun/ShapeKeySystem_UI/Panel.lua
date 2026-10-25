@@ -24,6 +24,7 @@ local PAGES = {
     { key = "expr",    name = "表情详情", mod = "ShapeKeySystem_UI.PageExpression", adv = true },
     { key = "cond",    name = "条件规则", mod = "ShapeKeySystem_UI.PageConditions", adv = true },
     { key = "mocap",   name = "面捕",     mod = "ShapeKeySystem_UI.PageMocap",      adv = true },
+    { key = "drivers", name = "驱动",     mod = "ShapeKeySystem_UI.PageDrivers",    adv = true },
     { key = "files",   name = "总体绑定与配置", mod = "ShapeKeySystem_UI.PagePresets", adv = true },
     { key = "debug",   name = "设置与调试", mod = "ShapeKeySystem_UI.PageDebug",    adv = true },
 }
