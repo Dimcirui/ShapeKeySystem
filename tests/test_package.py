@@ -20,7 +20,7 @@ class PackageTest(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="sks_package_test_")
         self.root = Path(self.temporary.name).resolve()
         self.source = self.root / "repo"
-        for name in ("package.ps1", "sks-files.ps1"):
+        for name in ("package.ps1", "sks-files.ps1", "strip-lua.ps1"):
             target = self.source / "tools" / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO / "tools" / name, target)

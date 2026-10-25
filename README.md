@@ -53,6 +53,7 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 | `reframework/data/ShapeKeySystem/faces/`、`reframework/images/ShapeKeySystem/` | 面部导航图的样式 |
 | `tools/deploy.ps1` | 在仓库和游戏目录之间同步 |
 | `tools/package.ps1` | 生成 Fluffy Mod Manager 发布包，附带 REF-IME 附加包 |
+| `tools/strip-lua.ps1` | 打包时去掉 Lua 注释，行号与源码一致 |
 | `tools/sks-files.ps1` | 发布文件清单，部署和打包共用 |
 | `tools/install-ref-ime.ps1` | 从上游 Release 安装 REF-IME |
 | `tools/onimusha_signals.py` | 从鬼武者原版 jcns 生成信号字典 |

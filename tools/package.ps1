@@ -8,16 +8,20 @@
   package.ps1 -RefImeZip <zip> -RefImeVersion <tag>   用本地 Release zip，不联网；-RefImeSha256 可选
 
 主包版本取自 Version.lua 的 V.number，REF-IME 版本取自其 Release tag。
+
+Lua 文件去掉注释后打包（tools/strip-lua.ps1，行号与源码一致）；-KeepComments 按源码原样打包。
 #>
 param(
     [string]$Screenshot = (Join-Path (Split-Path -Parent $PSScriptRoot) "docs\images\screenshot.jpg"),
     [string]$OutDir = (Join-Path (Split-Path -Parent $PSScriptRoot) "dist"),
     [string]$RefImeZip,
     [string]$RefImeVersion,
-    [string]$RefImeSha256
+    [string]$RefImeSha256,
+    [switch]$KeepComments
 )
 $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "sks-files.ps1")
+. (Join-Path $PSScriptRoot "strip-lua.ps1")
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
@@ -108,7 +112,10 @@ try {
     Add-Bytes "ShapeKeySystem/modinfo.ini" (Write-ModInfo $info)
     if ($hasShot) { Add-File "ShapeKeySystem/screenshot.jpg" $Screenshot }
     foreach ($k in ($files.Keys | Sort-Object)) {
-        Add-File ("ShapeKeySystem/reframework/" + ($k -replace '\\', '/')) $files[$k]
+        $name = "ShapeKeySystem/reframework/" + ($k -replace '\\', '/')
+        # 注释只给维护者看，不随发布包分发
+        if (-not $KeepComments -and $k -like "*.lua") { Add-Bytes $name (Remove-LuaComments $files[$k]) }
+        else { Add-File $name $files[$k] }
     }
 
     $info = [ordered]@{
