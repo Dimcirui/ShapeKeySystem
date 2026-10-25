@@ -360,15 +360,18 @@ local function clips_section(ctx, x, y, w)
     if not open_all then return cy - y end
     local playing = live.cond and live.cond.playing
     -- keys a clip can use: every merged mesh key
-    local key_names = {}
-    for _, k in ipairs(st.sculpt.keys or {}) do key_names[#key_names + 1] = k.name end
+    local key_items = W.shape_key_items(st.sculpt, s)
+    s.search = s.search or {}
+    -- the open search list of a clip adds its height to that clip's box
+    local list_h = s.addkey_h or {}
+    s.addkey_h = list_h
     for _, id in ipairs(ids) do
         local c = data.clips[id]
         local open = s.open_clip == id
         local keys = {}
         for k in pairs(c.values) do keys[#keys + 1] = k end
         table.sort(keys)
-        local h = 44 + (open and (40 + #keys * 30 + 40) or 0)
+        local h = 44 + (open and (40 + #keys * 30 + max(40, (list_h[id] or 34) + 6)) or 0)
         if visible(cy, h) then
             W.panel_box(x, cy, w, h, playing == id)
             local clicked = W.header(id, x + 8, cy + 9, min(260, w * 0.35), open, L.f("%d 个形态键", #keys))
@@ -404,10 +407,12 @@ local function clips_section(ctx, x, y, w)
                     if W.tbutton("移除", x + w - tbw("移除") - 10, oy + 3) then edit(ctx, function(d) d.clips[id].values[k] = nil end) end
                     oy = oy + 30
                 end
-                if #key_names > 0 then
-                    local c4, i4 = W.select("addkey_" .. id, x + 20, oy + 4, min(260, w * 0.4), 28, key_names, nil,
-                        { placeholder = "＋ 添加形态键…" })
-                    if c4 and key_names[i4] then edit(ctx, function(d) d.clips[id].values[key_names[i4]] = 1.0 end) end
+                if #key_items > 0 then
+                    local c4, name, kh = W.search_select(s.search, "addkey_" .. id, x + 20, oy + 4, min(320, w * 0.5),
+                        key_items, nil, { placeholder = "＋ 添加形态键（输入文字搜索）…",
+                            empty = "没有匹配的已扫描形态键" })
+                    list_h[id] = kh
+                    if c4 and name then edit(ctx, function(d) d.clips[id].values[name] = 1.0 end) end
                 else
                     D.text_mid("先在「捏脸」页扫描装备，才能选择形态键", x + 20, oy + 4, 28, C.faint, W.small())
                 end

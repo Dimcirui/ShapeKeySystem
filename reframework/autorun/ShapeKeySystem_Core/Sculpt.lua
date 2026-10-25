@@ -13,6 +13,7 @@ local Ext = require("ShapeKeySystem_Core.External")
 local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch = require("ShapeKeySystem_Core.Touch")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
+local Trail = require("ShapeKeySystem_Core.Trail")
 
 local S = {}
 
@@ -405,7 +406,21 @@ function S.tick(edit_mode, preview, eps)
     local writes = 0
     for _, t in ipairs(K.targets) do
         if t.stable < G.STABLE_FRAMES then
-            if G.mesh_ready(t.mesh) then t.stable = t.stable + 1 else t.stable = 0 end
+            local ready, why = G.mesh_ready(t.mesh)
+            if ready then
+                t.stable = t.stable + 1
+                if t.stable == G.STABLE_FRAMES and not t.logged then
+                    t.logged = true
+                    local n = 0
+                    for _, item in ipairs(t.items) do n = n + #item.idx end
+                    Trail.event("sculpt: writing %s (%d keys, %d channels)", t.id, #t.items, n)
+                end
+            else
+                t.stable = 0
+                -- a part that never becomes ready says why once, after about ten seconds
+                t.waited = (t.waited or 0) + 1
+                if t.waited == 600 then Trail.event("sculpt: %s not ready: %s", t.id, tostring(why)) end
+            end
         elseif not G.mesh_still_ready(t.mesh) then
             return writes, "sculpt mesh no longer ready: " .. t.id
         elseif t.dirty or edit_mode or W.adapter.rewrite_active_weights then
@@ -426,6 +441,10 @@ function S.tick(edit_mode, preview, eps)
                         if W.set_weight(t.mesh, i, w, item.key.name) then
                             last[i] = w
                             writes = writes + 1
+                        elseif not t.refused then
+                            -- the adapter's channel check turned the channel down
+                            t.refused = true
+                            Trail.event("sculpt: %s channel %d (%s) refused by the game adapter", t.id, i, item.key.name)
                         end
                     end
                 end

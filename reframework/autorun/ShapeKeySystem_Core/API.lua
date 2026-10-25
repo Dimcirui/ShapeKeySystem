@@ -166,6 +166,7 @@ state.scene.additional = ActorInstances.state
 NativeSignals.on_export = function() Playback.refresh() end
 state.mocap = Mocap.view
 state.drivers = Drivers.view
+Drivers.clip_progress = CondExpr.alpha
 -- characters by person (Actors.lua): list = {{id, name, player, copies}}, selected (being edited),
 -- wanted (picked in the panel, may be absent), player_id (the player's character), enabled (the
 -- game tells people apart)

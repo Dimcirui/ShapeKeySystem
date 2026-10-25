@@ -144,13 +144,23 @@ check(math.abs((b.mesh.values[3] or 0) - .7) < 1e-6, "a driven channel outside t
 Dr.actor_values.ada = nil
 for frame = 441, 445 do M.tick(frame, options) end
 check(math.abs(b.mesh.values[0] - .8) < 1e-6 and b.mesh.values[3] == 0, "without the driver both channels return to their own values")
+-- a sculpt preset made on another part (its `target`) still reaches this character's parts
+json.dump_file("ShapeKeySystem/mods/ada/sculpt/made_on_body.json", {schema = "sks.sculpt/1",
+    name = "made_on_body", target = {part = "ada_body"}, values = {B_size = .6}})
+json.dump_file("ShapeKeySystem/mods/ada/ada_head.json", {schema = "sks.binding/1", profile = "profile_b",
+    sculpt = "made_on_body", fingerprints = {ada_head = b.fingerprint}, gains = {master_gain = 1},
+    eyes = {neutral = {L = {yaw = 20, pitch = 0}}}})
+Presets.load_sculpt()
+M.release("sculpt preset")
+for frame = 446, 520 do M.tick(frame, options) end
+check(math.abs((b.mesh.values[3] or 0) - .6) < 1e-6, "a sculpt preset's target part does not limit which parts it reaches")
 adapter.actor_of = nil
 options.enabled = false
-M.tick(446, options)
+M.tick(521, options)
 check(a.mesh.values[0] == 0 and b.mesh.values[0] == 0, "disable clears only valid owned weights in update")
 check(#M.state.instances == 0, "disable releases independent instances")
 M.init({id = "other_game"})
-M.tick(447, options)
+M.tick(522, options)
 check(#M.state.instances == 0, "adapters without the capability do not scan or drive extra actors")
 print("ACTOR INSTANCE ASSERTIONS:", assertions)
 print("ACTOR INSTANCE FAILS:", 0)

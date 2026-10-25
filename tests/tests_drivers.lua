@@ -1,5 +1,6 @@
--- shape key drivers (Drivers.lua): the formula parser, waveforms, leases owned by "drivers" and
--- how they give way to mocap, the 驱动 page
+-- shape key drivers (Drivers.lua): the formula parser, waveforms, driver groups (variables, rows
+-- reading earlier rows, schema 1 files), leases owned by "drivers" and how they give way to mocap,
+-- the 驱动 page
 local SKS = require("ShapeKeySystem_Core.API")
 local Dr = require("ShapeKeySystem_Core.Drivers")
 local Ext = require("ShapeKeySystem_Core.External")
@@ -17,6 +18,8 @@ local function ev(src, t)
     if not fn then return nil, err end
     return fn(t or 0)
 end
+local function vrow(g, r) return st.drivers.groups[g].rows[r or 1] end
+local function crow(g, r) return st.drivers.cfg.groups[g].rows[r or 1] end
 local function ticks(n) for _ = 1, n or 1 do CB.tick(); CB.frame() end end
 -- this file's face; the earlier groups' channel list comes back at the end
 local saved_channels = {}
@@ -50,6 +53,32 @@ check(err_of('("x"):rep(9)') == "无法识别的字符 %s" and err_of("os.exit()
 check(err_of(string.rep("1+", 150) .. "1") == "公式太长（最多 %s 个字符）", "length limit")
 check(err_of(string.rep("(", 40) .. "1" .. string.rep(")", 40)) == "括号嵌套太深", "nesting limit")
 
+-- comparisons and rand
+check(near(ev("1 < 2"), 1) and near(ev("2 <= 1"), 0) and near(ev("3 >= 3"), 1) and near(ev("2 > 3"), 0),
+    "comparisons give 1 or 0")
+check(near(ev("1 == 1"), 1) and near(ev("1 != 2"), 1) and near(ev("1 ~= 1"), 0), "== and != (~= too)")
+check(near(ev("1 + 1 > 1"), 1) and near(ev("2 * (1 < 2)"), 2) and near(ev("max(0, 1 >= 1)"), 1),
+    "comparisons below arithmetic, inside brackets and arguments")
+check(err_of("1 < 2 < 3") == "比较不能连写，请加括号" and near(ev("(1 < 2) < 3"), 1), "comparisons do not chain")
+check(err_of("x = 1") == "无法识别的字符 %s", "a formula holds no assignment")
+local seed0 = Dr.seed
+Dr.seed = 7
+local r1, r2, r3 = ev("rand(3.2)"), ev("rand(3.9)"), ev("rand(4)")
+check(r1 and r1 >= 0 and r1 < 1 and near(r1, r2) and not near(r1, r3), "rand: same value within one whole number")
+Dr.seed = 8
+check(not near(ev("rand(3.2)"), r1), "rand: another seed gives another sequence")
+Dr.seed = seed0
+
+-- clip(name): a condition clip's weight along its fades
+check(Dr.clip_progress == require("ShapeKeySystem_Core.CondExpr").alpha, "clip() reads the condition clips' weights")
+local progress0 = Dr.clip_progress
+Dr.clip_progress = function(id) return id == "aim" and 0.25 or 0 end
+check(near(ev("clip(aim) * 2"), 0.5) and near(ev("clip(other)"), 0), "clip(name) gives that clip's weight, 0 for another")
+check(err_of("clip(1)") and err_of("clip(1)"):find("clip", 1, true) and err_of("clip(a, b)") ~= nil and err_of("clip()") ~= nil,
+    "clip takes exactly one bare name")
+check(not Dr.valid_name("clip"), "clip is not a variable name")
+Dr.clip_progress = progress0
+
 -- a waveform is compiled through its formula
 local it = { wave = "osc", period = 2, lo = 0.2, hi = 0.8, phase = 0 }
 local f = Dr.formula_of(it)
@@ -63,38 +92,40 @@ set_channels({ "blendShape1.jawOpen", "blendShape1.Other", "blendShape1.Waist_th
 local ok, err = SKS.call("drivers", { op = "patch", index = 1, patch = { period = 1 } })
 check(not ok and err == "E_NOT_FOUND", "patching a missing driver is rejected")
 ok = SKS.call("drivers", { op = "add", key = "Other" })
-check(ok and #st.drivers.cfg.items == 1 and st.drivers.cfg.items[1].key == "Other", "add creates a driver for the key")
+check(ok and #st.drivers.cfg.groups == 1 and #st.drivers.cfg.groups[1].rows == 1 and crow(1).key == "Other"
+    and crow(1).kind == "out", "add creates a group with one output row for the key")
 ok, err = SKS.call("drivers", { op = "patch", index = 1, patch = { wave = "zigzag" } })
-check(not ok and err == "E_BAD_ARGS" and st.drivers.cfg.items[1].wave == "osc", "unknown wave rejected")
+check(not ok and err == "E_BAD_ARGS" and crow(1).wave == "osc", "unknown wave rejected")
 SKS.call("drivers", { op = "patch", index = 1, patch = { period = 999, lo = -1 } })
-check(st.drivers.cfg.items[1].period == 120 and st.drivers.cfg.items[1].lo == 0, "numbers clamped to their limits")
+check(crow(1).period == 120 and crow(1).lo == 0, "numbers clamped to their limits (a group patch with row fields goes to row 1)")
 SKS.call("drivers", { op = "patch", index = 1, patch = { wave = "expr", expr = "0.7" } })
-check(st.drivers.items[1].err == nil and st.drivers.items[1].formula == "0.7", "formula driver compiled")
+check(vrow(1).err == nil and vrow(1).formula == "0.7", "formula driver compiled")
 ticks(3)
 local oi
 for i, n in ipairs(CHANNELS) do if n:match("([^%.]+)$") == "Other" then oi = i - 1 end end
 local _, owner = Ext.get("Other")
-check(owner == "drivers" and near(st.drivers.items[1].value, 0.7), "the key is held by owner drivers")
+check(owner == "drivers" and near(vrow(1).value, 0.7), "the key is held by owner drivers")
 check(oi and math.abs((WEIGHTS[oi] or -1) - 0.7) < 1e-3, "the driven value reaches the mesh")
 check(U.load_json(U.path("user", "drivers.json")) == nil, "the file is written only after the edits settle")
 Dr.flush()
 local saved = U.load_json(U.path("user", "drivers.json"))
-check(saved and saved.schema == "sks.drivers/1" and saved.items[1].expr == "0.7", "saved to user/drivers.json")
+check(saved and saved.schema == "sks.drivers/2" and saved.groups[1].rows[1].expr == "0.7", "saved to user/drivers.json")
 
 -- a second driver on the same key is not applied; values above the cap are clamped
 SKS.call("drivers", { op = "add", key = "other" })
 SKS.call("drivers", { op = "patch", index = 2, patch = { wave = "expr", expr = "9" } })
 ticks(1)
-check(st.drivers.items[2].dup == 1 and near(Ext.get("Other"), 0.7), "a second driver on the same key is flagged, the first keeps it")
+check(vrow(2).dup and vrow(2).dup[1] == 1 and vrow(2).dup[2] == 1 and near(Ext.get("Other"), 0.7),
+    "a second driver on the same key is flagged, the first keeps it")
 SKS.call("drivers", { op = "remove", index = 1 }); ticks(1)
-check(#st.drivers.cfg.items == 1 and near(Ext.get("Other"), st.settings.sculpt_max),
+check(#st.drivers.cfg.groups == 1 and near(Ext.get("Other"), st.settings.sculpt_max),
     "after removing the first, the second drives (clamped to sculpt_max)")
 
 -- another owner holds the key: the driver waits
 Ext.set("mocap", "Other", 0.3, 5)
 ticks(1)
 local v, o = Ext.get("Other")
-check(o == "mocap" and near(v, 0.3) and st.drivers.items[1].owner == "mocap", "a key held by mocap is left to it")
+check(o == "mocap" and near(v, 0.3) and vrow(1).owner == "mocap", "a key held by mocap is left to it")
 Ext.release("mocap", "Other"); ticks(1)
 _, o = Ext.get("Other")
 check(o == "drivers", "the driver takes the key back once it is free")
@@ -109,33 +140,180 @@ SKS.call("drivers", { op = "patch", patch = { enabled = false } }); ticks(1)
 check(Ext.get("Waist_thin") == nil and st.drivers.cfg.enabled == false, "the master switch releases everything")
 SKS.call("drivers", { op = "patch", patch = { enabled = true } })
 SKS.call("drivers", { op = "patch", index = 1, patch = { expr = "lerp(0, 1" } }); ticks(1)
-check(st.drivers.items[1].err ~= nil and Ext.get("Waist_thin") == nil, "a formula with an error drives nothing")
+check(vrow(1).err ~= nil and Ext.get("Waist_thin") == nil, "a formula with an error drives nothing")
 
 -- the clock: dt adds up, a wave moves with it
 Dr.load({ items = { { key = "Other", wave = "saw", period = 4, lo = 0, hi = 1 } } })
 Dr.tick(1, 1); Dr.tick(1, 1)
-check(near(Dr.view.items[1].value, 0.5) and near(Ext.get("Other"), 0.5), "saw at 2 s of a 4 s period is half way")
+check(near(Dr.view.groups[1].rows[1].value, 0.5) and near(Ext.get("Other"), 0.5), "saw at 2 s of a 4 s period is half way")
 Dr.load({ enabled = "yes", items = { { key = 3, wave = "?", period = "x" }, "bad" } })
 local c = Dr.config()
-check(c.enabled == true and #c.items == 2 and c.items[1].key == "" and c.items[1].wave == "osc" and c.items[1].period == 2,
-    "a damaged file loads with defaults")
+check(c.enabled == true and #c.groups == 2 and c.groups[1].rows[1].key == "" and c.groups[1].rows[1].wave == "osc"
+    and c.groups[1].rows[1].period == 2, "a damaged file loads with defaults")
 Dr.tick(0.1, 1)
 check(Ext.get("Other") == nil, "loading a new list releases keys no driver names")
 
+-- groups: variables, rows reading the rows above, one tick for all outputs
+local function g1(r) return Dr.view.groups[1].rows[r] end
+Dr.seed = 3
+Dr.load({ schema = "sks.drivers/2", groups = { { rows = {
+    { kind = "var", var = "u", wave = "expr", expr = "t % 10" },
+    { kind = "var", var = "b", wave = "expr", expr = "1.5 + rand(floor(t / 10))" },
+    { kind = "var", var = "blow", wave = "expr", expr = "u < b" },
+    { kind = "out", key = "Other", wave = "expr", expr = "clamp(u, 0, 1) * blow" },
+    { kind = "out", key = "Waist_thin", wave = "expr", expr = "0.5 * Other" },
+} } } })
+check(Dr.view.groups[1].rows[4].err == nil and Dr.view.groups[1].rows[5].err == nil, "a group compiles with names of earlier rows")
+Dr.tick(0.6, 1)
+check(near(g1(1).value, 0.6) and near(g1(3).value, 1) and near(Ext.get("Other"), 0.6) and near(Ext.get("Waist_thin"), 0.3),
+    "variables feed the outputs; an output name is read by a later row")
+for _ = 1, 30 do Dr.tick(0.1, 1) end
+check(near(g1(3).value, 0) and near(Ext.get("Other"), 0) and near(Ext.get("Waist_thin"), 0),
+    "a comparison switches the outputs off in the same tick")
+check(Ext.get("u") == nil and Ext.get("blow") == nil, "variables hold no shape key")
+-- names: forward references, bad names, the same name twice; any error stops the whole group
+Dr.load({ groups = { { rows = {
+    { kind = "out", key = "Other", wave = "expr", expr = "later" },
+    { kind = "var", var = "later", wave = "expr", expr = "1" } } } } })
+Dr.tick(0.1, 1)
+check(g1(1).err and g1(1).err[1] == "未知名称 %s" and Ext.get("Other") == nil, "a row reads only names defined above it")
+Dr.load({ groups = { { rows = {
+    { kind = "var", var = "x", wave = "expr", expr = "1" }, { kind = "var", var = "x", wave = "expr", expr = "2" },
+    { kind = "out", key = "Other", wave = "expr", expr = "0.4" } } } } })
+Dr.tick(0.1, 1)
+check(g1(2).err and g1(2).err[1] == "名称 %s 已在上面定义" and g1(3).err == nil and Ext.get("Other") == nil,
+    "a name defined twice is an error, and the group's other outputs wait for it")
+for _, bad in ipairs({ "t", "a", "pi", "sin", "2x", "x-y", "" }) do
+    Dr.load({ groups = { { rows = { { kind = "var", var = bad, wave = "expr", expr = "1" } } } } })
+    check(g1(1).err ~= nil, "variable name rejected: '" .. bad .. "'")
+end
+Dr.load({ groups = { { enabled = false, rows = { { kind = "out", key = "Other", wave = "expr", expr = "0.4" } } } } })
+Dr.tick(0.1, 1)
+check(Ext.get("Other") == nil and near(g1(1).value, 0), "a switched-off group writes nothing")
+
+-- a group run by a condition clip: the halo hides at A, then spins in at B and slows to rest.
+-- Four keys 90 degrees apart, weighted s * max(0, cos(phi - k * 90)), give one halo of size s at angle phi.
+local P = 0
+local progress1 = Dr.clip_progress
+Dr.clip_progress = function(id) return id == "FY" and P or 0 end
+local function hrow(kind, name, expr) return { kind = kind, var = kind == "var" and name or "", key = kind == "out" and name or "", wave = "expr", expr = expr } end
+Dr.load({ groups = { { name = "halo", rows = {
+    hrow("var", "p", "clip(FY)"),
+    hrow("out", "Halo_Hide", "smoothstep(clamp(p / 0.35, 0, 1))"),
+    hrow("var", "u", "clamp((p - 0.35) / 0.65, 0, 1)"),
+    hrow("var", "s", "1 - (1 - u) ^ 2"),
+    hrow("var", "phi", "-720 * (1 - u) ^ 3 * pi / 180"),
+    hrow("out", "Spin000", "s * max(0, cos(phi))"),
+    hrow("out", "Spin090", "s * max(0, cos(phi - pi / 2))"),
+    hrow("out", "Spin180", "s * max(0, cos(phi - pi))"),
+    hrow("out", "Spin270", "s * max(0, cos(phi - 1.5 * pi))") } } } })
+local function halo(p)
+    P = p; Dr.tick(0.016, 1)
+    local r = Dr.view.groups[1].rows
+    local w0, w1, w2, w3 = r[6].value, r[7].value, r[8].value, r[9].value
+    return r[2].value, r[4].value, math.sqrt((w0 - w2) ^ 2 + (w1 - w3) ^ 2), math.atan(w1 - w3, w0 - w2)
+end
+local hide, size, radius = halo(0)
+check(near(hide, 0) and near(radius, 0), "halo at rest: A shown, B hidden")
+hide, size, radius = halo(0.35)
+check(near(hide, 1) and near(radius, 0), "halo: A gone before B appears")
+local ok_mid = true
+for _, p in ipairs({ 0.45, 0.6, 0.8, 0.95 }) do
+    hide, size, radius = halo(p)
+    if not near(radius, size) then ok_mid = false end
+end
+check(ok_mid, "halo: B's size is exactly s at every angle while it spins")
+hide, size, radius = halo(1)
+local _, _, _, angle = halo(1)
+check(near(radius, 1) and near(angle, 0) and near(Dr.view.groups[1].rows[6].value, 1), "halo: B ends full size at rest on Spin000")
+Dr.clip_progress = progress1
+
+-- ramp(target, in, out): a switch becomes a fade of its own length, each way
+Dr.clip_progress = function(id) return id == "FY" and P or 0 end
+Dr.load({ groups = { { rows = { hrow("var", "r", "ramp(clip(FY) > 0.5, 1.2, 0.4)") } } } })
+local function ramp_after(p, sec)
+    P = p
+    for _ = 1, math.floor(sec / 0.05 + 0.5) do Dr.tick(0.05, 1) end
+    return Dr.view.groups[1].rows[1].value
+end
+check(near(ramp_after(0, 1), 0), "ramp rests at 0")
+check(near(ramp_after(1, 0.6), 0.5) and near(ramp_after(1, 0.6), 1) and near(ramp_after(1, 1), 1),
+    "ramp rises over its fade-in and stays at the target")
+check(near(ramp_after(0, 0.2), 0.5) and near(ramp_after(0, 0.2), 0), "ramp falls over its fade-out")
+check(err_of("ramp(1, 2)") == "%s 需要 %s 个参数" and not Dr.valid_name("ramp"), "ramp takes three arguments and is not a variable name")
+Dr.clip_progress = progress1
+
+-- schema 1: each driver becomes a group of one output row
+Dr.load({ schema = "sks.drivers/1", items = { { enabled = false, key = "Other", wave = "expr", expr = "0.2", actor = "ada" } } })
+local mg = Dr.config().groups[1]
+check(#Dr.config().groups == 1 and mg.enabled == false and mg.actor == "ada" and #mg.rows == 1 and mg.rows[1].kind == "out"
+    and mg.rows[1].key == "Other" and mg.rows[1].expr == "0.2", "a schema 1 driver loads as a one-row group")
+
+-- row commands
+Dr.load({})
+SKS.call("drivers", { op = "add", key = "Other" })
+ok = SKS.call("drivers", { op = "add_row", index = 1, kind = "var" })
+check(ok and crow(1, 2).kind == "var" and crow(1, 2).var == "x1", "add_row: a variable gets a free name")
+SKS.call("drivers", { op = "add_row", index = 1, kind = "var" })
+check(crow(1, 3).var == "x2", "the next variable takes the next free name")
+SKS.call("drivers", { op = "patch", index = 1, row = 2, patch = { wave = "expr", expr = "0.25" } })
+SKS.call("drivers", { op = "patch", index = 1, row = 1, patch = { wave = "expr", expr = "x1 * 2" } })
+check(vrow(1, 1).err and vrow(1, 1).err[1] == "未知名称 %s", "the output above the variable cannot read it")
+ok = SKS.call("drivers", { op = "move_row", index = 1, row = 2, to = 1 })
+check(ok and crow(1, 1).var == "x1" and crow(1, 2).key == "Other" and vrow(1, 2).err == nil, "move_row: the variable moves above")
+ticks(1)
+check(near(Ext.get("Other"), 0.5), "the moved rows drive the key")
+ok, err = SKS.call("drivers", { op = "patch", index = 1, row = 2, patch = { kind = "box" } })
+check(not ok and err == "E_BAD_ARGS", "unknown row kind rejected")
+ok, err = SKS.call("drivers", { op = "patch", index = 1, row = 9, patch = { expr = "1" } })
+check(not ok and err == "E_NOT_FOUND", "patching a missing row is rejected")
+ok, err = SKS.call("drivers", { op = "patch", index = 1, row = 2, patch = { expr = "1", period = "x" } })
+check(not ok and err == "E_BAD_ARGS" and crow(1, 2).expr == "x1 * 2", "a rejected patch changes nothing")
+SKS.call("drivers", { op = "patch", index = 1, patch = { name = "gum" } })
+check(st.drivers.cfg.groups[1].name == "gum", "a group takes a name")
+SKS.call("drivers", { op = "remove_row", index = 1, row = 1 })
+check(#st.drivers.cfg.groups[1].rows == 2 and vrow(1, 1).err and vrow(1, 1).err[1] == "未知名称 %s",
+    "remove_row: rows reading the removed name fail")
+ticks(1)
+check(Ext.get("Other") == nil, "and the group lets its key go")
+SKS.call("drivers", { op = "remove", index = 1 })
+
 -- page
-Dr.load({ items = { { key = "Other", wave = "tri", period = 3 }, { key = "Other", wave = "expr", expr = "0.5" },
-                    { key = "Waist_thin", wave = "expr", expr = "sin(" } } })
+Dr.load({ groups = {
+    { name = "gum", rows = { { kind = "var", var = "u", wave = "tri", period = 3 },
+                             { kind = "out", key = "Other", wave = "expr", expr = "u * (u < 0.8)" } } },
+    { rows = { { key = "Other", wave = "expr", expr = "0.5" } } },
+    { rows = { { key = "Waist_thin", wave = "expr", expr = "sin(" } } } } })
 SKS.call("set_setting", { key = "advanced", value = true })
 Panel.set_open(true)
 Panel.ui.page = "drivers"
 ticks(1)
+-- a tall window: every card of the list is on screen
+local h_page = Panel.ui.win.h
+Panel.ui.win.h = 1400
 DRAWS = {}; CB.d2d_draw()
 local function drawn(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then return true end end end
+check(drawn("2 行，写入 Other") and drawn("1 行，有错误") and not drawn("相位") and not drawn("添加变量"),
+    "groups start collapsed: one summary line each")
+for _, grp in ipairs(Dr.config().groups) do Panel.ui.page_state.drivers.closed[grp] = false end
+DRAWS = {}; CB.d2d_draw()
 check(drawn("启用驱动") and drawn("添加驱动") and drawn("周期") and drawn("lerp(0, 1, tri(t / 3))") and drawn("改为公式"),
-    "wave driver card drawn with its formula")
-check(drawn("公式不完整") and drawn("第 1 条驱动") and not drawn("页面出错"), "formula error and duplicate shown")
-local h_page = Panel.ui.win.h
-Panel.ui.win.h = 1000
+    "wave row drawn with its formula")
+check(drawn("变量") and drawn("添加变量") and drawn("删除组") and drawn("上移"), "group card: kind picker, row buttons")
+check(drawn("公式不完整") and drawn("第 1 组第 2 行") and not drawn("页面出错"), "formula error and duplicate shown")
+-- key picker: a pick after typing a search holds, though ImGui reports the typed text once more
+local function pframe() CB.tick(); CB.frame(); DRAWS, CMDS = {}, {}; CB.d2d_draw() end
+local function drawn_at(text) for _, d in ipairs(DRAWS) do if d.s == text then return d end end end
+local field = drawn_at("Other")
+local function pclick(d) MOUSE.x, MOUSE.y = d.x + 4, d.y + 6; MOUSE.down = true; pframe(); MOUSE.down = false; pframe() end
+if field then pclick(field) end
+INPUT_EDITS["drv_key:1:2"] = "Wai"; pframe(); pframe()
+local item = drawn_at("Waist_thin")
+check(field ~= nil and item ~= nil and crow(1, 2).key == "Wai", "typing in the key picker searches and keeps the typed name")
+if item then pclick(item) end
+INPUT_EDITS["drv_key:1:2"] = "Wai"; pframe(); pframe()
+check(crow(1, 2).key == "Waist_thin" and require("ShapeKeySystem_UI.Widgets").open_search == nil,
+    "the first click on a search result picks it")
 DRAWS, CMDS = {}, {}; CB.d2d_draw()
 SNAP("驱动", function() DRAWS, CMDS = {}, {}; CB.d2d_draw() end)
 Panel.ui.win.h = h_page
