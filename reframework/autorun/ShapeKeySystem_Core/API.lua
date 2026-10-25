@@ -2499,13 +2499,6 @@ end
 function SKS.prepare_targets()
     ActorInstances.prepare()
     local A = SKS.adapter
-    -- the player's head before it is a part: a head drawn at a LOD without blendshape channels
-    -- scans as an empty part, and only parts get prepared, so it would never be found. Looked up
-    -- fresh each frame; cached faces of other characters are not touched here.
-    if A.prepare_face and A.faces and cfg.enabled then
-        local root = A.primary_root and A.primary_root()
-        for _, face in ipairs(root and A.faces(root) or {}) do pcall(A.prepare_face, face) end
-    end
     if not A.prepare_mesh or not cfg.enabled or #(C.instances or {}) == 0 then return end
     if Scene.children_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("preparation after rebuild", Guard.SETTLE_FRAMES)
