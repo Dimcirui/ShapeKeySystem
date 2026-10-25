@@ -235,6 +235,11 @@ end
 
 -- Core passes only current targets after checking the player's signature and readiness.
 function A.prepare_mesh(m) call(m, "set_LodLevel", 0) end
+-- LOD 1 heads report no blendshape channels; Core prepares heads before they are scanned
+function A.prepare_face(face)
+    local m = mesh(face)
+    if m and call(m, "get_MeshReady") == true and call(m, "get_LodLevel") ~= 0 then A.prepare_mesh(m) end
+end
 
 -- Prepare custom channels only after the engine has allocated their complete weight list.
 function A.prepare_parts(parts)

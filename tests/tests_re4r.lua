@@ -100,6 +100,9 @@ length = #CHANNELS
 check(A.id=="re4" and A.primary_ready(), "RE4R adapter resolves nested cha000 head")
 check(pres.UpdateMotion and pres.PrepareRendering, "LOD preparation registered at both pre stages")
 check(A.primary_root()==ROOT and #A.parts(ROOT)==1, "head may be separate from player-root children")
+m.get_LodLevel=function() return lod end
+lod=1; SKS.prepare_targets()
+check(lod==0, "a head drawn at LOD 1 (no blendshape channels) is prepared before it becomes a part")
 check(not A.channel_writable(native) and not A.channel_writable(Hash.label(Hash.hash(native))), "native and unresolved labels are read-only")
 check(not ShapeKeySystemAPI.set("test",native,1), "public API rejects native channels")
 check(A.raw.parse("jawOpen") and not A.raw.parse("typo"), "raw labels compile to stable keys")
