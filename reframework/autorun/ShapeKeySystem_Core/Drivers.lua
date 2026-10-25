@@ -1,7 +1,10 @@
--- ShapeKeySystem: shape key drivers. Each driver holds one key at a value computed from time,
--- either a waveform (period, low / high value, phase) or a formula the player types.
+-- ShapeKeySystem: shape key drivers. A driver group is an ordered list of rows; each row computes
+-- one value from time, either a waveform (period, low / high value, phase) or a formula the player
+-- types. A variable row (`kind = "var"`) stores its value under a name, an output row
+-- (`kind = "out"`) holds a shape key at it. Later rows read the names defined above them, so one
+-- group computes all its outputs from the same values in the same tick.
 --
--- A wave driver is compiled through the same formula path: `formula_of` turns it into
+-- A wave row is compiled through the same formula path: `formula_of` turns it into
 -- `lerp(lo, hi, wave(t / period + phase))`, and the page shows that text so a wave can be
 -- copied into a formula and edited.
 --
@@ -12,10 +15,12 @@
 -- - Values go out as External leases (owner "drivers"), so they override expression and sculpt
 --   and pass the same write guards as every other value. A key another owner holds (face mocap,
 --   another plugin) is left to that owner; the driver resumes once the key is free.
+-- - A group with an error in any row writes nothing: its outputs never mix values of two ticks.
 -- - The clock advances by API's tick dt (at most 0.1 s), so a long hitch does not jump the phase.
--- - Settings live in user/drivers.json, not settings.json.
--- - A driver belongs to a character (`actor`, Core/Actors.lua; "" = the player's character). Only
---   the edited character's drivers take leases; the others' values go to `D.actor_values`, which
+-- - Settings live in user/drivers.json, not settings.json. Files of schema 1 (one key per driver)
+--   load as groups of one output row.
+-- - A group belongs to a character (`actor`, Core/Actors.lua; "" = the player's character). Only
+--   the edited character's groups take leases; the others' values go to `D.actor_values`, which
 --   ActorInstances writes on that character's rigs.
 
 local U   = require("ShapeKeySystem_Core.Util")
@@ -23,28 +28,44 @@ local Ext = require("ShapeKeySystem_Core.External")
 
 local D = {}
 D.OWNER = "drivers"
-D.MAX_ITEMS = 32
+D.SCHEMA = "sks.drivers/2"
+D.MAX_GROUPS = 32
+D.MAX_ROWS = 32
 D.MAX_FORMULA = 200
--- "expr" = the item's own formula; the others are waveforms over one cycle (see FUNCS)
+D.MAX_NAME = 40
+-- "expr" = the row's own formula; the others are waveforms over one cycle (see FUNCS)
 D.WAVES = { "osc", "tri", "saw", "square", "noise", "expr" }
 D.WAVE_NAMES = { osc = "正弦", tri = "三角", saw = "锯齿", square = "方波", noise = "随机平滑", expr = "自定义公式" }
-D.ITEM_DEFAULTS = { enabled = true, key = "", wave = "osc", period = 2.0, lo = 0.0, hi = 1.0, phase = 0.0, expr = "",
-    actor = "" }
--- lo / hi up to Sculpt.MAX_LIMIT; tick clamps the value to the current sculpt_max
+D.KINDS = { "out", "var" }
+D.KIND_NAMES = { out = "形态键", var = "变量" }
+D.ROW_DEFAULTS = { kind = "out", key = "", var = "", wave = "osc", period = 2.0, lo = 0.0, hi = 1.0, phase = 0.0,
+    expr = "" }
+D.GROUP_DEFAULTS = { enabled = true, name = "", actor = "" }
+-- lo / hi up to Sculpt.MAX_LIMIT; tick clamps an output to the current sculpt_max
 D.LIMITS = { period = { 0.05, 120 }, lo = { 0, 5 }, hi = { 0, 5 }, phase = { 0, 1 } }
+-- names a variable cannot take: the inputs, constants and `clip` of every formula. `a` is kept
+-- for the progress of a condition clip that hosts a group.
+local RESERVED = { t = true, a = true, pi = true, tau = true, clip = true, ramp = true }
 
 local CFG_PATH = U.path("user", "drivers.json")
 local clock, floor, abs, pi = os.clock, math.floor, math.abs, math.pi
 
-local cfg = { enabled = true, items = {} }
+local cfg = { enabled = true, groups = {} }
 local st = { save_at = nil, held = {} }   -- held: norm key -> name, leases set on the last tick
--- view: what the page shows (state.drivers). items[i] = { value, err = { template, args... },
--- owner = another owner holding the key, dup = index of the driver that already holds it }
-D.view = { cfg = cfg, items = {}, time = 0, waves = D.WAVES, wave_names = D.WAVE_NAMES, max_items = D.MAX_ITEMS }
+-- view: what the page shows (state.drivers). groups[g] = { rows = { [r] = { value, formula,
+-- err = { template, args... }, owner = another owner holding the key, dup = { group, row } of the
+-- row that already holds it } } }
+D.view = { cfg = cfg, groups = {}, time = 0, waves = D.WAVES, wave_names = D.WAVE_NAMES, kinds = D.KINDS,
+    kind_names = D.KIND_NAMES, max_groups = D.MAX_GROUPS, max_rows = D.MAX_ROWS }
 D.time = 0
 D.current_actor, D.default_actor = "", ""   -- the edited character, the player's character (API)
 D.actor_values = {}   -- actor id -> norm key -> { name, value }, other characters' drivers this tick
-local compiled = {}   -- index -> closure(t) or false
+-- rand() draws from this seed; a new one per game start, so random schedules differ between runs
+D.seed = os.time() % 65536
+local compiled = {}   -- group index -> { ok, rows = { { fn, slot } } }
+-- clip(name) in a formula: the condition clip's weight, 0..1 along its fade-in / fade-out
+-- (CondExpr.alpha, set by API). 0 for a clip that does not exist or does not play.
+D.clip_progress = function() return 0 end
 
 -- ---------------------------------------------------------------- formula
 local function frac(x) return x - floor(x) end
@@ -73,9 +94,14 @@ local FUNCS = {
         local a, b = hash(i), hash(i + 1)
         return a + (b - a) * smooth(x - i)
     end },
+    -- the same x within one whole number gives the same value; D.seed changes the sequence
+    rand = { 1, function(x) return hash(floor(x) + D.seed * 0.6180339887) end },
 }
 local CONSTS = { pi = pi, tau = 2 * pi }
 D.FUNCS = FUNCS
+
+-- two-character operators first: "<=" must not tokenize as "<" "="
+local CMP2 = { ["<="] = "<=", [">="] = ">=", ["=="] = "==", ["~="] = "~=", ["!="] = "~=" }
 
 local function tokenize(s)
     local toks, i, n = {}, 1, #s
@@ -93,6 +119,12 @@ local function tokenize(s)
             local id = s:match("^[%w_]+", i)
             toks[#toks + 1] = { k = "id", v = id }
             i = i + #id
+        elseif CMP2[s:sub(i, i + 1)] then
+            toks[#toks + 1] = { k = "cmp", v = CMP2[s:sub(i, i + 1)] }
+            i = i + 2
+        elseif c == "<" or c == ">" then
+            toks[#toks + 1] = { k = "cmp", v = c }
+            i = i + 1
         elseif c:match("[%+%-%*/%%%^%(%),]") then
             toks[#toks + 1] = { k = c }
             i = i + 1
@@ -103,13 +135,21 @@ local function tokenize(s)
     return toks
 end
 
--- Recursive descent: add := mul (+|- mul)*, mul := unary (*|/|% unary)*, unary := - unary | pow,
--- pow := atom (^ unary)?. Each rule returns a closure of t.
-local function parse(toks)
+local CMP_FN = {
+    ["<"] = function(x, y) return x < y and 1 or 0 end, ["<="] = function(x, y) return x <= y and 1 or 0 end,
+    [">"] = function(x, y) return x > y and 1 or 0 end, [">="] = function(x, y) return x >= y and 1 or 0 end,
+    ["=="] = function(x, y) return x == y and 1 or 0 end, ["~="] = function(x, y) return x ~= y and 1 or 0 end,
+}
+
+-- Recursive descent: cmp := add (op add)?, add := mul (+|- mul)*, mul := unary (*|/|% unary)*,
+-- unary := - unary | pow, pow := atom (^ unary)?. Each rule returns a closure of the environment
+-- e (`e.t` = seconds, `e[slot]` = the value of a name defined by an earlier row). names: name ->
+-- slot.
+local function parse(toks, names)
     local pos, depth = 1, 0
     local function peek() return toks[pos] and toks[pos].k end
     local function take() pos = pos + 1; return toks[pos - 1] end
-    local add
+    local cmp
     local function atom()
         local tk = take()
         if not tk then error({ "公式不完整" }, 0) end
@@ -119,12 +159,50 @@ local function parse(toks)
         elseif tk.k == "(" then
             depth = depth + 1
             if depth > 32 then error({ "括号嵌套太深" }, 0) end
-            local e = add()
+            local e = cmp()
             if peek() ~= ")" then error({ "缺少右括号" }, 0) end
             take(); depth = depth - 1
             return e
         elseif tk.k == "id" then
             local name = tk.v
+            if name == "clip" and peek() == "(" then
+                take()
+                local arg = take()
+                if not (arg and arg.k == "id") or peek() ~= ")" then
+                    error({ "clip 的参数是一个形态键配置组合的名称（英文字母、数字、下划线），例如 clip(aim)" }, 0)
+                end
+                take()
+                local id = arg.v
+                return function() return D.clip_progress(id) end
+            end
+            if name == "ramp" and peek() == "(" then
+                -- ramp(target, in, out): follows target (clamped to 0..1) at 1 / in per second
+                -- upward and 1 / out downward, so a switch becomes a fade of its own length. Each
+                -- ramp in a formula keeps its own value; it restarts at 0 when the group recompiles.
+                take()
+                depth = depth + 1
+                if depth > 32 then error({ "括号嵌套太深" }, 0) end
+                local args = { cmp() }
+                while peek() == "," do take(); args[#args + 1] = cmp() end
+                if peek() ~= ")" then error({ "缺少右括号" }, 0) end
+                take(); depth = depth - 1
+                if #args ~= 3 then error({ "%s 需要 %s 个参数", name, 3 }, 0) end
+                local target, t_in, t_out = args[1], args[2], args[3]
+                local v = 0
+                return function(e)
+                    local x = target(e)
+                    x = x < 0 and 0 or (x > 1 and 1 or x)
+                    local dt = e.dt or 0
+                    if x > v then
+                        local d = t_in(e)
+                        v = d > 0 and math.min(x, v + dt / d) or x
+                    elseif x < v then
+                        local d = t_out(e)
+                        v = d > 0 and math.max(x, v - dt / d) or x
+                    end
+                    return v
+                end
+            end
             if peek() == "(" then
                 local f = FUNCS[name]
                 if not f then error({ "未知函数 %s", name }, 0) end
@@ -133,20 +211,22 @@ local function parse(toks)
                 if depth > 32 then error({ "括号嵌套太深" }, 0) end
                 local args = {}
                 if peek() ~= ")" then
-                    args[1] = add()
-                    while peek() == "," do take(); args[#args + 1] = add() end
+                    args[1] = cmp()
+                    while peek() == "," do take(); args[#args + 1] = cmp() end
                 end
                 if peek() ~= ")" then error({ "缺少右括号" }, 0) end
                 take(); depth = depth - 1
                 if #args ~= f[1] then error({ "%s 需要 %s 个参数", name, f[1] }, 0) end
                 local fn, a, b, c = f[2], args[1], args[2], args[3]
-                if f[1] == 1 then return function(t) return fn(a(t)) end end
-                if f[1] == 2 then return function(t) return fn(a(t), b(t)) end end
-                return function(t) return fn(a(t), b(t), c(t)) end
+                if f[1] == 1 then return function(e) return fn(a(e)) end end
+                if f[1] == 2 then return function(e) return fn(a(e), b(e)) end end
+                return function(e) return fn(a(e), b(e), c(e)) end
             end
-            if name == "t" then return function(t) return t end end
+            if name == "t" then return function(e) return e.t end end
             local v = CONSTS[name]
             if v then return function() return v end end
+            local slot = names and names[name]
+            if slot then return function(e) return e[slot] end end
             error({ "未知名称 %s", name }, 0)
         end
         error({ "公式不完整" }, 0)
@@ -157,8 +237,8 @@ local function parse(toks)
         if peek() == "^" then
             take()
             local b = unary()
-            return function(t)
-                local x, y = a(t), b(t)
+            return function(e)
+                local x, y = a(e), b(e)
                 if x < 0 and y ~= floor(y) then return 0 end
                 return x ^ y
             end
@@ -169,7 +249,7 @@ local function parse(toks)
         if peek() == "-" then
             take()
             local a = unary()
-            return function(t) return -a(t) end
+            return function(e) return -a(e) end
         end
         if peek() == "+" then take(); return unary() end
         return pow()
@@ -179,34 +259,45 @@ local function parse(toks)
         while peek() == "*" or peek() == "/" or peek() == "%" do
             local op = take().k
             local l, r = a, unary()
-            if op == "*" then a = function(t) return l(t) * r(t) end
-            elseif op == "/" then a = function(t) local d = r(t); return d ~= 0 and l(t) / d or 0 end
-            else a = function(t) local d = r(t); return d ~= 0 and l(t) % d or 0 end end
+            if op == "*" then a = function(e) return l(e) * r(e) end
+            elseif op == "/" then a = function(e) local d = r(e); return d ~= 0 and l(e) / d or 0 end
+            else a = function(e) local d = r(e); return d ~= 0 and l(e) % d or 0 end end
         end
         return a
     end
-    add = function()
+    local function add()
         local a = mul()
         while peek() == "+" or peek() == "-" do
             local op = take().k
             local l, r = a, mul()
-            if op == "+" then a = function(t) return l(t) + r(t) end
-            else a = function(t) return l(t) - r(t) end end
+            if op == "+" then a = function(e) return l(e) + r(e) end
+            else a = function(e) return l(e) - r(e) end end
         end
         return a
     end
-    local e = add()
+    -- comparisons give 1 or 0 and do not chain: `a < b < c` is an error, not (a < b) < c
+    cmp = function()
+        local a = add()
+        if peek() == "cmp" then
+            local fn = CMP_FN[take().v]
+            local l, r = a, add()
+            if peek() == "cmp" then error({ "比较不能连写，请加括号" }, 0) end
+            return function(e) return fn(l(e), r(e)) end
+        end
+        return a
+    end
+    local e = cmp()
     if pos <= #toks then error({ "多余的内容：%s", toks[pos].v or toks[pos].k }, 0) end
     return e
 end
 
--- Returns a closure t -> number, or nil and an error { template, args... } for I18n.f.
-function D.compile(src)
+-- Returns a closure of the environment, or nil and an error { template, args... } for I18n.f.
+local function compile_env(src, names)
     if type(src) ~= "string" or src:match("^%s*$") then return nil, { "公式为空" } end
     if #src > D.MAX_FORMULA then return nil, { "公式太长（最多 %s 个字符）", D.MAX_FORMULA } end
     local toks, err = tokenize(src)
     if not toks then return nil, err end
-    local ok, e = pcall(parse, toks)
+    local ok, e = pcall(parse, toks, names)
     if not ok then
         if type(e) == "table" then return nil, e end
         return nil, { "公式有误" }
@@ -214,9 +305,17 @@ function D.compile(src)
     return e
 end
 
+-- A formula of t alone: a closure t -> number, or nil and an error { template, args... }.
+function D.compile(src)
+    local fn, err = compile_env(src)
+    if not fn then return nil, err end
+    local e = {}
+    return function(t) e.t = t; return fn(e) end
+end
+
 local function num_text(v) return (string.format("%.3f", v):gsub("0+$", ""):gsub("%.$", "")) end
 
--- the formula a driver runs: its own for "expr", the waveform written out otherwise
+-- the formula a row runs: its own for "expr", the waveform written out otherwise
 function D.formula_of(it)
     if it.wave == "expr" then return it.expr or "" end
     local x = "t / " .. num_text(it.period)
@@ -224,13 +323,20 @@ function D.formula_of(it)
     return string.format("lerp(%s, %s, %s(%s))", num_text(it.lo), num_text(it.hi), it.wave, x)
 end
 
+-- a name a formula can read: letters, digits and `_`, not starting with a digit, not an input,
+-- constant or function
+function D.valid_name(s)
+    return type(s) == "string" and s:match("^[%a_][%w_]*$") ~= nil and #s <= D.MAX_NAME
+        and not RESERVED[s] and not FUNCS[s]
+end
+
 -- ---------------------------------------------------------------- settings
-local function sanitize_item(src)
-    local it = U.copy(D.ITEM_DEFAULTS)
+local function sanitize_row(src)
+    local it = U.copy(D.ROW_DEFAULTS)
     if type(src) ~= "table" then return it end
-    if type(src.enabled) == "boolean" then it.enabled = src.enabled end
+    if D.KIND_NAMES[src.kind] then it.kind = src.kind end
     if type(src.key) == "string" then it.key = src.key end
-    if type(src.actor) == "string" then it.actor = src.actor end
+    if type(src.var) == "string" then it.var = src.var:sub(1, D.MAX_NAME) end
     if D.WAVE_NAMES[src.wave] then it.wave = src.wave end
     if type(src.expr) == "string" then it.expr = src.expr:sub(1, D.MAX_FORMULA) end
     for k, lim in pairs(D.LIMITS) do
@@ -240,29 +346,85 @@ local function sanitize_item(src)
     return it
 end
 
-local function recompile(i)
-    local it = cfg.items[i]
-    local formula = D.formula_of(it)
-    local fn, err = D.compile(formula)
-    compiled[i] = fn or false
-    D.view.items[i] = { value = 0, err = err, formula = formula }
+local function sanitize_group(src)
+    local g = U.copy(D.GROUP_DEFAULTS)
+    g.rows = {}
+    if type(src) ~= "table" then return g end
+    if type(src.enabled) == "boolean" then g.enabled = src.enabled end
+    if type(src.name) == "string" then g.name = src.name:sub(1, D.MAX_NAME) end
+    if type(src.actor) == "string" then g.actor = src.actor end
+    for i, r in ipairs(type(src.rows) == "table" and src.rows or {}) do
+        if i > D.MAX_ROWS then break end
+        g.rows[i] = sanitize_row(r)
+    end
+    return g
+end
+
+-- a schema 1 driver: one output row, the switch and the character move to the group
+local function group_of_item(src)
+    if type(src) ~= "table" then src = {} end
+    local row = sanitize_row(src)
+    row.kind = "out"
+    local g = sanitize_group({ enabled = src.enabled, actor = src.actor })
+    g.rows[1] = row
+    return g
+end
+
+-- Compiles group g row by row. A variable row defines its name for the rows below it; an output
+-- row whose key is a valid name does too, so `jaw = 0.5 * Mouth_open` reads an earlier output.
+local function recompile(g)
+    local grp = cfg.groups[g]
+    local names, nslots = {}, 0
+    local cg = { ok = true, rows = {} }
+    local vg = { rows = {} }
+    for r, row in ipairs(grp.rows) do
+        local formula = D.formula_of(row)
+        local fn, err = compile_env(formula, names)
+        local name
+        if row.kind == "var" then
+            if not D.valid_name(row.var) then
+                err = err or (row.var == "" and { "变量需要名称" }
+                    or { "变量名 %s 不可用：只能用英文字母、数字和下划线，不能以数字开头，也不能是函数名或 t、a、pi、tau", row.var })
+            elseif names[row.var] then
+                err = err or { "名称 %s 已在上面定义", row.var }
+            else
+                name = row.var
+            end
+        elseif D.valid_name(row.key) and not names[row.key] then
+            name = row.key
+        end
+        local slot
+        if name then nslots = nslots + 1; slot = nslots; names[name] = slot end
+        if err then cg.ok = false end
+        cg.rows[r] = { fn = fn, slot = slot }
+        vg.rows[r] = { value = 0, err = err, formula = formula }
+    end
+    compiled[g] = cg
+    D.view.groups[g] = vg
 end
 
 local function recompile_all()
-    for i in pairs(compiled) do compiled[i] = nil end
-    for i in pairs(D.view.items) do D.view.items[i] = nil end
-    for i = 1, #cfg.items do recompile(i) end
+    for g in pairs(compiled) do compiled[g] = nil end
+    for g in pairs(D.view.groups) do D.view.groups[g] = nil end
+    for g = 1, #cfg.groups do recompile(g) end
 end
 
 -- data: a decoded drivers.json (tests); default user/drivers.json
 function D.load(data)
     if data == nil then data = U.load_json(CFG_PATH) end
-    cfg.enabled, cfg.items = true, {}
+    cfg.enabled, cfg.groups = true, {}
     if type(data) == "table" then
         if type(data.enabled) == "boolean" then cfg.enabled = data.enabled end
-        for i, src in ipairs(type(data.items) == "table" and data.items or {}) do
-            if i > D.MAX_ITEMS then break end
-            cfg.items[i] = sanitize_item(src)
+        if type(data.groups) == "table" then
+            for i, src in ipairs(data.groups) do
+                if i > D.MAX_GROUPS then break end
+                cfg.groups[i] = sanitize_group(src)
+            end
+        else
+            for i, src in ipairs(type(data.items) == "table" and data.items or {}) do
+                if i > D.MAX_GROUPS then break end
+                cfg.groups[i] = group_of_item(src)
+            end
         end
     end
     D.time = 0
@@ -271,29 +433,89 @@ end
 
 function D.save()
     st.save_at = nil
-    return U.save_json(CFG_PATH, { schema = "sks.drivers/1", enabled = cfg.enabled, items = cfg.items })
+    return U.save_json(CFG_PATH, { schema = D.SCHEMA, enabled = cfg.enabled, groups = cfg.groups })
 end
 
 -- slider drags patch every frame: write the file once they settle
 function D.save_soon() st.save_at = clock() + 0.5 end
 function D.flush() if st.save_at then D.save() end end
 
--- a = { op = "add", key } | { op = "remove", index } | { op = "patch", index?, patch }
--- (patch without index: { enabled }). Returns ok, err, msg like the API commands.
+-- a variable name not used in group grp yet: x1, x2, ...
+local function free_var(grp)
+    local used = {}
+    for _, row in ipairs(grp.rows) do used[row.var] = true; used[row.key] = true end
+    local i = 1
+    while used["x" .. i] do i = i + 1 end
+    return "x" .. i
+end
+
+local function new_row(grp, a)
+    local row = U.copy(D.ROW_DEFAULTS)
+    if a.kind == "var" then
+        row.kind = "var"
+        row.var = type(a.var) == "string" and a.var:sub(1, D.MAX_NAME) or free_var(grp)
+    end
+    if type(a.key) == "string" then row.key = a.key end
+    return row
+end
+
+-- checks every field before changing any: a rejected patch leaves the row as it was
+local function patch_row(row, p)
+    if p.wave ~= nil and not D.WAVE_NAMES[p.wave] then return false, "E_BAD_ARGS", "unknown wave" end
+    if p.kind ~= nil and not D.KIND_NAMES[p.kind] then return false, "E_BAD_ARGS", "unknown kind" end
+    for _, k in ipairs({ "key", "var", "expr" }) do
+        if p[k] ~= nil and type(p[k]) ~= "string" then return false, "E_BAD_ARGS", k .. " must be a string" end
+    end
+    for k, lim in pairs(D.LIMITS) do
+        if p[k] ~= nil then
+            local v = tonumber(p[k])
+            if not v or v ~= v then return false, "E_BAD_ARGS", k .. ": number expected" end
+        end
+    end
+    for k, v in pairs(p) do
+        local lim = D.LIMITS[k]
+        if lim then
+            row[k] = U.clamp(tonumber(v), lim[1], lim[2]) + 0.0
+        elseif k == "expr" then
+            row.expr = v:sub(1, D.MAX_FORMULA)
+        elseif k == "var" then
+            row.var = v:sub(1, D.MAX_NAME)
+        elseif k == "kind" or k == "key" or k == "wave" then
+            row[k] = v
+        end
+    end
+    -- a row turned into a variable needs a name to be read by
+    if row.kind == "var" and row.var == "" then row.var = "x" end
+    return true
+end
+
+local ROW_FIELDS = { kind = true, key = true, var = true, wave = true, expr = true, period = true, lo = true,
+    hi = true, phase = true }
+
+-- a = { op = "add", key?, actor? } (a new group with one output row)
+--   | { op = "remove", index } | { op = "patch", patch } (master switch: { enabled })
+--   | { op = "patch", index, patch } (group: enabled, name; row fields go to row 1)
+--   | { op = "patch", index, row, patch } | { op = "add_row", index, kind?, key?, var? }
+--   | { op = "remove_row", index, row } | { op = "move_row", index, row, to }
+-- Returns ok, err, msg like the API commands.
 function D.command(a)
     if type(a) ~= "table" then return false, "E_BAD_ARGS", "args must be a table" end
-    local items = cfg.items
+    local groups = cfg.groups
+    local function group_of()
+        local g = tonumber(a.index)
+        return g, g and groups[g]
+    end
     if a.op == "add" then
-        if #items >= D.MAX_ITEMS then return false, "E_BAD_ARGS", "too many drivers" end
-        local it = U.copy(D.ITEM_DEFAULTS)
-        if type(a.key) == "string" then it.key = a.key end
-        if type(a.actor) == "string" then it.actor = a.actor end
-        items[#items + 1] = it
-        recompile(#items)
+        if #groups >= D.MAX_GROUPS then return false, "E_BAD_ARGS", "too many drivers" end
+        local grp = U.copy(D.GROUP_DEFAULTS)
+        if type(a.actor) == "string" then grp.actor = a.actor end
+        grp.rows = { new_row(grp, { key = a.key }) }
+        groups[#groups + 1] = grp
+        recompile(#groups)
     elseif a.op == "remove" then
-        local i = tonumber(a.index)
-        if not i or not items[i] then return false, "E_NOT_FOUND", "no such driver" end
-        table.remove(items, i)
+        local g, grp = group_of()
+        if not grp then return false, "E_NOT_FOUND", "no such driver" end
+        table.remove(groups, g)
         recompile_all()
     elseif a.op == "patch" then
         local p = a.patch
@@ -302,30 +524,51 @@ function D.command(a)
             if type(p.enabled) ~= "boolean" then return false, "E_BAD_ARGS", "enabled must be boolean" end
             cfg.enabled = p.enabled
         else
-            local i = tonumber(a.index)
-            local it = i and items[i]
-            if not it then return false, "E_NOT_FOUND", "no such driver" end
-            if p.wave ~= nil and not D.WAVE_NAMES[p.wave] then return false, "E_BAD_ARGS", "unknown wave" end
-            if p.enabled ~= nil and type(p.enabled) ~= "boolean" then return false, "E_BAD_ARGS", "enabled must be boolean" end
-            for _, k in ipairs({ "key", "expr" }) do
-                if p[k] ~= nil and type(p[k]) ~= "string" then return false, "E_BAD_ARGS", k .. " must be a string" end
-            end
-            for k, v in pairs(p) do
-                local lim = D.LIMITS[k]
-                if lim then
-                    v = tonumber(v)
-                    if not v or v ~= v then return false, "E_BAD_ARGS", k .. ": number expected" end
-                    it[k] = U.clamp(v, lim[1], lim[2]) + 0.0
-                elseif k == "expr" then
-                    it.expr = v:sub(1, D.MAX_FORMULA)
-                elseif k == "enabled" or k == "key" or k == "wave" then
-                    it[k] = v
+            local g, grp = group_of()
+            if not grp then return false, "E_NOT_FOUND", "no such driver" end
+            local r = tonumber(a.row)
+            if r == nil then
+                if p.enabled ~= nil and type(p.enabled) ~= "boolean" then return false, "E_BAD_ARGS", "enabled must be boolean" end
+                if p.name ~= nil and type(p.name) ~= "string" then return false, "E_BAD_ARGS", "name must be a string" end
+                local rp = {}
+                for k, v in pairs(p) do if ROW_FIELDS[k] then rp[k] = v end end
+                if next(rp) then
+                    if not grp.rows[1] then return false, "E_NOT_FOUND", "no such row" end
+                    local ok, err, msg = patch_row(grp.rows[1], rp)
+                    if not ok then return ok, err, msg end
                 end
+                if p.enabled ~= nil then grp.enabled = p.enabled end
+                if p.name ~= nil then grp.name = p.name:sub(1, D.MAX_NAME) end
+            else
+                local row = grp.rows[r]
+                if not row then return false, "E_NOT_FOUND", "no such row" end
+                local ok, err, msg = patch_row(row, p)
+                if not ok then return ok, err, msg end
             end
-            recompile(i)
+            recompile(g)
         end
+    elseif a.op == "add_row" then
+        local g, grp = group_of()
+        if not grp then return false, "E_NOT_FOUND", "no such driver" end
+        if #grp.rows >= D.MAX_ROWS then return false, "E_BAD_ARGS", "too many rows" end
+        if a.kind ~= nil and not D.KIND_NAMES[a.kind] then return false, "E_BAD_ARGS", "unknown kind" end
+        grp.rows[#grp.rows + 1] = new_row(grp, a)
+        recompile(g)
+    elseif a.op == "remove_row" or a.op == "move_row" then
+        local g, grp = group_of()
+        if not grp then return false, "E_NOT_FOUND", "no such driver" end
+        local r = tonumber(a.row)
+        if not (r and grp.rows[r]) then return false, "E_NOT_FOUND", "no such row" end
+        if a.op == "remove_row" then
+            table.remove(grp.rows, r)
+        else
+            local to = tonumber(a.to)
+            if not (to and grp.rows[to]) then return false, "E_BAD_ARGS", "to: row index expected" end
+            table.insert(grp.rows, to, table.remove(grp.rows, r))
+        end
+        recompile(g)
     else
-        return false, "E_BAD_ARGS", "op: add / remove / patch"
+        return false, "E_BAD_ARGS", "op: add / remove / patch / add_row / remove_row / move_row"
     end
     D.save_soon()
     return true
@@ -338,54 +581,67 @@ local function release_all()
     return Ext.release_all(D.OWNER) > 0
 end
 
+local function finite(x)
+    if x ~= x or x == math.huge or x == -math.huge then return 0 end
+    return x
+end
+
 -- Once per API tick. hi = the largest value a key takes (Sculpt.RANGE[2]); writable(name) is the
 -- adapter's channel check or nil. Returns true when any held value changed.
-local now_held = {}
+local now_held, env = {}, {}
 function D.tick(dt, hi, writable)
     if st.save_at and clock() >= st.save_at then D.save() end
-    local items = cfg.items
+    local groups = cfg.groups
     for k in pairs(D.actor_values) do D.actor_values[k] = nil end
-    if not cfg.enabled or #items == 0 then
-        for _, v in pairs(D.view.items) do v.value, v.owner, v.dup = 0, nil, nil end
+    if not cfg.enabled or #groups == 0 then
+        for _, vg in pairs(D.view.groups) do
+            for _, v in pairs(vg.rows) do v.value, v.owner, v.dup = 0, nil, nil end
+        end
         return release_all()
     end
     D.time = D.time + dt
     D.view.time = D.time
-    local t = D.time
     for k in pairs(now_held) do now_held[k] = nil end
-    local first = {}   -- actor id -> norm key -> index of the first driver naming it
-    for i, it in ipairs(items) do
-        local actor = D.actor_of(it)
-        local v = D.view.items[i]
-        v.owner, v.dup = nil, nil
-        local fn = compiled[i]
-        local key = it.key
-        if not (it.enabled and fn and key ~= "") then
-            v.value = 0
-        elseif writable and not writable(key) then
-            v.value, v.owner = 0, "?"
-        else
-            local n = Ext.norm(key)
-            local x = fn(t)
-            if x ~= x or x == math.huge or x == -math.huge then x = 0 end
-            x = U.clamp(x, 0, hi)
-            v.value = x
-            local seen = first[actor] or {}
-            first[actor] = seen
-            local _, owner = Ext.get(key)
-            if seen[n] then
-                v.dup = seen[n]
-            elseif actor ~= D.current_actor then
-                seen[n] = i
-                local values = D.actor_values[actor] or {}
-                D.actor_values[actor] = values
-                values[n] = { name = key, value = x + 0.0 }
-            elseif owner and owner ~= D.OWNER then
-                v.owner = owner
+    local first = {}   -- actor id -> norm key -> { group, row } of the first row naming it
+    for g, grp in ipairs(groups) do
+        local actor = D.actor_of(grp)
+        local cg, vg = compiled[g], D.view.groups[g]
+        local run = grp.enabled and cg and cg.ok
+        for k in pairs(env) do env[k] = nil end
+        env.t, env.dt = D.time, dt
+        for r, row in ipairs(grp.rows) do
+            local v, c = vg.rows[r], cg.rows[r]
+            v.owner, v.dup = nil, nil
+            local x = run and finite(c.fn(env)) or 0
+            if c.slot then env[c.slot] = x end
+            if row.kind == "var" then
+                v.value = x
+            elseif not run or row.key == "" then
+                v.value = 0
+            elseif writable and not writable(row.key) then
+                v.value, v.owner = 0, "?"
             else
-                seen[n] = i
-                Ext.set(D.OWNER, key, x + 0.0, Ext.DEFAULT_TTL)
-                now_held[n] = key
+                local key = row.key
+                local n = Ext.norm(key)
+                x = U.clamp(x, 0, hi)
+                v.value = x
+                local seen = first[actor] or {}
+                first[actor] = seen
+                local _, owner = Ext.get(key)
+                if seen[n] then
+                    v.dup = seen[n]
+                elseif actor ~= D.current_actor then
+                    seen[n] = { g, r }
+                    local values = D.actor_values[actor] or {}
+                    D.actor_values[actor] = values
+                    values[n] = { name = key, value = x + 0.0 }
+                elseif owner and owner ~= D.OWNER then
+                    v.owner = owner
+                else
+                    seen[n] = { g, r }
+                    Ext.set(D.OWNER, key, x + 0.0, Ext.DEFAULT_TTL)
+                    now_held[n] = key
+                end
             end
         end
     end
@@ -401,9 +657,9 @@ function D.tick(dt, hi, writable)
     return released or next(now_held) ~= nil
 end
 
--- the character a driver belongs to; "" (older files, games with one character) is the player's
-function D.actor_of(it)
-    return (it.actor ~= nil and it.actor ~= "") and it.actor or D.default_actor
+-- the character a group belongs to; "" (older files, games with one character) is the player's
+function D.actor_of(grp)
+    return (grp.actor ~= nil and grp.actor ~= "") and grp.actor or D.default_actor
 end
 
 function D.config() return cfg end
