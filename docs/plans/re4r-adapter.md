@@ -156,9 +156,9 @@ RE4R 按用户绑定优先选择配置；模型自身或同模型部件的指纹
 
 头部身份按网格文件名的编号组判定（`cha000_10` → `cha000`），不受 mod 替换文件内容影响。有标定的组：里昂 `cha000`、`cha005`、`cha006`、`cha500`，艾达 `cha200`、`cha800`、`cha801`、`cha803`；文件名可带后缀（`cha006_10_TU1`）。Ashley、Luis、Krauser、Wesker、Hunk 的组只用于判定“另一个角色”，不作为面部驱动。皮肤的身体网格自有编号组（雕像的 `cha002_00` 配 `cha000_10` 头部），未登记的组的 `_00` 网格也算本角色身体。
 
-模型鉴赏的雕像由 `chainsaw.FigureModelController` 管理，没有玩家 context；Motion 挂在没有网格的 `…_Body` 节点上，头部是名为 `Head` 的子物体。`additional_faces` 在 Motion 扫描之外按控制器向下找 `Head`（最多 6 层）。没有玩家且不在过场时，`instances_ready` 以场景里有雕像为准，场景搜索最多每 0.5 秒一次；离开鉴赏后至多这段时间内，失效实例由签名检查丢弃。
+模型鉴赏的雕像由 `chainsaw.FigureModelController` 管理，没有玩家 context；Motion 挂在没有网格的 `…_Body` 节点上，头部是名为 `Head` 的子物体。没有玩家时，主角色取 `BonusContentsGuiManager.get_FigureManager():get_ModelController()` 当前展示的雕像，头部向下找 `Head`（最多 6 层），根取 `…_Body`；捏脸、表情配置、驱动等主角色功能都作用于它。`FigureGuiManager` 的 `requestInstantiateModel` 与 `requestDestroyInstantiatedModel` 触发引用释放。
 
-编号组与雕像结构来自 MODVariantManager 0.4.2 的实测记录，SKS 侧尚未在模型鉴赏中实机确认。
+编号组参考 MODVariantManager 0.4.2 的实测记录；雕像结构与 `get_ModelController` 已在游戏中确认。
 
 ## 模型配置转换
 
