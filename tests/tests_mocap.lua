@@ -83,6 +83,23 @@ check(U.load_json(U.path("user", "mocap.json")) ~= nil, "calibration saved to us
 SKS.call("mocap_calibrate", { what = "clear" })
 check(next(st.mocap.cfg.neutral) == nil, "clear removes the neutral pose")
 check(not SKS.call("mocap_calibrate", { what = "nose" }), "unknown calibration target rejected")
+check(st.mocap.cfg.scheme == "ifacialmocap" and #st.mocap.schemes == 2, "default scheme iFacialMocap, RhyLive offered too")
+ok, err = SKS.call("mocap", { patch = { scheme = "facecap" } })
+check(not ok and err == "E_BAD_ARGS" and st.mocap.cfg.scheme == "ifacialmocap", "unknown scheme rejected")
+-- RhyLive reads the same live.json but sends no head: the head turn runs only as the test pose
+SKS.call("mocap", { patch = { head = { enabled = true } } })
+frame_in({ jawOpen = 0.6 }); ticks(2)
+check(Mocap.wants_head(), "iFacialMocap stream drives the head turn")
+ok = SKS.call("mocap", { patch = { scheme = "rhylive" } })
+check(ok and st.mocap.cfg.scheme == "rhylive", "scheme RhyLive selected")
+json.dump_file(LIVE, { seq = seq + 1, w = (function() local w = {}; for i = 1, 52 do w[i] = 0 end; w[25] = 0.4; return w end)() })
+seq = seq + 1
+ticks(2)
+check(math.abs((WEIGHTS[ji] or -1) - 0.4) < 1e-3, "RhyLive frame without head reaches the mesh")
+check(not Mocap.wants_head(), "RhyLive stream leaves the head alone")
+SKS.call("mocap", { patch = { test = { on = true } } })
+check(Mocap.wants_head(), "test pose still turns the head under RhyLive")
+SKS.call("mocap", { patch = { scheme = "ifacialmocap", test = { on = false }, head = { enabled = false } } })
 
 -- the stream stops: fades out and hands the keys back
 SKS.call("mocap", { patch = { timeout = 0.1 } })
@@ -109,7 +126,17 @@ if rail then
 end
 local function drawn(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then return true end end end
 check(Panel.ui.page == "mocap", "rail click opens the 面捕 page")
-check(drawn("面捕（iFacialMocap）") and drawn("头部转动") and not drawn("页面出错"), "面捕 page cards drawn")
+check(drawn("面捕总配置") and drawn("基础配置 · iFacialMocap") and drawn("校准面部") and drawn("头部转动")
+    and not drawn("页面出错"), "面捕 page cards drawn")
+SKS.call("mocap", { patch = { scheme = "rhylive" } })
+local h_page = Panel.ui.win.h
+Panel.ui.win.h = 2000   -- the head card sits below the fold at the default height
+DRAWS = {}; CB.d2d_draw()
+Panel.ui.win.h = h_page
+check(drawn("基础配置 · RhyLive") and drawn("rhylive_bridge.py") and drawn("不发送头部数据")
+    and not drawn("校准正前方") and not drawn("页面出错"), "RhyLive scheme box, head card without phone controls")
+SKS.call("mocap", { patch = { scheme = "ifacialmocap" } })
+DRAWS = {}; CB.d2d_draw()
 Panel.ui.page_state.mocap.channels_open = true
 local h_before = Panel.ui.win.h
 Panel.ui.win.h = 2000

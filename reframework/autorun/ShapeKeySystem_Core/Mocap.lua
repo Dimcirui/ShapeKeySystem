@@ -1,7 +1,7 @@
--- ShapeKeySystem: face mocap from iFacialMocap (iPhone ARKit tracking).
+-- ShapeKeySystem: face mocap from a phone app (iFacialMocap or RhyLive, ARKit tracking).
 --
--- REFramework Lua has no sockets: builtin/mocap/ifm_bridge.py receives the phone's UDP stream and
--- writes the latest frame to mocap/live.json, which this module reads once per tick. The 52 ARKit
+-- REFramework Lua has no sockets: a bridge script under builtin/mocap receives the phone's UDP
+-- stream and writes the latest frame to mocap/live.json, which this module reads once per tick. The 52 ARKit
 -- values go in as External leases (owner "mocap"), so they override expression and sculpt for
 -- those keys and pass the same warm-up / cutscene / rebuild guards as every other write. While
 -- the stream fades in or out the lease value is mixed with the pure expression weight, so the
@@ -31,8 +31,18 @@ local CFG_PATH = U.path("user", "mocap.json")
 local HEAD_JOINTS = { { "Neck_0", 0.25 }, { "Neck_1", 0.25 }, { "Head", 0.5 } }
 local AXES = { "pitch", "yaw", "roll" }
 
+-- input schemes the 面捕方案 select offers. Every bridge writes the same live.json, so the read
+-- path is shared; head = false: the app sends no head rotation, the head turn only runs as the
+-- test pose (a head neutral calibrated under another scheme would otherwise turn the head).
+M.SCHEMES = {
+    { id = "ifacialmocap", name = "iFacialMocap", bridge = "ifm_bridge.py", head = true },
+    { id = "rhylive", name = "RhyLive", bridge = "rhylive_bridge.py", head = false },
+}
+local SCHEME_BY_ID = {}
+for _, sc in ipairs(M.SCHEMES) do SCHEME_BY_ID[sc.id] = sc end
+
 M.DEFAULTS = {
-    enabled = false, mirror = false, gain = 1.0, smoothing = 0.3,
+    enabled = false, scheme = "ifacialmocap", mirror = false, gain = 1.0, smoothing = 0.3,
     timeout = 0.5, fade_sec = 0.25,
     neutral = {},        -- ARKit name -> resting value subtracted before gain
     channel_gains = {},  -- ARKit name -> extra gain
@@ -68,6 +78,7 @@ local view = {
     live = false, age = nil, rx_hz = 0, fade = 0, held = 0, derived = 0, resolved = 0,
     status = "未开启", head_status = "-", read_ms = 0,
     test = { on = false, pitch = 0, yaw = 0, roll = 0 },
+    schemes = M.SCHEMES,
     cfg = cfg,
 }
 M.view = view
@@ -90,7 +101,10 @@ end
 function M.load()
     local saved = U.load_json(CFG_PATH)
     if type(saved) == "table" then fill(cfg, saved, M.DEFAULTS) end
+    if not SCHEME_BY_ID[cfg.scheme] then cfg.scheme = M.DEFAULTS.scheme end
 end
+
+function M.scheme() return SCHEME_BY_ID[cfg.scheme] or M.SCHEMES[1] end
 
 function M.save()
     st.save_at = nil
@@ -193,7 +207,7 @@ function M.tick(dt, ctx)
     compute(dt)
     local f = view.fade
     if f <= 0 then
-        view.status = st.last_rx < 0 and "等待 ifm_bridge.py 的数据" or "数据中断"
+        view.status = st.last_rx < 0 and ("等待 " .. M.scheme().bridge .. " 的数据") or "数据中断"
         return release()
     end
     view.status = f < 1 and "淡入淡出中" or "面捕驱动中"
@@ -229,7 +243,7 @@ local function num(v, lim)
     return U.clamp(v, lim[1], lim[2]) + 0.0
 end
 
--- patch: enabled, mirror, gain, smoothing, fade_sec, timeout, channel_gains = {name = gain|false},
+-- patch: enabled, scheme (an M.SCHEMES id), mirror, gain, smoothing, fade_sec, timeout, channel_gains = {name = gain|false},
 -- head = {enabled, gain, max_deg, smoothing, invert = {axis = bool}, order = {axis = 1..3}},
 -- test = {on, pitch, yaw, roll} (not saved). Validates everything before changing anything;
 -- returns ok, err, msg.
@@ -244,6 +258,10 @@ function M.patch(p)
     end
     for _, k in ipairs({ "enabled", "mirror" }) do
         if not bool(cfg, k, p[k]) then return false, "E_BAD_ARGS", k .. " must be boolean" end
+    end
+    if p.scheme ~= nil then
+        if not SCHEME_BY_ID[p.scheme] then return false, "E_BAD_ARGS", "unknown scheme " .. tostring(p.scheme) end
+        writes[#writes + 1] = { cfg, "scheme", p.scheme }
     end
     for k, lim in pairs(M.LIMITS) do
         if p[k] ~= nil then
@@ -334,8 +352,10 @@ function M.drop_refs()
     return false
 end
 
+local function phone_head() return view.fade > 0 and M.scheme().head end
+
 function M.wants_head()
-    return cfg.enabled and cfg.head.enabled and (view.fade > 0 or view.test.on)
+    return cfg.enabled and cfg.head.enabled and (phone_head() or view.test.on)
 end
 
 -- After UpdateMotion: the animation has written this frame's local rotations and constraints
@@ -351,7 +371,7 @@ function M.update_motion(root, jbn)
         view.head_status = st.chain and string.format("头部骨骼链：%d 节", #st.chain) or "找不到 Head 骨骼"
         if not st.chain then return end
     end
-    local ho, f = view.head_out, view.fade
+    local ho, f = view.head_out, phone_head() and view.fade or 0
     if view.test.on then ho, f = view.test, 1 end
     if f <= 0 then return end
     local C = root:call("get_Rotation")

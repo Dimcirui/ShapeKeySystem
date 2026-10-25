@@ -1,4 +1,4 @@
--- ShapeKeySystem panel, advanced page "面捕": iFacialMocap face and head tracking (Mocap.lua).
+-- ShapeKeySystem panel, advanced page "面捕": face and head tracking from a phone (Mocap.lua).
 -- Drawing only submits `mocap` / `mocap_calibrate`; the values shown come from state.mocap.
 
 local T = require("ShapeKeySystem_UI.Theme")
@@ -13,7 +13,21 @@ local LW = 120   -- label column
 local AXES = { { "pitch", "俯仰" }, { "yaw", "左右转" }, { "roll", "歪头" } }
 local SOURCES = { "head#1", "head#2", "head#3" }
 
+-- how to start each scheme's app and bridge (Mocap.SCHEMES ids)
+local SETUP = {
+    ifacialmocap = { "手机打开 iFacialMocap，电脑运行 builtin/mocap/ifm_bridge.py <手机 IP>。" },
+    rhylive = { "手机 RhyLive 把 OSC 发到电脑的局域网 IP、端口 9000，无需触发信号。",
+                "电脑运行 builtin/mocap/rhylive_bridge.py，启动时会显示本机 IP。" },
+}
+
 local function patch(call, p) call("mocap", { patch = p }) end
+
+local function current_scheme(m)
+    for i, sc in ipairs(m.schemes) do
+        if sc.id == m.cfg.scheme then return sc, i end
+    end
+    return m.schemes[1], 1
+end
 
 -- label | slider; returns the row height
 local function slider_row(id, label, value, lo, hi, opt, rx, ry, rw, on_change)
@@ -23,14 +37,39 @@ local function slider_row(id, label, value, lo, hi, opt, rx, ry, rw, on_change)
     return 32
 end
 
+-- what only the selected scheme has: its app, its transport and how it is doing
+local function setup_lines(sc)
+    return SETUP[sc.id] or { "手机打开 " .. sc.name .. "，并启用相应的收发程序。" }
+end
+
+local function scheme_box(m, sc, x, y, w)
+    local lines = setup_lines(sc)
+    local h = 60 + 22 * #lines
+    D.rrect(x, y, w, h, 3, C.panel2)
+    D.outline(x, y, w, h, 3, 1, C.line)
+    local rx, rw = x + 10, w - 20
+    local ry = y + 8
+    D.text("基础配置 · " .. sc.name, rx, ry, C.text, W.small(), rw); ry = ry + 24
+    for _, line in ipairs(lines) do
+        D.text(line, rx, ry, C.faint, W.small(), rw); ry = ry + 22
+    end
+    local input
+    if m.age == nil then input = "还没有收到数据"
+    elseif m.live then input = string.format("接收中 %.0f Hz", m.rx_hz)
+    else input = string.format("%.1f 秒没有新数据", m.age) end
+    D.text(string.format("%s · 读取 %.2f 毫秒/帧", input, m.read_ms), rx, ry, m.live and C.signal or C.muted, W.small(), rw)
+    return h
+end
+
 local function face_card(ctx, x, y, w)
     local m, call = ctx.st.mocap, ctx.call
     local c = m.cfg
-    local h = 344
+    local sc, cur = current_scheme(m)
+    local h = 358 + 22 * #setup_lines(sc)
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local ry = y + 10
-    W.h2("面捕（iFacialMocap）", rx, ry); ry = ry + 32
+    W.h2("面捕总配置", rx, ry); ry = ry + 32
 
     local ch, v, tw = W.toggle("启用", rx, ry, c.enabled)
     if ch then patch(call, { enabled = v }) end
@@ -38,15 +77,16 @@ local function face_card(ctx, x, y, w)
     if ch then patch(call, { mirror = v }) end
     ry = ry + 36
 
-    local input
-    if m.age == nil then input = "还没有收到数据"
-    elseif m.live then input = string.format("接收中 %.0f Hz", m.rx_hz)
-    else input = string.format("%.1f 秒没有新数据", m.age) end
-    D.text(string.format("%s · %s · 淡入 %d%%", m.status, input, math.floor(m.fade * 100 + 0.5)),
-        rx, ry, m.live and C.signal or C.muted, W.small(), rw)
-    ry = ry + 22
-    D.text(string.format("当前部件能接住 %d / 52 个 ARKit 通道；读取 %.2f 毫秒/帧", m.resolved, m.read_ms),
-        rx, ry, C.faint, W.small(), rw)
+    D.text_mid("面捕方案", rx, ry, 28, C.text, W.small(), LW - 8)
+    local labels = {}
+    for i, sc in ipairs(m.schemes) do labels[i] = sc.name end
+    local cs, si = W.select("mocap_scheme", rx + LW, ry, min(240, rw - LW), 28, labels, cur)
+    if cs and m.schemes[si] then patch(call, { scheme = m.schemes[si].id }) end
+    ry = ry + 36
+    ry = ry + scheme_box(m, sc, rx, ry, rw) + 12
+
+    D.text(string.format("%s · 淡入 %d%% · 当前部件能接住 %d / 52 个 ARKit 通道", m.status,
+        math.floor(m.fade * 100 + 0.5), m.resolved), rx, ry, m.live and C.signal or C.muted, W.small(), rw)
     ry = ry + 28
 
     ry = ry + slider_row("mocap_gain", "整体强度", c.gain, 0, 3, { step = 0.01, fmt = "×%.2f" }, rx, ry, rw,
@@ -58,30 +98,36 @@ local function face_card(ctx, x, y, w)
     ry = ry + 4
 
     local bx = rx
-    local clicked, bw = W.button("校准中性脸", bx, ry, nil, 28, { kind = m.live and "primary" or nil, disabled = not m.live })
+    local clicked, bw = W.button("校准面部", bx, ry, nil, 28, { kind = m.live and "primary" or nil, disabled = not m.live })
     if clicked then call("mocap_calibrate", { what = "face" }) end
     bx = bx + bw + 8
     clicked, bw = W.button("清除校准", bx, ry, nil, 28, { disabled = next(c.neutral) == nil })
     if clicked then call("mocap_calibrate", { what = "clear" }) end
     D.text_mid("放松面部、正对手机时点校准", bx + bw + 12, ry, 28, C.faint, W.small(), rw - (bx + bw + 12 - rx))
-    ry = ry + 40
-
-    -- the game cannot open sockets: a helper on the PC turns the phone's stream into a file
-    for _, line in ipairs({
-        "手机打开 iFacialMocap，电脑上运行：",
-        "python reframework\\data\\ShapeKeySystem\\builtin\\mocap\\ifm_bridge.py <手机 IP>",
-        "把 reframework\\data\\ShapeKeySystem\\mocap 加入 Windows Defender 排除项，否则每帧读取要多花约 5 毫秒。",
-    }) do
-        D.text(line, rx, ry, C.faint, W.small(), rw)
-        ry = ry + 20
-    end
     return h
+end
+
+-- fixed pose without the phone, for checking the axes
+local function test_pose(m, call, rx, ry, rw)
+    local t = m.test
+    local ct, tv, tw = W.toggle("测试姿势（不用手机）", rx, ry, t.on == true)
+    if ct then patch(call, { test = { on = tv } }) end
+    if t.on then
+        local sx = rx + tw + 20
+        local sw = (rx + rw - sx - 16) / 3
+        for k, a in ipairs(AXES) do
+            local cx = sx + (k - 1) * (sw + 8)
+            local cs, sv = W.slider("mocap_test_" .. a[1], cx, ry, sw, 28, t[a[1]], -60, 60, { step = 1, fmt = "%.0f°", value_w = 40 })
+            if cs then patch(call, { test = { [a[1]] = sv } }) end
+        end
+    end
 end
 
 local function head_card(ctx, x, y, w)
     local m, call = ctx.st.mocap, ctx.call
     local hc = m.cfg.head
-    local h = 384
+    local sc = current_scheme(m)
+    local h = sc.head == false and 140 or 384
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local ry = y + 10
@@ -91,6 +137,11 @@ local function head_card(ctx, x, y, w)
     if ch then patch(call, { head = { enabled = v } }) end
     D.text_mid(m.head_status or "-", rx + 120, ry, 28, C.muted, W.small(), rw - 120)
     ry = ry + 34
+    if sc.head == false then
+        D.text(sc.name .. " 不发送头部数据，这里只能用测试姿势检查头部转动。", rx, ry, C.faint, W.small(), rw)
+        test_pose(m, call, rx, ry + 26, rw)
+        return h
+    end
     local ho = m.head_out
     D.text(string.format("原始 %.1f / %.1f / %.1f  →  俯仰 %.1f°  左右转 %.1f°  歪头 %.1f°",
         m.head_raw[1], m.head_raw[2], m.head_raw[3], ho.pitch, ho.yaw, ho.roll), rx, ry, C.faint, W.small(), rw)
@@ -117,20 +168,7 @@ local function head_card(ctx, x, y, w)
     local clicked = W.button("校准正前方", rx, ry, nil, 28, { disabled = not m.live })
     if clicked then call("mocap_calibrate", { what = "head" }) end
     ry = ry + 36
-
-    -- fixed pose without the phone, for checking the axes
-    local t = m.test
-    local ct, tv, tw = W.toggle("测试姿势（不用手机）", rx, ry, t.on == true)
-    if ct then patch(call, { test = { on = tv } }) end
-    if t.on then
-        local sx = rx + tw + 20
-        local sw = (rx + rw - sx - 16) / 3
-        for k, a in ipairs(AXES) do
-            local cx = sx + (k - 1) * (sw + 8)
-            local cs, sv = W.slider("mocap_test_" .. a[1], cx, ry, sw, 28, t[a[1]], -60, 60, { step = 1, fmt = "%.0f°", value_w = 40 })
-            if cs then patch(call, { test = { [a[1]] = sv } }) end
-        end
-    end
+    test_pose(m, call, rx, ry, rw)
     return h
 end
 

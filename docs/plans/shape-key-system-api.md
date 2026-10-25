@@ -698,16 +698,27 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 `lacking`（`blink.L`、`blink.R`、`jawOpen` 是否按「缺失」处理；`gaze` 按主角色有没有眼球关节或适配器的声明，每次扫描后更新）。
 「表情详情」页的「自动表情」区提供总开关、合成方式，眨眼的开关、频率和速度，视线微动的开关和幅度，微微张嘴的开关和幅度，每行右侧是当前值。
 
-## 面捕（iFacialMocap）
+## 面捕
 
-进阶「面捕」页。手机上的 iFacialMocap 把 ARKit 52 个通道和头部角度用 UDP 发到电脑；REFramework 的 Lua 不能开 socket，所以由 `builtin/mocap/ifm_bridge.py`（只用标准库）接收，每收到一包就把最新一帧整体替换写入 `mocap/live.json`，SKS 每帧读一次（`Mocap.lua`）。
+进阶「面捕」页。顶部「面捕总配置」放各方案共用的设置（开关、镜像、强度、平滑、淡入淡出、面部校准），其中「面捕方案」下拉选输入来源，所选方案独有的内容放在它下面的「基础配置」框里。方案列在 `Mocap.SCHEMES`：iFacialMocap 和 RhyLive。REFramework 的 Lua 不能开 socket，所以每个方案由 `builtin/mocap/` 下一个只用标准库的 Python 桥接脚本接收手机的 UDP 数据，每收到一包就把最新一帧整体替换写入 `mocap/live.json`（先写 `.tmp` 再 `os.replace`，游戏正占用文件时跳过这一包）。两个桥接写同一种格式，SKS 每帧读一次（`Mocap.lua`），读取路径与方案无关；同一时间只运行一个桥接。
+
+**iFacialMocap**：手机把 ARKit 52 个通道和头部角度以文本协议发到 UDP 49983，需要电脑先发开始信号。
 
 ```
 python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py <手机 IP>   # 向手机发开始信号
 python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py             # 只监听（手机已在发）
 ```
 
-`live.json`：`{"seq": n, "w": [52 个 0..1，顺序同 Names.ARKIT52], "head": [6 个数] | null, "le": [...], "re": [...]}`。`seq` 不变就当没有新数据；SKS 启动后看到的第一份文件不算数（可能是上次留下的）。Windows Defender 实时扫描开着时每次读取约 5 毫秒，需要把 `mocap/` 加入排除项。
+**RhyLive**：手机主动把 OSC 推到电脑，不需要开始信号。在 RhyLive 里把发送目标设成电脑的局域网 IPv4 和端口（默认 9000）；桥接启动时打印本机 IP 和端口，之后每 5 秒打印一次收包速率。
+
+```
+python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py          # 监听 UDP 9000
+python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     # 换端口
+```
+
+协议：一个 UDP 包是一条 OSC 消息或一个 `#bundle`（可嵌套；8 字节时间标签被忽略，元素 = 大端 int32 长度 + 内容，长度须为 4 的倍数）。字符串以 NUL 结尾并补齐到 4 字节。面部数据是地址 `/Face`、类型标签 `,` 加 52 个 `f`、52 个大端 float32，顺序同 `Names.ARKIT52`；数值截到 0..1。其他地址忽略；类型标签不符、长度不符或含 NaN / 无穷的 `/Face` 整条丢弃；结构损坏的包整包丢弃。一个包里有多帧时写最后一帧。RhyLive 不发头部数据，`head` 写 `null`：选这个方案时「头部转动」卡片只留启用开关和测试姿势，手机数据不转头（另一方案下校准的头部基准也不生效）。
+
+`live.json`：`{"seq": n, "w": [52 个 0..1，顺序同 Names.ARKIT52], "head": [6 个数] | null, "le": [...], "re": [...]}`（`le` / `re` 只有 iFacialMocap 写）。`seq` 不变就当没有新数据；SKS 启动后看到的第一份文件不算数（可能是上次留下的）。Windows Defender 实时扫描开着时每次读取约 5 毫秒，需要把 `mocap/` 加入排除项。
 
 写入：52 个通道作为外部值（`External.lua`，所有者 `mocap`）每帧续租，和其他插件一样覆盖表情和捏脸、走同一套写入保护（预热、过场、换装重建）。每个通道 = 手机值 × 淡入系数 + 纯表情值 ×（1 − 淡入系数），所以数据开始或中断时脸在 `fade_sec` 秒内平滑交接；系数回到 0 时放掉全部外部值。通道名先按当前表情配置的槽位解析，解析不到的再按名字匹配捏脸键；部件上没有 ARKit 键（或别名）的脸收不到。
 
@@ -715,7 +726,7 @@ python reframework/data/ShapeKeySystem/builtin/mocap/ifm_bridge.py             #
 
 | 命令 | 参数 | 作用 | 持久化 |
 |---|---|---|---|
-| `mocap` | `{patch}` | 修改面捕设置：`enabled`、`mirror`、`gain`（0–3）、`smoothing`（0–1）、`fade_sec`（0–2）、`timeout`（0.1–5 秒，多久没新数据算中断）、`channel_gains = {ARKit 名 = 0–3 或 false}`（1 和 false 都表示不单独调）、`head = {enabled, gain 0–2, max_deg 5–90, smoothing 0–1, invert = {pitch/yaw/roll = bool}, order = {pitch/yaw/roll = 1–3}}`、`test = {on, pitch, yaw, roll}`（−60–60°，不用手机的测试姿势，不保存）。数值截到范围内；类型不对、未知通道、`order` 不在 1–3 时返回 `E_BAD_ARGS`，什么都不改 | `user/mocap.json`（约 0.5 秒后写） |
+| `mocap` | `{patch}` | 修改面捕设置：`enabled`、`scheme`（`Mocap.SCHEMES` 里的 id：`ifacialmocap` 或 `rhylive`）、`mirror`、`gain`（0–3）、`smoothing`（0–1）、`fade_sec`（0–2）、`timeout`（0.1–5 秒，多久没新数据算中断）、`channel_gains = {ARKit 名 = 0–3 或 false}`（1 和 false 都表示不单独调）、`head = {enabled, gain 0–2, max_deg 5–90, smoothing 0–1, invert = {pitch/yaw/roll = bool}, order = {pitch/yaw/roll = 1–3}}`、`test = {on, pitch, yaw, roll}`（−60–60°，不用手机的测试姿势，不保存）。数值截到范围内；类型不对、未知方案、未知通道、`order` 不在 1–3 时返回 `E_BAD_ARGS`，什么都不改 | `user/mocap.json`（约 0.5 秒后写） |
 | `mocap_calibrate` | `{what}` | `face`：把手机当前各通道值记为放松时的基准（之后按 `(v − 基准) / (1 − 基准)` 换算）；`head`：把当前头部角度记为正前方；`clear`：清除面部基准 | `user/mocap.json` |
 
-`state.mocap`：`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
+`state.mocap`：`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
