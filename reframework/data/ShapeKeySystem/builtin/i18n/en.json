@@ -1009,6 +1009,8 @@
   "相位": "Phase",
   "最低": "Low",
   "最高": "High",
+  "＋ 添加形态键（输入文字搜索）…": "+ Add shape key (type to search)…",
+  "没有匹配的已扫描形态键": "No scanned shape key matches",
   "改为公式": "Edit as formula",
   "公式：%s": "Formula: %s",
   "输入公式，例如 0.5 + 0.5 * sin(t * 2)": "Type a formula, e.g. 0.5 + 0.5 * sin(t * 2)",

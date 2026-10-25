@@ -191,13 +191,12 @@ if add then
     local names = {}
     for _, k in ipairs(st.sculpt.keys) do names[k.name] = true end
     for _, dd in ipairs(DRAWS) do
-        if names[dd.s] and math.abs(dd.x - add.x) < 20 and math.abs(dd.y - add.y) > 10 then picked = dd; break end
+        -- a row of the inline search list: under the field, inside its width
+        if names[dd.s] and dd.x >= add.x - 20 and dd.x < add.x + 320 and dd.y > add.y + 10 then picked = dd; break end
     end
     if picked then click(picked) end
 end
-local W_ = require("ShapeKeySystem_UI.Widgets")
-print("  after click: open_select=", tostring(W_.open_select), "pending=", W_.pending and W_.pending["addkey_smile"])
-for i = 1, 3 do frame(); print("  frame", i, next(st.conditions.current.data.clips["smile"].values)) end
+for _ = 1, 3 do frame() end
 local vals = st.conditions.current.data.clips["smile"].values
 check(picked ~= nil and vals[picked.s] ~= nil, "12: the chosen key is added on that click (" .. tostring(picked and picked.s) .. ")")
 -- 13: the combination header collapses

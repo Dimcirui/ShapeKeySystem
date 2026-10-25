@@ -350,7 +350,10 @@ function W.search_select(state, id, x, y, w, items, value, opt)
     -- 点开那一下 ImGui 用的是上一次登记的文字，登记已选值会让搜索从旧值开始追加。
     W.text_box(id, x, y, field_w, 28, open and s.query or "",
         opt.placeholder or "输入文字搜索…", function(text)
-            s.query, s.offset, W.open_search = text, 0, id
+            -- after a pick ImGui still holds the typed text for a frame and reports it; a closed
+            -- list ignores it, or the typed text would reopen the list and replace the pick
+            if W.open_search ~= id then return end
+            s.query, s.offset = text, 0
             if opt.on_query then opt.on_query(text) end
         end, (not open) and value or nil)
     if not open then return false, nil, 34 end
@@ -395,6 +398,23 @@ function W.search_select(state, id, x, y, w, items, value, opt)
     end
     if I.clicked and not I.inside(x, y, w, cy - y + 8) then W.open_search = nil end
     return false, nil, cy - y + 8
+end
+
+-- Search items for the scanned shape keys (state.sculpt.keys): label "label（name）" when a key has
+-- a display label. cache holds the list until the sculpt state revision changes.
+function W.shape_key_items(sculpt, cache)
+    if cache.keys_rev == sculpt.rev and cache.keys then return cache.keys end
+    local items, seen = {}, {}
+    for _, k in ipairs(sculpt.keys or {}) do
+        if not seen[k.name] then
+            seen[k.name] = true
+            local label = (k.label and k.label ~= k.name) and L.f("%s（%s）", L.tr(k.label), k.name) or k.name
+            items[#items + 1] = { value = k.name, label = label, search = label .. " " .. k.name }
+        end
+    end
+    table.sort(items, function(a, b) return a.value < b.value end)
+    cache.keys, cache.keys_rev = items, sculpt.rev
+    return items
 end
 
 -- 命名表单由所属页面保存草稿；布局在操作栏下展开，不建立弹窗或全屏输入遮罩。
