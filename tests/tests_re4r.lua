@@ -47,6 +47,11 @@ sdk.get_managed_singleton = function(name)
     if name == "chainsaw.CharacterManager" then
         return {call=call,getPlayerContextRef=function() return current and ctx or nil end}
     end
+    if name == "chainsaw.BonusContentsGuiManager" then
+        return {call=call,get_FigureManager=function()
+            return {call=call,get_ModelController=function() return FIGURE_GO and {call=call,get_GameObject=function() return FIGURE_GO end} end}
+        end}
+    end
     return original_singleton(name)
 end
 local pres = {}
@@ -170,23 +175,23 @@ for _,c in ipairs({fig_skin,fig_head,fig_hair,fig_prop}) do c.parent=fig_body en
 local function array(list)
     return {call=function(_, method,i) if method=="get_Length" then return #list else return list[i+1] end end}
 end
-SCENE={call=function(_, _, ty)
-    if ty=="chainsaw.FigureModelController" then return array({{call=function()return fig_root:get_GameObject() end}}) end
-    return array({{call=function()return fig_body:get_GameObject() end}})
-end}
+SCENE={call=function() return array({{call=function()return fig_body:get_GameObject() end}}) end}
 current=false
-check(not A.primary_ready() and A.instances_ready(true), "a model viewer figure makes instances ready without a player")
-extra=A.additional_faces()
-check(#extra==1 and extra[1]==fig_head, "the figure's Head child is found though only its mesh-less parent has a Motion")
-check(A.face_root(fig_head, nil)==fig_body, "a skin body of another group still marks the figure's actor root")
-local fig_parts=A.parts(fig_body,fig_head)
+check(not A.primary_ready(), "no player and no figure: no primary character")
+FIGURE_GO=fig_root:get_GameObject()
+check(A.primary_ready() and A.primary_root()==fig_body and A.faces()[1]==fig_head,
+    "without a player the model viewer figure is the primary character, rooted at its ..._Body")
+check(A.instances_ready(true), "instances run while the figure is primary")
+local fig_parts=A.parts(A.primary_root())
 check(#fig_parts==4, "figure parts: body, head, hair and the prop mesh")
+check(#A.additional_faces()==0, "the primary figure is not driven again as an additional actor")
 local fh=A.bind(fig_head,{A.raw.parse("jawOpen")})
 check(fh.calibration.joints.L_U_Eyelid03==nil, "a Leon figure binds the Leon calibration")
-SCENE={call=function() return array({}) end}
-local t_wait=os.clock()+0.55; while os.clock()<t_wait do end
-check(not A.instances_ready(true), "without a player, cutscene or figure, instances stay off")
+check(type(HOOKS.requestInstantiateModel)=="function" and type(HOOKS.requestDestroyInstantiatedModel)=="function",
+    "figure swaps register reference release")
 current=true
+check(A.primary_root()==ROOT, "a player context takes precedence over the figure")
+FIGURE_GO=nil
 SCENE=old_scene;ARMOR.get_address=saved_address or function() return "player head" end
 
 

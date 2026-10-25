@@ -4,9 +4,11 @@
 -- rig handles are released when the topology changes.
 --
 -- A head's identity is the group of its mesh file name (`cha000_10` -> `cha000`): mods replace the
--- file contents, not the logical path, and costume groups reuse the base head. Model viewer
--- figures (`chainsaw.FigureModelController`) have no player context; their head is the child
--- named `Head`, while the Motion sits on a mesh-less `..._Body` node above it.
+-- file contents, not the logical path, and costume groups reuse the base head.
+--
+-- Without a player context the figure shown in the model viewer is the primary character:
+-- `FigureGuiManager.get_ModelController()` gives it each frame, its head is the descendant named
+-- `Head`, and its root is the mesh-less `..._Body` node that holds the Motion.
 local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
 local NativeFace = require("ShapeKeySystem_Games.RE4R.NativeFace")
 local BoneHold = require("ShapeKeySystem_Games.RE4R.BoneHold")
@@ -37,8 +39,25 @@ local function path(tr)
     local p = call(call(mesh(tr), "getMesh"), "get_ResourcePath")
     return type(p) == "string" and p:gsub("\\", "/"):lower() or ""
 end
+local function figure_head()
+    local manager = call(sdk.get_managed_singleton("chainsaw.BonusContentsGuiManager"), "get_FigureManager")
+    local root = transform(call(call(manager, "get_ModelController"), "get_GameObject"))
+    local function find(tr, depth)
+        local c, seen = call(tr, "get_Child"), {}
+        while c and not seen[c] do
+            seen[c] = true
+            local name = call(call(c, "get_GameObject"), "get_Name")
+            if type(name) == "string" and name:lower() == "head" then return c end
+            local hit = depth < 6 and find(c, depth + 1)
+            if hit then return hit end
+            c = call(c, "get_Next")
+        end
+    end
+    return root and find(root, 1) or nil
+end
 local function head()
     local ctx = context()
+    if not ctx then return figure_head() end
     local go = call(call(call(ctx, "get_BodyUpdater"), "get_HeadMotion"), "get_GameObject")
         or call(ctx, "get_HeadGameObject")
     return transform(go)
@@ -68,6 +87,10 @@ end
 
 function A.primary_root()
     local ctx = context()
+    if not ctx then
+        local h = figure_head()
+        return h and A.instance_root(h) or nil
+    end
     return transform(call(ctx, "get_BodyGameObject") or call(ctx, "get_GameObject"))
 end
 function A.is_face(tr)
@@ -115,31 +138,6 @@ local function components(type_name)
     return scene and t and call(scene, "findComponents(System.Type)", t) or nil
 end
 
--- supported heads of the model viewer figures: a descendant named Head, at most 6 levels down
-local function figure_heads(out, seen)
-    local list = components("chainsaw.FigureModelController")
-    local n = list and call(list, "get_Length") or 0
-    for i = 0, n - 1 do
-        local function visit(tr, depth)
-            local c = call(tr, "get_Child")
-            local siblings = {}
-            while c and not siblings[c] do
-                siblings[c] = true
-                local name = call(call(c, "get_GameObject"), "get_Name")
-                if type(name) == "string" and name:lower() == "head" and not seen[c] and A.is_face(c) then
-                    seen[c] = true
-                    out[#out + 1] = c
-                elseif depth < 6 then
-                    visit(c, depth + 1)
-                end
-                c = call(c, "get_Next")
-            end
-        end
-        local tr = transform(call(call(list, "GetValue(System.Int32)", i), "get_GameObject"))
-        if tr then visit(tr, 1) end
-    end
-end
-
 function A.additional_faces()
     local result, seen = {}, {}
     local player = head()
@@ -157,29 +155,13 @@ function A.additional_faces()
             result[#result + 1] = tr
         end
     end
-    figure_heads(result, seen)
     return result
-end
-
--- Whether a model viewer figure exists. Without a player this is asked every frame, so the scene
--- search runs at most once per FIGURE_CHECK_SEC; for up to that long after the viewer closes a
--- rig may still be driven, and its signature check drops it.
-local FIGURE_CHECK_SEC = 0.5
-local figure_check = { at = nil, present = false }
-local function figures_present()
-    local now = os.clock()
-    if not figure_check.at or now - figure_check.at >= FIGURE_CHECK_SEC then
-        local list = components("chainsaw.FigureModelController")
-        local n = list and call(list, "get_Length")
-        figure_check.at, figure_check.present = now, type(n) == "number" and n > 0
-    end
-    return figure_check.present
 end
 
 function A.instances_ready(cutscene_drive)
     local playing = Cutscene.playing()
     if playing and cutscene_drive == false then return false end
-    return A.primary_ready() or playing == true or figures_present()
+    return A.primary_ready() or playing == true
 end
 function A.face_rank(face) return path(face):match("_10[_%w]*%.mesh") and 2 or 1 end
 function A.is_part() return false end
@@ -306,6 +288,12 @@ function A.init(events)
                 Signals.release_deforms()
                 events.rebuilt()
             end, nil) end
+        end
+        -- the model viewer swaps its figure through these; references go before the old one is destroyed
+        local figures = sdk.find_type_definition("chainsaw.BonusContentsGuiManager.FigureGuiManager")
+        for _, name in ipairs({"requestInstantiateModel", "requestDestroyInstantiatedModel"}) do
+            local method = figures and figures:get_method(name)
+            if method then sdk.hook(method, function() events.rebuilt() end, nil) end
         end
     end
     Conditions.init()
