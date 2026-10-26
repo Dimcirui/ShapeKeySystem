@@ -38,14 +38,16 @@ for name in ("tests_re4r_rules.lua", "tests_re4r_demand.lua", "tests_re4r_pose_s
     runtime.execute('package.path = arg[1] .. "/reframework/autorun/?.lua;" .. package.path')
     runtime.execute(source(name))
 
-states = {}
-for variant in ("reference", "B"):
-    runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
-    runtime.globals().arg = runtime.table_from([str(REPO), variant])
-    lines = []
-    runtime.globals().print = lambda *values: lines.append("\t".join(map(str, values)))
-    runtime.execute(source("tests_sculpt_active.lua"))
-    states[variant] = [line for line in lines if line.startswith("STATE:")]
-assert states["reference"] == states["B"]
-print("SCULPT_ACTIVE_EQUIVALENCE_PASS", len(states["B"]), "operation states")
+# RE9 shares the strict write path, so the same operations run with its channel checks too.
+for game in ("re4", "re9"):
+    states = {}
+    for variant in ("reference", "B"):
+        runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
+        runtime.globals().arg = runtime.table_from([str(REPO), variant, game])
+        lines = []
+        runtime.globals().print = lambda *values: lines.append("\t".join(map(str, values)))
+        runtime.execute(source("tests_sculpt_active.lua"))
+        states[variant] = [line for line in lines if line.startswith("STATE:")]
+    assert states["reference"] == states["B"], game
+    print("SCULPT_ACTIVE_EQUIVALENCE_PASS", game, len(states["B"]), "operation states")
 print("RE4R_PERFORMANCE_REGRESSIONS_PASS")
