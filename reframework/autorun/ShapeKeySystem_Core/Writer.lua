@@ -41,10 +41,19 @@ function W.limit(mesh)
     return ok and n or 0
 end
 
-function W.set_weight(mesh, idx, value, name)
+-- The context is local to one write invocation and never survives an engine callback.
+function W.begin_batch(mesh)
+    if not W.adapter.batch_weights or not W.adapter.strict_bounds then return nil end
+    return {mesh = mesh, limit = W.limit(mesh), context = W.adapter.write_context and W.adapter.write_context(mesh)}
+end
+
+function W.set_weight(mesh, idx, value, name, batch)
     if W.adapter.strict_bounds then
-        if idx < 0 or idx >= W.limit(mesh) then return false end
-        if W.adapter.channel_writable and not W.adapter.channel_writable(name, mesh, idx) then return false end
+        local limit = batch and batch.mesh == mesh and batch.limit or W.limit(mesh)
+        if idx < 0 or idx >= limit then return false end
+        if W.adapter.channel_writable and not W.adapter.channel_writable(name, mesh, idx, batch and batch.context) then
+            return false
+        end
     end
     M_SET:call(mesh, idx, value + 0.0)
     return true
@@ -66,6 +75,7 @@ function W.write_target(t, vals, force, eps, base, mix, skip)
     end
     local slots, idxs, last, mesh = t.slots, t.idxs, t.last, t.mesh
     local writes, skipped = 0, 0
+    local batch
     for k = 1, t.count do
         local s = slots[k]
         local w = vals[s] or 0
@@ -78,7 +88,8 @@ function W.write_target(t, vals, force, eps, base, mix, skip)
         if force or active or abs(w - last[k]) > eps then
             -- always a float: a Lua integer (e.g. a value clamped to the integer 1 from
             -- settings.json) reaches the System.Single parameter as raw bits (1 -> 1.4e-45)
-            if W.set_weight(mesh, idxs[k], w, t.names and t.names[idxs[k] + 1]) then
+            if W.adapter.batch_weights then batch = batch or W.begin_batch(mesh) end
+            if W.set_weight(mesh, idxs[k], w, t.names and t.names[idxs[k] + 1], batch) then
                 last[k] = w
                 writes = writes + 1
             end
@@ -95,8 +106,9 @@ function W.zero_target(t)
     pcall(W.write_target, t, ZERO, true, 0)
 end
 
-function W.read_weight(mesh, idx)
-    if W.adapter.strict_bounds and (idx < 0 or idx >= W.limit(mesh)) then return nil end
+function W.read_weight(mesh, idx, batch)
+    local limit = batch and batch.mesh == mesh and batch.limit
+    if W.adapter.strict_bounds and (idx < 0 or idx >= (limit or W.limit(mesh))) then return nil end
     local ok, v = pcall(W.M_GETW.call, W.M_GETW, mesh, idx)
     return ok and v or nil
 end

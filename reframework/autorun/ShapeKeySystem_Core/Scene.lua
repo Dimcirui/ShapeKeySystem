@@ -8,6 +8,11 @@ local W = require("ShapeKeySystem_Core.Writer")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
 
 local S = {}
+local channel_cache = setmetatable({}, {__mode = "k"})
+local layouts = setmetatable({}, {__mode = "k"})
+function S.clear_channel_cache()
+    channel_cache, layouts = setmetatable({}, {__mode = "k"}), setmetatable({}, {__mode = "k"})
+end
 S.adapter = {}   -- set by SKS.init
 
 local M_CN = W.M_CN
@@ -41,6 +46,15 @@ function S.children_signature(root)
         c = c:call("get_Next")
     end
     return table.concat(parts, "|")
+end
+
+function S.runtime_signature(root)
+    local cached = root and layouts[root]
+    if cached and S.adapter.layout_valid then
+        if S.adapter.layout_valid(root, cached.layout) then return cached.signature end
+        return "layout changed"
+    end
+    return S.children_signature(root)
 end
 
 -- "+added -removed" between two children signatures, for the trail.
@@ -118,16 +132,30 @@ local function read_parts(parent, known, face)
             local mesh
             pcall(function() mesh = child:call("get_GameObject"):call("getComponent(System.Type)", W.MESH_TYPE) end)
             local n = mesh and (M_CN:call(mesh) or 0) or 0
-            local names = n > 0 and channel_names(mesh, n, known)
-            if names then
-                local writable = S.adapter.channel_writable
-                if writable then
+            if n > 0 then
+                local A = S.adapter
+                local stamp = A.cache_channels and A.channel_stamp(mesh)
+                local entry = stamp and channel_cache[mesh]
+                if not entry or entry.n ~= n or entry.stamp ~= stamp or entry.known ~= known or entry.adapter ~= A then
+                    local names = channel_names(mesh, n, known)
+                    local writable, any = A.channel_writable, false
+                    local context = A.write_context and A.write_context(mesh)
                     for i, name in ipairs(names) do
-                        if not writable(name, mesh, i - 1) then names[i] = "" end
+                        if writable and not writable(name, mesh, i - 1, context) then names[i] = ""
+                        elseif name ~= "" then any = true end
                     end
+                    local sorted = {}
+                    for i, name in ipairs(names) do sorted[i] = name end
+                    table.sort(sorted)
+                    entry = {names = names, n = n, stamp = stamp, known = known, adapter = A,
+                        fingerprint = U.fnv(table.concat(sorted, "\n")), layout = U.fnv(table.concat(names, "\n")), has_writable = any,
+                        matches = setmetatable({}, {__mode = "k"})}
+                    if stamp then channel_cache[mesh] = entry end
                 end
-                local id = S.adapter.part_id and S.adapter.part_id(child) or cname
-                parts[#parts + 1] = { id = id, mesh = mesh, names = names, n = n }
+                local id = A.part_id and A.part_id(child) or cname
+                parts[#parts + 1] = {id = id, mesh = mesh, names = entry.names, n = n,
+                    fingerprint = entry.fingerprint, layout = entry.layout, has_writable = entry.has_writable,
+                    metadata = A.cache_channels and entry or nil}
             end
         end
         if candidates then ci = ci + 1; child = candidates[ci]
@@ -141,7 +169,11 @@ end
 local function build_target(part, index, min_hits, mesh_name_of)
     local slots, idxs, distinct, count = {}, {}, {}, 0
     local hits = 0
-    local sel = Names.match_part(index, part.names)
+    local sel = part.metadata and part.metadata.matches[index]
+    if not sel then
+        sel = Names.match_part(index, part.names)
+        if part.metadata then part.metadata.matches[index] = sel end
+    end
     for i, cn in ipairs(part.names) do
         local s = sel[i]
         if s then
@@ -158,7 +190,7 @@ local function build_target(part, index, min_hits, mesh_name_of)
     for k = 1, count do last[k] = -1 end   -- force the first write
     local ok, addr = pcall(part.mesh.get_address, part.mesh)
     return { mesh = part.mesh, addr = ok and addr or nil, name = part.id, slots = slots, idxs = idxs,
-             last = last, count = count, channels = part.n, names = part.names,
+             last = last, count = count, channels = part.n, names = part.names, layout = part.layout,
              distinct = hits, ready = false, stable = 0 }
 end
 
@@ -198,6 +230,10 @@ function S.scan(opts)
             parts = read_parts(parent, opts.known, face)
             if #parts == 0 and psig then S.no_targets[parent] = psig end
         end
+        if S.adapter.capture_layout and #parts > 0 then
+            local layout = S.adapter.capture_layout(parent, face, parts)
+            layouts[parent] = layout and {layout = layout, signature = psig or sig} or nil
+        end
         if #parts > 0 then seen_parents[#seen_parents + 1] = string.format("%s(%d)", S.go_name(parent), #parts) end
         local targets = {}
         for _, part in ipairs(parts) do
@@ -223,12 +259,6 @@ function S.scan(opts)
         end
     end
     table.sort(rigs, function(a, b) return a.primary and not b.primary end)
-    for _, part in ipairs(instances) do
-        local sorted = {}
-        for i, n in ipairs(part.names) do sorted[i] = n end
-        table.sort(sorted)
-        part.fingerprint = U.fnv(table.concat(sorted, "\n"))
-    end
     -- parts: one entry per part id (bindings, coverage); instances: every mesh found (the same
     -- part worn by the player, the guild card copy, a cutscene copy ...), for the sculpt layer
     return { rigs = rigs, parts = part_list, instances = instances, parents = seen_parents, faces = #faces, skipped = skipped,

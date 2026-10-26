@@ -114,7 +114,7 @@ function S.rebuild(parts, owned, presets_of)
                 end
             end
             local ok, addr = pcall(part.mesh.get_address, part.mesh)
-            targets[#targets + 1] = { id = part.id, mesh = part.mesh, addr = ok and addr or nil, items = items,
+            targets[#targets + 1] = { id = part.id, mesh = part.mesh, addr = ok and addr or nil, items = items, layout = part.layout or part.fingerprint,
                                       last = {}, stable = 0, dirty = true }
         else
             -- another copy of a part already seen (guild card / cutscene / save-select hunter):
@@ -134,7 +134,7 @@ function S.rebuild(parts, owned, presets_of)
                 end
             end
             local ok, addr = pcall(part.mesh.get_address, part.mesh)
-            targets[#targets + 1] = { id = part.id, mesh = part.mesh, addr = ok and addr or nil, items = items,
+            targets[#targets + 1] = { id = part.id, mesh = part.mesh, addr = ok and addr or nil, items = items, layout = part.layout or part.fingerprint,
                                       last = {}, stable = 0, dirty = true, copy = true }
         end
     end
@@ -144,10 +144,25 @@ function S.rebuild(parts, owned, presets_of)
     for _, t in ipairs(K.targets) do if t.addr then prev_t[t.addr] = t end end
     for _, t in ipairs(targets) do
         local o = t.addr and prev_t[t.addr]
-        if o then t.stable, t.last = o.stable, o.last
+        if o and o.layout == t.layout then t.stable, t.last = o.stable, o.last
         elseif t.addr and warm[t.addr] then t.stable = warm[t.addr] end
     end
     warm = {}
+    if W.adapter.active_sculpt then
+        for _, t in ipairs(targets) do
+            t.active, t.active_pos, t.pending, t.pending_set = {}, {}, {}, {}
+            t.by_key, t.by_norm, t.work, t.work_seen = {}, {}, {}, {}
+            t.dynamic, t.next_dynamic, t.work_epoch, t.all_dirty = {}, {}, 0, true
+            for i, item in ipairs(t.items) do
+                t.by_key[item.key.name] = i
+                if #item.idx > 0 then
+                    local name = Ext.norm(item.key.name)
+                    local bucket = t.by_norm[name] or {}
+                    bucket[#bucket + 1], t.by_norm[name] = i, bucket
+                end
+            end
+        end
+    end
     for _, k in ipairs(keys) do k.owner = (k.free == 0) and "expression" or "self" end
     table.sort(keys, function(a, b)
         if a.group ~= b.group then return a.group < b.group end
@@ -221,9 +236,25 @@ function S.can_undo() return #K.undo > 0 end
 function S.can_redo() return #K.redo > 0 end
 
 S.version = 0   -- bumped on every value change: expression targets refresh their rest values
-function S.mark_dirty()
+function S.mark_dirty(name)
     S.version = S.version + 1
-    for _, t in ipairs(K.targets) do t.dirty = true end
+    for _, t in ipairs(K.targets) do
+        t.dirty = true
+        if W.adapter.active_sculpt then
+            if not name then t.all_dirty = true
+            else
+                local i = t.by_key[name]
+                if i and #t.items[i].idx > 0 and not t.pending_set[i] then
+                    t.pending_set[i] = true
+                    t.pending[#t.pending + 1] = i
+                end
+            end
+        end
+    end
+end
+
+function S.mark_dynamic()
+    if not W.adapter.active_sculpt then S.mark_dirty() end
 end
 
 -- expression + sculpt on one channel: the sculpt value s is the rest position, the expression
@@ -263,7 +294,7 @@ function S.set(name, value)
     S.push_undo("set:" .. name)
     k.value = U.clamp(value, S.RANGE[1], S.RANGE[2])
     k.touched = true
-    S.mark_dirty()
+    S.mark_dirty(name)
     return true
 end
 
@@ -276,7 +307,7 @@ function S.set_override(name, part, value)
     S.push_undo("ovr:" .. name .. "@" .. part)
     k.overrides[part] = value ~= nil and U.clamp(value, S.RANGE[1], S.RANGE[2]) or nil
     k.touched = true
-    S.mark_dirty()
+    S.mark_dirty(name)
     return true
 end
 
@@ -286,7 +317,7 @@ function S.reset(name)
     S.push_undo(nil)
     k.value, k.overrides, k.touched = k.default, {}, true
     for p, v in pairs(k.preset_overrides) do k.overrides[p] = v end
-    S.mark_dirty()
+    S.mark_dirty(name)
     return true
 end
 
@@ -401,8 +432,95 @@ local function value_for(key, part, preview)
     return S.mix(base, Touch.for_key(key.name, CondExpr.for_key(key.name, 0)))
 end
 
+local function activate(t, i, want)
+    local pos = t.active_pos[i]
+    if want and not pos then
+        t.active[#t.active + 1] = i
+        t.active_pos[i] = #t.active
+    elseif not want and pos then
+        local last = t.active[#t.active]
+        t.active[pos], t.active_pos[last] = last, pos
+        t.active[#t.active], t.active_pos[i] = nil, nil
+    end
+end
+
+local function queue(t, i)
+    if t.work_seen[i] ~= t.work_epoch then
+        t.work_seen[i] = t.work_epoch
+        t.work[#t.work + 1] = i
+    end
+end
+
+local dynamic_names = {}
+local function tick_active(preview, eps)
+    for name in pairs(dynamic_names) do dynamic_names[name] = nil end
+    for name in pairs(Ext.entries) do dynamic_names[name] = true end
+    CondExpr.targets(dynamic_names)
+    Touch.targets(dynamic_names)
+    local writes = 0
+    for _, t in ipairs(K.targets) do
+        if t.stable < G.STABLE_FRAMES then
+            if G.mesh_ready(t.mesh) then t.stable = t.stable + 1 else t.stable = 0 end
+        elseif not G.mesh_still_ready(t.mesh) then
+            return writes, "sculpt mesh no longer ready: " .. t.id
+        else
+            local full = t.all_dirty or t.preview ~= preview
+            t.work_epoch = t.work_epoch + 1
+            for i = #t.work, 1, -1 do t.work[i] = nil end
+            local current = t.next_dynamic
+            for i in pairs(current) do current[i] = nil end
+            for name in pairs(dynamic_names) do
+                for _, i in ipairs(t.by_norm[name] or {}) do current[i] = true end
+            end
+            if full then
+                for i, item in ipairs(t.items) do if #item.idx > 0 then queue(t, i) end end
+            else
+                for _, i in ipairs(t.active) do queue(t, i) end
+                for _, i in ipairs(t.pending) do queue(t, i) end
+                for i in pairs(t.dynamic) do queue(t, i) end
+                for i in pairs(current) do queue(t, i) end
+            end
+            local batch
+            for _, item_index in ipairs(t.work) do
+                local item = t.items[item_index]
+                if full or item.weight == nil or t.pending_set[item_index] or current[item_index] or t.dynamic[item_index] then
+                    item.weight = value_for(item.key, t.id, preview)
+                end
+                local w, keep = item.weight, false
+
+                for _, i in ipairs(item.idx) do
+                    local last = t.last[i]
+                    if last == nil then
+                        batch = batch or W.begin_batch(t.mesh)
+                        last = W.read_weight(t.mesh, i, batch) or 0
+                        t.last[i] = last
+                    end
+                    local active = W.adapter.rewrite_active_weights and (w ~= 0 or last ~= 0)
+
+                    if active or abs(w - last) > eps then
+                        batch = batch or W.begin_batch(t.mesh)
+                        if W.set_weight(t.mesh, i, w, item.key.name, batch) then
+                            t.last[i] = w
+                            writes = writes + 1
+                        end
+                    end
+                    if w ~= 0 or t.last[i] ~= 0 then keep = true end
+                end
+                -- Failed zero writes remain scheduled; a released override also restores its base.
+                activate(t, item_index, keep)
+            end
+            for i = #t.pending, 1, -1 do t.pending[i] = nil end
+            for i in pairs(t.pending_set) do t.pending_set[i] = nil end
+            t.dynamic, t.next_dynamic = current, t.dynamic
+            t.all_dirty, t.dirty, t.preview = false, false, preview
+        end
+    end
+    return writes
+end
+
 -- returns writes, error string (mesh lost readiness)
 function S.tick(edit_mode, preview, eps)
+    if W.adapter.active_sculpt then return tick_active(preview, eps) end
     local writes = 0
     for _, t in ipairs(K.targets) do
         if t.stable < G.STABLE_FRAMES then
@@ -425,7 +543,9 @@ function S.tick(edit_mode, preview, eps)
             return writes, "sculpt mesh no longer ready: " .. t.id
         elseif t.dirty or edit_mode or W.adapter.rewrite_active_weights then
             local last = t.last
+
             for _, item in ipairs(t.items) do
+
                 local w = value_for(item.key, t.id, preview)
                 for _, i in ipairs(item.idx) do
                     local l = last[i]

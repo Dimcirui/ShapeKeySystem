@@ -297,4 +297,15 @@ function E.for_key(key_name, e)
     return v
 end
 
+function E.targets(out)
+    for _, id in ipairs(active_clips()) do
+        local index = target_indexes[id]
+        if not index then
+            index = TargetIndex.build(active_data.clips[id].values)
+            target_indexes[id] = index
+        end
+        for name in pairs(index) do out[name] = true end
+    end
+end
+
 return E

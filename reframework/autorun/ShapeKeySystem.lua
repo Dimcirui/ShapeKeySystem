@@ -33,15 +33,6 @@ if not ok then
 end
 DebugUI.attach(SKS)
 
-if Game.prepare_mesh and re.on_pre_application_entry then
-    for _, stage in ipairs({ "UpdateMotion", "PrepareRendering" }) do
-        re.on_pre_application_entry(stage, function()
-            local ok, err = pcall(SKS.prepare_targets)
-            if not ok then SKS.state.debug.status = "prepare error: " .. tostring(err) end
-        end)
-    end
-end
-
 -- runs fn inside the adapter's lookup cache (cache_begin / cache_end, optional): the primary
 -- character is resolved once per callback, and the window closes even when fn fails
 local function cached(fn)
@@ -50,6 +41,15 @@ local function cached(fn)
     local ok, err = pcall(fn)
     if A and A.cache_end then A.cache_end() end
     return ok, err
+end
+
+if Game.prepare_mesh and re.on_pre_application_entry then
+    for _, stage in ipairs({ "UpdateMotion", "PrepareRendering" }) do
+        re.on_pre_application_entry(stage, function()
+            local ok, err = cached(SKS.prepare_targets)
+            if not ok then SKS.state.debug.status = "prepare error: " .. tostring(err) end
+        end)
+    end
 end
 
 -- after the animation has posed the joints (same slot as Lua Bone System): mocap head turn
@@ -80,7 +80,7 @@ if D.has_d2d() then
     d2d.register(function() D.init_images(Faces.image_paths()) end, function() draw_panel("d2d") end)
 end
 
-re.on_draw_ui(DebugUI.draw)
+re.on_draw_ui(function() DebugUI.draw() end)
 re.on_frame(function()
     D.set_backend(D.pick(SKS.state.settings.ui_backend))
     local ok, err = pcall(Panel.frame)

@@ -187,4 +187,18 @@ function E.for_key(key_name, e)
     return v
 end
 
+function E.targets(out)
+    for _, layer in ipairs(active_layers()) do
+        local set, index = layer[1]
+        if set == drag.values then
+            drag_index = drag_index or TargetIndex.build(set)
+            index = drag_index
+        else
+            index = target_indexes[set]
+            if not index then index = TargetIndex.build(set); target_indexes[set] = index end
+        end
+        for name in pairs(index) do out[name] = true end
+    end
+end
+
 return E

@@ -172,7 +172,6 @@ Drivers.clip_progress = CondExpr.alpha
 -- game tells people apart)
 state.actors = { rev = 0, list = {}, selected = "", wanted = nil, player_id = "", enabled = false }
 
-
 -- ---------------------------------------------------------------- internal
 local C = {
     prog = nil, resolved = nil, original_resolved = nil, edits = {}, index = {},
@@ -252,7 +251,12 @@ end
 local function request_rescan(...)
     local delays = { ... }
     if #delays == 0 then delays = { 1 } end
-    for _, d in ipairs(delays) do C.scan_at[#C.scan_at + 1] = C.frame + d end
+    C.scan_force = true
+    for _, d in ipairs(delays) do
+        local at, found = C.frame + d, false
+        for _, existing in ipairs(C.scan_at) do if existing == at then found = true; break end end
+        if not found then C.scan_at[#C.scan_at + 1] = at end
+    end
 end
 
 -- Let go of every engine object we hold (no writes). Used when parts are rebuilt or a cutscene
@@ -263,6 +267,8 @@ local MENU_SCAN_FRAMES = 180
 local QUICK_RESCAN = 2
 
 local function drop_rigs(reason, rescan_after)
+    C.scan_force = true
+    Scene.clear_channel_cache()
     ActorInstances.release(reason)
     -- the character faces go with the rigs; they are collected again before the rescan
     Actors.clear(); Scene.override = nil; C.actors_at = C.frame
@@ -284,7 +290,8 @@ local function drop_rigs(reason, rescan_after)
     C.driven_frame, C.held_frame = nil, nil
     Guard.release_refs()
     if rescan_after then
-        C.scan_at = { C.frame + rescan_after }
+        C.scan_after_frame = C.frame + rescan_after
+        C.scan_at = { C.scan_after_frame }
     end
 end
 
@@ -325,7 +332,7 @@ end
 
 -- sculpt + expression targets of ready meshes back to 0 (disable / script reset)
 local function zero_sculpt()
-    if SKS.adapter.strict_bounds and Scene.children_signature(Scene.primary_root()) ~= C.sig then return end
+    if SKS.adapter.strict_bounds and Scene.runtime_signature(Scene.primary_root()) ~= C.sig then return end
     pcall(Sculpt.zero_all)
 end
 
@@ -1017,7 +1024,7 @@ local function known_names()
     return C.known
 end
 
-local function do_scan()
+local function scan_full()
     local scan_start = clock()
     if not C.prog then return end
     local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
@@ -1035,7 +1042,7 @@ local function do_scan()
             local o = t.addr and (old[t.addr] or warm[t.addr])
             if o then
                 t.stable, t.ready = o.stable, o.ready
-                if o.count == t.count then t.last = o.last end
+                if o.count == t.count and o.layout == t.layout then t.last = o.last end
             end
         end
     end
@@ -1141,6 +1148,32 @@ local function do_scan()
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
     Perf.record("scan", clock() - scan_start)
+end
+
+local function root_address(root)
+    local ok, addr = pcall(function() return root:get_address() end)
+    return ok and addr or nil
+end
+
+local function do_scan()
+    local A = SKS.adapter
+    if not C.prog then return end
+    if A.inspect_before_scan and not C.scan_force and #C.rigs > 0 then
+        local root = Scene.primary_root()
+        local addr = root_address(root)
+        local same = addr ~= nil and addr == C.scan_root_addr and Scene.children_signature(root) == C.sig
+        if same and cfg.enabled and A.prepare_parts then A.prepare_parts(C.instances) end
+        if same then
+            C.next_periodic_at = clock() + (C.menu and 3 or max(1, cfg.periodic_scan_sec))
+            return
+        end
+    end
+    C.scan_force = false
+    local ok, err = pcall(scan_full)
+    if not ok then C.scan_force = true; error(err) end
+    local root = Scene.primary_root()
+    C.scan_root_addr = root_address(root)
+    C.next_periodic_at = clock() + (C.menu and 3 or max(1, cfg.periodic_scan_sec))
 end
 
 -- ---------------------------------------------------------------- per frame
@@ -1312,7 +1345,7 @@ end
 local function parents_changed()
     for _, r in ipairs(C.rigs) do
         if not r.primary and r.parent then
-            local ok, sig = pcall(Scene.children_signature, r.parent)
+            local ok, sig = pcall(Scene.runtime_signature, r.parent)
             if not ok or sig ~= r.psig then return true end
         end
     end
@@ -1386,7 +1419,7 @@ local function tick()
     Playback.tick(false)
     C.frame = C.frame + 1
     local f = C.frame
-    if Ext.expire() then Sculpt.mark_dirty(); C.build_external_state() end
+    if Ext.expire() then Sculpt.mark_dynamic(); C.build_external_state() end
     local now = clock()
     local dt = min(now - (C.last_tick or now), 0.1)
     C.last_tick = now
@@ -1397,7 +1430,7 @@ local function tick()
     local held_changed = Mocap.tick(dt, mc)
     if Drivers.tick(dt, Sculpt.RANGE[2], SKS.adapter.channel_writable) then held_changed = true end
     if held_changed then
-        Sculpt.mark_dirty()
+        Sculpt.mark_dynamic()
         if Ext.rev ~= ext_rev then C.build_external_state() end
     end
     Sculpt.frame = f
@@ -1406,7 +1439,7 @@ local function tick()
     -- "setup" (title / save select) drives the preview hunters.
     local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
     if SKS.adapter.strict_bounds and #(C.instances or {}) > 0
-        and Scene.children_signature(Scene.primary_root()) ~= C.sig then
+        and Scene.runtime_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("part signature changed", QUICK_RESCAN)
     end
     Trail.frame = f
@@ -1473,19 +1506,25 @@ local function tick()
         C.pending_zero = {}
     end
     -- parts changed (load screen, equipment): stop touching the old meshes at once
-    local now_sig = (f % 5 == 0 and #C.rigs > 0) and Scene.children_signature(Scene.primary_root()) or nil
+    local now_sig = (f % 5 == 0 and #C.rigs > 0) and Scene.runtime_signature(Scene.primary_root()) or nil
     if now_sig and now_sig ~= C.sig then
         drop_rigs("hunter parts changed (" .. Scene.signature_diff(C.sig, now_sig) .. ")", QUICK_RESCAN)
     elseif f % 30 == 15 and #C.rigs > 0 and parents_changed() then
         drop_rigs("preview hunter changed", QUICK_RESCAN)
-    elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.children_signature(Scene.primary_root()) ~= C.sig then
+    elseif f % 30 == 0 and #C.rigs == 0 and #C.scan_at == 0 and Scene.runtime_signature(Scene.primary_root()) ~= C.sig then
         request_rescan(Guard.SETTLE_FRAMES)
     end
     local due = false
     for i = #C.scan_at, 1, -1 do
         if f >= C.scan_at[i] then due = true; table.remove(C.scan_at, i) end
     end
-    if due or ((C.menu or cfg.periodic_scan_sec > 0) and f >= C.next_periodic) then do_scan() end
+    local periodic = SKS.adapter.inspect_before_scan and now >= (C.next_periodic_at or 0)
+        or not SKS.adapter.inspect_before_scan and f >= C.next_periodic
+    if due or ((C.menu or cfg.periodic_scan_sec > 0) and periodic) then
+        if C.scan_after_frame and f < C.scan_after_frame then
+            C.scan_at = {C.scan_after_frame}
+        else C.scan_after_frame = nil; do_scan() end
+    end
     if C.probe_pending then
         C.probe_pending = false
         local probe = SKS.adapter.probe
@@ -1496,8 +1535,8 @@ local function tick()
     -- conditional expressions: master hunter in gameplay only
     C.cond_live = not C.menu and (CondExpr.current ~= nil or state.runtime.ui_open)
     if C.cond_live then Cnd.sample(f) end
-    if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dirty() end
-    if Touch.update() then Sculpt.mark_dirty() end
+    if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dynamic() end
+    if Touch.update() then Sculpt.mark_dynamic() end
     if state.runtime.ui_open then C.update_cond_live() end
     local lp = live.procedural
     lp.blink = Proc.tick(clock(), f)
@@ -1569,7 +1608,6 @@ function SKS.tick()
     prof_flush()
 end
 
-
 -- ---------------------------------------------------------------- commands
 local cmds = {}
 
@@ -1640,6 +1678,7 @@ function cmds.set_setting(a)
 end
 
 function cmds.rescan()
+    Scene.clear_channel_cache()
     request_rescan(1)
     return true
 end
@@ -2446,7 +2485,7 @@ function SKS.on_rebuilt()
     Actors.clear(); Scene.override = nil; C.actors_at = C.frame
     Trail.event("hook rebuilt (rigs %d)", #C.rigs)
     if #C.rigs > 0 then drop_rigs("equipment rebuilt", Guard.SETTLE_FRAMES)
-    else request_rescan(Guard.SETTLE_FRAMES) end
+    else C.scan_after_frame = C.frame + Guard.SETTLE_FRAMES; request_rescan(Guard.SETTLE_FRAMES) end
 end
 
 -- display name of a raw channel value (a `p` node), nil when the game has no such channel
@@ -2481,7 +2520,7 @@ function SKS.shutdown()
     Trail.event("script reset")
     FaceHold.release()
     C.unpublish_api()
-    if SKS.adapter.strict_bounds and Scene.children_signature(Scene.primary_root()) ~= C.sig then
+    if SKS.adapter.strict_bounds and Scene.runtime_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("shutdown after rebuild", nil)
     end
     for _, r in ipairs(C.rigs) do
@@ -2501,7 +2540,8 @@ function SKS.prepare_targets()
     ActorInstances.prepare()
     local A = SKS.adapter
     if not A.prepare_mesh or not cfg.enabled or #(C.instances or {}) == 0 then return end
-    if Scene.children_signature(Scene.primary_root()) ~= C.sig then
+    local changed = Scene.runtime_signature(Scene.primary_root()) ~= C.sig
+    if changed then
         drop_rigs("preparation after rebuild", Guard.SETTLE_FRAMES)
         return
     end
@@ -2739,7 +2779,7 @@ function PUB.set(owner, name, value, opts)
     value = U.clamp(value, 0, Sculpt.RANGE[2])
     local old = Ext.get(name)
     local structural = Ext.set(owner, name, value, ttl)
-    if structural or old ~= value then Sculpt.mark_dirty() end
+    if structural or old ~= value then Sculpt.mark_dynamic() end
     if structural then C.build_external_state() end
     return true
 end
@@ -2747,13 +2787,13 @@ end
 -- release(owner, name): give the key back to expression / sculpt
 function PUB.release(owner, name)
     if not check_owner(owner) or type(name) ~= "string" then return bad("owner, name") end
-    if Ext.release(owner, name) then Sculpt.mark_dirty(); C.build_external_state() end
+    if Ext.release(owner, name) then Sculpt.mark_dynamic(); C.build_external_state() end
     return true
 end
 
 function PUB.release_all(owner)
     if not check_owner(owner) then return bad("owner") end
-    if Ext.release_all(owner) > 0 then Sculpt.mark_dirty(); C.build_external_state() end
+    if Ext.release_all(owner) > 0 then Sculpt.mark_dynamic(); C.build_external_state() end
     return true
 end
 

@@ -1,6 +1,6 @@
 -- ShapeKeySystem: player discovery, actor calibration and shape-key targets for RE4R.
 --
--- The current player's head selects its calibration. Objects are resolved per call;
+-- The current player's head selects its calibration. Lookup references live for one callback;
 -- rig handles are released when the topology changes.
 --
 -- A head's identity is the group of its mesh file name (`cha000_10` -> `cha000`): mods replace the
@@ -18,11 +18,13 @@ local Cutscene = require("ShapeKeySystem_Games.RE4R.Cutscene")
 local L = require("ShapeKeySystem_Core.I18n")
 local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
     rewrite_active_weights = true, scene_search = false, scoped_bindings = true,
+    active_sculpt = true, batch_weights = true, cache_channels = true, inspect_before_scan = true, skip_empty_actors = true,
+    instance_auto_profile = true,
     conditions = Conditions,
     playback = Playback,
     input = require("ShapeKeySystem_Games.RE4R.Input"),
     terms = { primary = "主角色", part = "部件" }, raw = Signals.raw,
-    read = Signals.read, channel_writable = Signals.writable }
+    read = Signals.read, channel_writable = Signals.writable, write_context = Signals.write_context }
 local T_MESH
 local calibrations = {}
 local function call(obj, method, ...)
@@ -35,9 +37,13 @@ local function context()
 end
 local function transform(go) return call(go, "get_Transform") end
 local function mesh(tr) return call(call(tr, "get_GameObject"), "getComponent(System.Type)", T_MESH) end
-local function path(tr)
-    local p = call(call(mesh(tr), "getMesh"), "get_ResourcePath")
+local function resource(m) return call(m, "getMesh") end
+local function resource_path(m)
+    local p = call(resource(m), "get_ResourcePath")
     return type(p) == "string" and p:gsub("\\", "/"):lower() or ""
+end
+local function path(tr)
+    return resource_path(mesh(tr))
 end
 local function figure_head()
     local manager = call(sdk.get_managed_singleton("chainsaw.BonusContentsGuiManager"), "get_FigureManager")
@@ -213,15 +219,97 @@ function A.eye_angles(eye)
 end
 A.expression_joints = BoneHold.joints
 A.face_layers = BoneHold.layers
+function A.channel_stamp(m)
+    local hashes = call(m, "get_ChannelNameHash")
+    -- getMesh returns a transient resource wrapper; its address changes between callbacks.
+    local p = resource_path(m)
+    if p == "" then return nil end
+    local ok, key = pcall(function()
+        return p .. ":" .. tostring(hashes:get_address())
+    end)
+    return ok and key or nil
+end
 function A.signature(root)
     local out = {}
     for _, tr in ipairs(A.parts(root)) do
         local m = mesh(tr)
         local ok, addr = pcall(m.get_address, m)
-        out[#out+1] = A.part_id(tr) .. "@" .. tostring(ok and addr or "-") .. ":" .. tostring(call(m, "get_BlendShapeChannelNum"))
+        local n = call(m, "get_BlendShapeChannelNum")
+        if type(n) == "number" and n > 0 then
+            out[#out+1] = A.part_id(tr) .. "@" .. tostring(ok and addr or "-") .. ":" .. tostring(n)
+                .. ":" .. tostring(A.channel_stamp(m))
+        end
     end
     table.sort(out)
     return table.concat(out, "|")
+end
+
+local function object_address(o)
+    local ok, value = pcall(function() return o:get_address() end)
+    return ok and value or nil
+end
+
+-- Store numeric routes, not transform references. Resolve them from live anchors on every check.
+function A.capture_layout(root, face, parts)
+    local layout = {root = object_address(root), primary = root == A.primary_root(), routes = {}}
+    if not layout.root or #parts == 0 then return end
+    local wanted, seen, found, visited = {}, {}, 0, 0
+    for _, part in ipairs(parts) do
+        local addr = object_address(part.mesh)
+        if not addr then return end
+        wanted[addr] = part
+    end
+    local function visit(tr, route, anchor, depth)
+        if not tr or depth > 6 or seen[tr] or visited >= 4096 or found >= #parts then return end
+        seen[tr] = true
+        visited = visited + 1
+        local m = mesh(tr)
+        local addr = m and object_address(m)
+        local part = addr and wanted[addr]
+        if part then
+            local steps = {}; for i, step in ipairs(route) do steps[i] = step end
+            local stamp = A.channel_stamp(m)
+            local transform_address = object_address(tr)
+            if not stamp or not transform_address then return end
+            layout.routes[#layout.routes+1] = {anchor = anchor, steps = steps,
+                transform = transform_address, mesh = addr, channels = part.n, stamp = stamp}
+            found = found + 1
+        end
+        local child, siblings, index = call(tr, "get_Child"), {}, 0
+        while child and not siblings[child] and index < 256 and found < #parts and visited < 4096 do
+            siblings[child] = true; route[#route+1] = index
+            visit(child, route, anchor, depth+1); route[#route] = nil
+            child, index = call(child, "get_Next"), index+1
+        end
+    end
+    if layout.primary then
+        local h = head()
+        layout.head = object_address(h)
+        if not layout.head then return end
+        visit(h, {}, "head", 0)
+    end
+    visit(root, {}, "root", 0)
+    if found ~= #parts then return end
+    return layout
+end
+
+function A.layout_valid(root, layout)
+    if object_address(root) ~= layout.root then return false end
+    local h = layout.primary and head()
+    if layout.primary and object_address(h) ~= layout.head then return false end
+    for _, route in ipairs(layout.routes) do
+        local tr = route.anchor == "head" and h or root
+        for _, index in ipairs(route.steps) do
+            tr = call(tr, "get_Child")
+            for _ = 1, index do tr = call(tr, "get_Next") end
+            if not tr then return false end
+        end
+        if object_address(tr) ~= route.transform then return false end
+        local m = mesh(tr)
+        if object_address(m) ~= route.mesh or call(m, "get_BlendShapeChannelNum") ~= route.channels
+            or A.channel_stamp(m) ~= route.stamp then return false end
+    end
+    return true
 end
 function A.gate(_, cutscene_drive)
     if not A.primary_ready() then return false, "Player or supported head unavailable" end
@@ -242,9 +330,12 @@ function A.prepare_parts(parts)
         local m, n = part.mesh, part.n
         local wc = call(m, "get_BlendShapeChannelWeightCount")
         local length = call(call(m, "get_ChannelWeightList"), "get_Length")
-        local custom = false
-        for i, name in ipairs(part.names) do
-            if Signals.writable(name, m, i - 1) then custom = true; break end
+        local custom = part.has_writable
+        if custom == nil then
+            custom = false
+            for i, name in ipairs(part.names) do
+                if Signals.writable(name, m, i - 1) then custom = true; break end
+            end
         end
         if custom and type(wc) == "number" and wc >= 0 and wc < n
             and type(length) == "number" and length >= n and call(m, "get_BlendShapeChannelNum") == n
@@ -290,6 +381,7 @@ function A.init(events)
         for _, name in ipairs({"play", "skip", "unload", "changeEventPhase"}) do
             local method = work and work:get_method(name)
             if method then sdk.hook(method, function()
+                A.cache_end()
                 Signals.release_deforms()
                 events.rebuilt()
             end, nil) end
@@ -298,7 +390,7 @@ function A.init(events)
         local figures = sdk.find_type_definition("chainsaw.BonusContentsGuiManager.FigureGuiManager")
         for _, name in ipairs({"requestInstantiateModel", "requestDestroyInstantiatedModel"}) do
             local method = figures and figures:get_method(name)
-            if method then sdk.hook(method, function() events.rebuilt() end, nil) end
+            if method then sdk.hook(method, function() A.cache_end(); events.rebuilt() end, nil) end
         end
     end
     Conditions.init()
@@ -316,5 +408,35 @@ function A.init(events)
         calibrations[actor] = d
     end
     return Signals.configure(calibrations.leon)
+end
+-- Lookup results, including absent objects, live only within one engine callback.
+local lookup
+local absent = {}
+function A.cache_begin() lookup = {} end
+function A.cache_end() lookup = nil end
+local function memo(fn)
+    local bucket = {}
+    return function(key, second)
+        if not lookup then return fn(key, second) end
+        local group = lookup[bucket]
+        if not group then group = {}; lookup[bucket] = group end
+        local k, k2 = key == nil and absent or key, second == nil and absent or second
+        local row = group[k]
+        if not row then row = {}; group[k] = row end
+        local value = row[k2]
+        if value == nil then
+            value = fn(key, second)
+            if value == nil then value = absent end
+            row[k2] = value
+        end
+        if value == absent then return nil end
+        return value
+    end
+end
+context, mesh, resource, path = memo(context), memo(mesh), memo(resource), memo(path)
+resource_path = memo(resource_path)
+head, figure_head = memo(head), memo(figure_head)
+for _, name in ipairs({"primary_root", "primary_ready", "faces", "parts", "part_id", "instance_root", "signature", "channel_stamp"}) do
+    A[name] = memo(A[name])
 end
 return A

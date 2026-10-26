@@ -87,6 +87,7 @@ python run.py            # 运行全部检查，最后打印每组的 FAILS
 python run.py --shots    # 另外把面板各页渲染成 PNG，存到 tests/shots/
 python test_deploy.py    # 在独立目录里验证部署
 python test_package.py   # 验证发布包的结构，不联网
+python test_re4r_performance.py # RE4R 缓存、输入回退及角色切换检查
 ```
 
 发布时按 [版本规范](docs/writing/version_guideline.md) 定版，然后运行 `tools\package.ps1` 生成 `dist/ShapeKeySystem-<版本>.zip`，作为附件上传到 GitHub release。
