@@ -543,6 +543,80 @@
     ],
     "re9BrowInRight": [
       "HeadSkinned_blendShape.BrInDn_00_R"
+    ],
+    "mouthStretchLeft": [
+      "HeadSkinned_blendShape.Strtch_03_L",
+      "HeadSkinned_blendShape.Strtch_04_L",
+      "HeadSkinned_blendShape.Strtch_CrnPl_L"
+    ],
+    "mouthStretchRight": [
+      "HeadSkinned_blendShape.Strtch_03_R",
+      "HeadSkinned_blendShape.Strtch_04_R",
+      "HeadSkinned_blendShape.Strtch_CrnPl_R"
+    ],
+    "mouthUpperUpLeft": [
+      "HeadSkinned_blendShape.UprLpRs_01_L",
+      "HeadSkinned_blendShape.UprLpRs_04_L",
+      "HeadSkinned_blendShape.UprLpRs_05_L"
+    ],
+    "mouthUpperUpRight": [
+      "HeadSkinned_blendShape.UprLpRs_01_R",
+      "HeadSkinned_blendShape.UprLpRs_04_R",
+      "HeadSkinned_blendShape.UprLpRs_05_R"
+    ],
+    "mouthLowerDownLeft": [
+      "HeadSkinned_blendShape.CrnPl_LwrLpDprs_L"
+    ],
+    "mouthLowerDownRight": [
+      "HeadSkinned_blendShape.CrnPl_LwrLpDprs_R"
+    ],
+    "cheekSquintLeft": [
+      "HeadSkinned_blendShape.LdTight_05_L"
+    ],
+    "cheekSquintRight": [
+      "HeadSkinned_blendShape.LdTight_05_R"
+    ],
+    "noseSneerLeft": [
+      "HeadSkinned_blendShape.NosWrnkl_03_L",
+      "HeadSkinned_blendShape.NosWrnkl_04_L",
+      "HeadSkinned_blendShape.NosWrnkl_05_L"
+    ],
+    "noseSneerRight": [
+      "HeadSkinned_blendShape.NosWrnkl_03_R",
+      "HeadSkinned_blendShape.NosWrnkl_04_R",
+      "HeadSkinned_blendShape.NosWrnkl_05_R"
+    ],
+    "mouthDimpleLeft": [
+      "HeadSkinned_blendShape.CrnPl_05_L"
+    ],
+    "mouthDimpleRight": [
+      "HeadSkinned_blendShape.CrnPl_05_R"
+    ],
+    "mouthPressLeft": [
+      "HeadSkinned_blendShape.LpRolIn_04_L"
+    ],
+    "mouthPressRight": [
+      "HeadSkinned_blendShape.LpRolIn_04_R"
+    ],
+    "mouthRollUpper": [
+      "HeadSkinned_blendShape.LpRolIn_04_L",
+      "HeadSkinned_blendShape.LpRolIn_04_R"
+    ],
+    "mouthRollLower": [
+      "HeadSkinned_blendShape.LpRolIn_05_L",
+      "HeadSkinned_blendShape.LpRolIn_05_R"
+    ],
+    "mouthShrugLower": [
+      "HeadSkinned_blendShape.ChnRs_04_L",
+      "HeadSkinned_blendShape.ChnRs_04_R"
+    ],
+    "mouthLeft": [
+      "HeadSkinned_blendShape.MouthL_05_L",
+      "HeadSkinned_blendShape.MouthL_05_R"
+    ],
+    "mouthRight": [
+      "HeadSkinned_blendShape.MouthR_05_L",
+      "HeadSkinned_blendShape.MouthR_05_R"
     ]
   },
   "expression_fallbacks": {

@@ -205,6 +205,28 @@ re.on_frame(function()
 
     -- 1. Sample 96 FACS Channels directly from head mesh or fallback
     local mesh = R.mesh(head.face)
+    if mesh and not _dumped_mesh_info then
+        _dumped_mesh_info = true
+        pcall(function()
+            local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
+            local dhashes = R.call(mesh, "get_ChannelNameHash")
+            local list = {}
+            for i = 0, cn - 1 do
+                local h = Hash.hash_at(dhashes, i, true)
+                local w = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
+                table.insert(list, {
+                    index = i,
+                    hash = h and string.format("0x%08X", h) or nil,
+                    weight = w
+                })
+            end
+            json.dump_file("ShapeKeySystem/current_mesh_channels_dump.json", {
+                resource_path = R.path(mesh),
+                channel_num = cn,
+                channels = list
+            }, 2)
+        end)
+    end
     if mesh then
         local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
         for i = 0, math.min(cn - 1, 95) do

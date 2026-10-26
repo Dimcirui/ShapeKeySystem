@@ -94,13 +94,13 @@
     },
     {
       "name": "smileMinor.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthSmileLeft",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "smileMinor.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthSmileRight",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "smile.L",
@@ -114,13 +114,13 @@
     },
     {
       "name": "dimple.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthDimpleLeft",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "dimple.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthDimpleRight",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "stretch.L",
@@ -164,13 +164,13 @@
     },
     {
       "name": "press.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthPressLeft",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "press.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthPressRight",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "mouthMove.left",
@@ -209,13 +209,13 @@
     },
     {
       "name": "upperLipRoll",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthRollUpper",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "lowerLipRoll",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthRollLower",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "puff.L",
