@@ -177,18 +177,8 @@ re.on_draw_ui(function()
             return a.s.min > b.s.min
         end)
 
-        -- Columns
-        imgui.columns(5, "RecorderColumns", true)
-        imgui.text("形态键名称 (Name)")
-        imgui.next_column()
-        imgui.text("实时值 (Current)")
-        imgui.next_column()
-        imgui.text("常态底噪 (Min)")
-        imgui.next_column()
-        imgui.text("峰值 (Max)")
-        imgui.next_column()
-        imgui.text("跨度 (Span)")
-        imgui.next_column()
+        -- Header
+        imgui.text_colored(string.format("%-26s | %-8s | %-8s | %-8s | %-8s", "形态键名称 (Name)", "实时当前", "常态底噪", "峰值Max", "跨度Span"), 0xFFAAAAAA)
         imgui.separator()
 
         for _, item in ipairs(sorted_list) do
@@ -197,23 +187,16 @@ re.on_draw_ui(function()
             local is_high = (s.min >= 0.10)
             
             -- Color coding: orange for high baseline (>= 0.10), white otherwise
-            local color = is_high and 0xFF00AAFF or 0xFFFFFFFF
+            local color = 0xFFFFFFFF
             if s.min >= 0.40 then
                 color = 0xFF5555FF -- Reddish for near 0.5
+            elseif is_high then
+                color = 0xFF00AAFF -- Orange
             end
 
-            imgui.text_colored(item.name, color)
-            imgui.next_column()
-            imgui.text_colored(string.format("%.3f", s.current), color)
-            imgui.next_column()
-            imgui.text_colored(string.format("%.3f", s.min), color)
-            imgui.next_column()
-            imgui.text_colored(string.format("%.3f", s.max), color)
-            imgui.next_column()
-            imgui.text_colored(string.format("%.3f", span), color)
-            imgui.next_column()
+            local line = string.format("%-26s | %8.3f | %8.3f | %8.3f | %8.3f", item.name:sub(1, 26), s.current, s.min, s.max, span)
+            imgui.text_colored(line, color)
         end
-        imgui.columns(1)
 
         imgui.tree_pop()
     end
