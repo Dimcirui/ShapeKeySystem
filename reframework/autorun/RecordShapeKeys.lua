@@ -1,10 +1,9 @@
 -- RecordShapeKeys.lua
--- RE9 Native FACS Deform & Signal Baseline Recorder
--- Monitors and records real-time facial blendshapes to identify rest baselines (e.g. 0.17, 0.5)
+-- RE9 Native 96 FACS ShapeKey Baseline Monitor & Recorder
+-- Exclusively monitors the game's native facial blendshapes (00 ~ 95)
 
 local R = require('ShapeKeySystem_Games.RE9.Runtime')
 local Hash = require('ShapeKeySystem_Core.NameHash')
-local Signals = require('ShapeKeySystem_Games.RE9.Signals')
 
 local is_recording = false
 local record_start_time = 0
@@ -13,9 +12,8 @@ local filter_text = ""
 local auto_stop_seconds = 15
 local use_timer = true
 
-local show_facs_mesh = true
-local show_sks_signals = true
-local show_motion_deforms = false
+local sort_by_baseline = true
+local hide_zero_baseline = false
 
 -- 96 Native FACS blendshapes definitions on Leon's head mesh (Index 00 ~ 95)
 local FACS_CHANNEL_INFO = {
@@ -23,12 +21,12 @@ local FACS_CHANNEL_INFO = {
     [1]  = { name = "CrnPl_01_R",        desc = "嘴角平拉01右" },
     [2]  = { name = "CrnPl_04_L",        desc = "微笑嘴角上提04左" },
     [3]  = { name = "CrnPl_04_R",        desc = "微笑嘴角上提04右" },
-    [4]  = { name = "CrnPl_05_L",        desc = "嘴角上提05左" },
-    [5]  = { name = "CrnPl_05_R",        desc = "嘴角上提05右" },
+    [4]  = { name = "CrnPl_05_L",        desc = "嘴角上提05左(酒窝)" },
+    [5]  = { name = "CrnPl_05_R",        desc = "嘴角上提05右(酒窝)" },
     [6]  = { name = "CrnPl_09_L",        desc = "嘴角平提09左" },
     [7]  = { name = "CrnPl_09_R",        desc = "嘴角平提09右" },
-    [8]  = { name = "JwOpn_00_L",        desc = "物理下颌骨张开左" },
-    [9]  = { name = "JwOpn_00_R",        desc = "物理下颌骨张开右" },
+    [8]  = { name = "JwOpn_00_L",        desc = "物理下颌骨张开左(下巴)" },
+    [9]  = { name = "JwOpn_00_R",        desc = "物理下颌骨张开右(下巴)" },
     [10] = { name = "NekTns_L",          desc = "颈部紧绷左" },
     [11] = { name = "NekTns_R",          desc = "颈部紧绷右" },
     [12] = { name = "ChnRs_04_L",        desc = "下巴抬起左" },
@@ -53,14 +51,14 @@ local FACS_CHANNEL_INFO = {
     [31] = { name = "NosWrnkl_05_R",     desc = "皱鼻05右" },
     [32] = { name = "BrInDn_00_L",       desc = "眉头下压/皱眉左" },
     [33] = { name = "BrInDn_00_R",       desc = "眉头下压/皱眉右" },
-    [34] = { name = "BrInRs_00_L",       desc = "眉头上提/挑眉左" },
-    [35] = { name = "BrInRs_00_R",       desc = "眉头上提/挑眉右" },
-    [36] = { name = "BrOutRs_00_L",      desc = "眉梢上提左" },
-    [37] = { name = "BrOutRs_00_R",      desc = "眉梢上提右" },
+    [34] = { name = "BrInRs_00_L",       desc = "眉头上提/挑眉左(困惑)" },
+    [35] = { name = "BrInRs_00_R",       desc = "眉头上提/挑眉右(困惑)" },
+    [36] = { name = "BrOutRs_00_L",      desc = "眉梢上提左(惊讶)" },
+    [37] = { name = "BrOutRs_00_R",      desc = "眉梢上提右(惊讶)" },
     [38] = { name = "BrLr_00_L",         desc = "整眉压低左" },
     [39] = { name = "BrLr_00_R",         desc = "整眉压低右" },
-    [40] = { name = "LdTight_05_L",      desc = "眼睑收紧左" },
-    [41] = { name = "LdTight_05_R",      desc = "眼睑收紧右" },
+    [40] = { name = "LdTight_05_L",      desc = "眼睑收紧左(卧蚕)" },
+    [41] = { name = "LdTight_05_R",      desc = "眼睑收紧右(卧蚕)" },
     [42] = { name = "Sqnt_03_L",         desc = "眯眼03左" },
     [43] = { name = "Sqnt_03_R",         desc = "眯眼03右" },
     [44] = { name = "Sqnt_06_L",         desc = "眯眼06左" },
@@ -89,8 +87,8 @@ local FACS_CHANNEL_INFO = {
     [67] = { name = "UprLpRs_05_R",      desc = "上唇抬起05右(发音E)" },
     [68] = { name = "Fnl_04_L",          desc = "漏斗口型04左(发音O)" },
     [69] = { name = "Fnl_04_R",          desc = "漏斗口型04右(发音O)" },
-    [70] = { name = "CrnDprs_00_L",      desc = "嘴角下压00左" },
-    [71] = { name = "CrnDprs_00_R",      desc = "嘴角下压00右" },
+    [70] = { name = "CrnDprs_00_L",      desc = "嘴角下压00左(不爽)" },
+    [71] = { name = "CrnDprs_00_R",      desc = "嘴角下压00右(不爽)" },
     [72] = { name = "CrnDprs_01_L",      desc = "嘴角下压01左" },
     [73] = { name = "CrnDprs_01_R",      desc = "嘴角下压01右" },
     [74] = { name = "CrnDprs_02_L",      desc = "嘴角下压02左" },
@@ -117,43 +115,32 @@ local FACS_CHANNEL_INFO = {
     [95] = { name = "Pkr_Fnl_BR",        desc = "嘟嘴漏斗(发音U)下右" }
 }
 
--- SKS Output Signals
-local SKS_SIGNAL_INFO = {
-    re9VowelA = "SKS元音 A 输出 (あ)",
-    re9VowelI = "SKS元音 I 输出 (い)",
-    re9VowelU = "SKS元音 U 输出 (う)",
-    re9VowelE = "SKS元音 E 输出 (え)",
-    re9VowelO = "SKS元音 O 输出 (お)",
-    jawOpen   = "SKS物理下颌骨开合输出",
-    eyeBlinkLeft  = "SKS眨眼闭眼左输出",
-    eyeBlinkRight = "SKS眨眼闭眼右输出",
-    re9BrowInLeft = "SKS眉头表情左输出",
-    re9BrowInRight= "SKS眉头表情右输出"
-}
-
-local stats = {} -- key -> { min = x, max = x, sum = x, count = n, current = x, category = cat, desc = desc }
-
-local function reset_stats()
-    stats = {}
-    record_frame_count = 0
-    record_start_time = os.clock()
+-- stats[0..95] = { min = x, max = x, sum = x, count = n, current = x, name = str, desc = str }
+local stats = {}
+for i = 0, 95 do
+    local info = FACS_CHANNEL_INFO[i] or { name = string.format("Channel_%d", i), desc = "原生通道" }
+    stats[i] = {
+        index = i,
+        name = info.name,
+        desc = info.desc,
+        min = 0.0,
+        max = 0.0,
+        sum = 0.0,
+        count = 0,
+        current = 0.0
+    }
 end
 
-local function record_value(key, val, category, desc)
-    if type(val) ~= "number" or val ~= val then return end
-    local entry = stats[key]
-    if not entry then
-        entry = { min = val, max = val, sum = val, count = 1, current = val, category = category, desc = desc }
-        stats[key] = entry
-    else
-        entry.current = val
-        if is_recording then
-            if val < entry.min then entry.min = val end
-            if val > entry.max then entry.max = val end
-            entry.sum = entry.sum + val
-            entry.count = entry.count + 1
-        end
+local function reset_stats()
+    for i = 0, 95 do
+        local cur = stats[i].current
+        stats[i].min = cur
+        stats[i].max = cur
+        stats[i].sum = cur
+        stats[i].count = 1
     end
+    record_frame_count = 0
+    record_start_time = os.clock()
 end
 
 local function save_stats_to_file()
@@ -161,14 +148,15 @@ local function save_stats_to_file()
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         duration_sec = record_frame_count > 0 and (os.clock() - record_start_time) or 0,
         frame_count = record_frame_count,
-        channels = {}
+        facs_channels = {}
     }
-    for key, s in pairs(stats) do
+    for i = 0, 95 do
+        local s = stats[i]
         local avg = s.count > 0 and (s.sum / s.count) or 0
         local span = s.max - s.min
-        table.insert(export.channels, {
-            name = key,
-            category = s.category,
+        table.insert(export.facs_channels, {
+            index = s.index,
+            name = s.name,
             description = s.desc,
             baseline_min = math.floor(s.min * 1000 + 0.5) / 1000,
             peak_max = math.floor(s.max * 1000 + 0.5) / 1000,
@@ -177,21 +165,31 @@ local function save_stats_to_file()
             has_high_baseline = (s.min >= 0.10)
         })
     end
-    table.sort(export.channels, function(a, b)
+    table.sort(export.facs_channels, function(a, b)
         if a.has_high_baseline ~= b.has_high_baseline then
             return a.has_high_baseline
         end
         return a.baseline_min > b.baseline_min
     end)
     
-    local ok = json.dump_file("ShapeKeySystem/baseline_stats.json", export, 2)
+    local ok = json.dump_file("ShapeKeySystem/native_facs_baselines.json", export, 2)
     return ok
 end
 
--- Sampling logic every frame
+-- Sampling logic every frame (Exclusively for 96 Native FACS Channels)
 re.on_frame(function()
     local head = R.find()
     if not head or not head.face then return end
+    local mesh = head.mesh or R.mesh(head.face)
+    if not mesh then return end
+
+    local face_go = R.call(head.face, 'get_GameObject')
+    local root_go = head.root and R.call(head.root, 'get_GameObject')
+    local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
+    local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
+    local dm = fm or rm
+    local dvals = dm and R.call(dm, "get_DeformValues")
+    local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
 
     if is_recording then
         record_frame_count = record_frame_count + 1
@@ -203,73 +201,31 @@ re.on_frame(function()
         end
     end
 
-    -- 1. Sample 96 FACS Channels directly from head mesh or fallback
-    local mesh = R.mesh(head.face)
-    if mesh and not _dumped_mesh_info then
-        _dumped_mesh_info = true
-        pcall(function()
-            local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
-            local dhashes = R.call(mesh, "get_ChannelNameHash")
-            local list = {}
-            for i = 0, cn - 1 do
-                local h = Hash.hash_at(dhashes, i, true)
-                local w = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
-                table.insert(list, {
-                    index = i,
-                    hash = h and string.format("0x%08X", h) or nil,
-                    weight = w
-                })
-            end
-            json.dump_file("ShapeKeySystem/current_mesh_channels_dump.json", {
-                resource_path = R.path(mesh),
-                channel_num = cn,
-                channels = list
-            }, 2)
-        end)
-    end
-    if mesh then
-        local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
-        for i = 0, math.min(cn - 1, 95) do
-            local val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
-            local info = FACS_CHANNEL_INFO[i]
-            local name = info and info.name or string.format("Channel_%d", i)
-            local desc = info and info.desc or "未命名形态键"
-            local display_key = string.format("[FACS %02d] %s", i, name)
-            record_value(display_key, val, "facs", desc)
+    local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
+    for i = 0, 95 do
+        local val = nil
+        if i < cn then
+            val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
         end
-    end
-
-    -- 2. Sample SKS Evaluated Output Signals
-    pcall(function()
-        local snap = Signals.snapshot()
-        if snap and snap.outputs then
-            for sig_name, sig_val in pairs(snap.outputs) do
-                local desc = SKS_SIGNAL_INFO[sig_name] or sig_name
-                local display_key = string.format("[SKS信号] %s", sig_name)
-                record_value(display_key, sig_val, "sks", desc)
-            end
+        -- Fallback to motion deform value if mesh returned nil or zero but motion has deform
+        if (val == nil or val ~= val or val <= 0.0001) and dvals and i < dlen then
+            local mv = R.call(dvals, "get_Item", i)
+            if mv and mv == mv and mv > (val or 0) then val = mv end
         end
-    end)
 
-    -- 3. Sample Motion Component Deforms (if available on root or face)
-    local face_go = R.call(head.face, 'get_GameObject')
-    local root_go = head.root and R.call(head.root, 'get_GameObject')
-    local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
-    local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
-    local dm = fm or rm
-    if dm then
-        local dhashes = R.call(dm, "get_DeformNameHashes")
-        local dvals = R.call(dm, "get_DeformValues")
-        local len = dhashes and (R.call(dhashes, "get_Length") or R.call(dhashes, "get_Count")) or 0
-        if len > 0 and dvals then
-            for i = 0, len - 1 do
-                local h = Hash.hash_at(dhashes, i, true)
-                local val = R.call(dvals, "get_Item", i)
-                if h and type(val) == "number" and val == val then
-                    local hex_str = string.format("0x%08X", h)
-                    local display_key = string.format("[Motion %02d] %s", i, hex_str)
-                    record_value(display_key, val, "motion", "骨骼运动变形通道")
-                end
+        if type(val) == "number" and val == val then
+            local s = stats[i]
+            s.current = val
+            if s.count == 0 then
+                s.min = val
+                s.max = val
+                s.sum = val
+                s.count = 1
+            elseif is_recording then
+                if val < s.min then s.min = val end
+                if val > s.max then s.max = val end
+                s.sum = s.sum + val
+                s.count = s.count + 1
             end
         end
     end
@@ -277,8 +233,7 @@ end)
 
 -- UI Drawing logic
 re.on_draw_ui(function()
-    if imgui.tree_node("RE9 原生形态键常态底噪监测与录制 (Baseline Recorder)") then
-        -- Controls
+    if imgui.tree_node("RE9 原生96 FACS形态键监测与底噪录制") then
         imgui.spacing()
         if not is_recording then
             if imgui.button("开始录制 (Start Recording)", 200, 32) then
@@ -296,16 +251,16 @@ re.on_draw_ui(function()
             reset_stats()
         end
         imgui.same_line()
-        if imgui.button("导出当前数据为 JSON", 160, 32) then
+        if imgui.button("导出为 JSON 文件", 150, 32) then
             save_stats_to_file()
         end
 
         -- Status Display
         local elapsed = is_recording and (os.clock() - record_start_time) or 0
         if is_recording then
-            imgui.text_colored(string.format("正在录制中... 时间: %.1f 秒 / %d 帧", elapsed, record_frame_count), 0xFF00FF00)
+            imgui.text_colored(string.format("正在录制中... 时间: %.1f 秒 / 已统计: %d 帧", elapsed, record_frame_count), 0xFF00FF00)
         else
-            imgui.text(string.format("录制就绪 / 已统计: %d 帧", record_frame_count))
+            imgui.text(string.format("录制就绪 / 已统计: %d 帧 (文件将保存到 ShapeKeySystem/native_facs_baselines.json)", record_frame_count))
         end
 
         local c_timer, v_timer = imgui.checkbox("自动录制固定秒数停止", use_timer)
@@ -318,70 +273,75 @@ re.on_draw_ui(function()
 
         imgui.separator()
         
-        -- Category Checkboxes
-        local c1, v1 = imgui.checkbox("显示面部96 FACS原生形态键", show_facs_mesh)
-        if c1 then show_facs_mesh = v1 end
+        -- Sorting & View Options
+        local c_sort, v_sort = imgui.checkbox("按常态底噪从大到小排序 (高底噪置顶)", sort_by_baseline)
+        if c_sort then sort_by_baseline = v_sort end
         imgui.same_line()
-        local c2, v2 = imgui.checkbox("显示SKS实时信号", show_sks_signals)
-        if c2 then show_sks_signals = v2 end
-        imgui.same_line()
-        local c3, v3 = imgui.checkbox("显示Motion骨骼变形", show_motion_deforms)
-        if c3 then show_motion_deforms = v3 end
+        local c_hide, v_hide = imgui.checkbox("隐藏静止为 0 的形态键 (仅看活动/底噪键)", hide_zero_baseline)
+        if c_hide then hide_zero_baseline = v_hide end
 
         -- Filter Input
-        local c_filter, v_filter = imgui.input_text("筛选 (Filter: 名称/中文功能)", filter_text)
+        local c_filter, v_filter = imgui.input_text("搜索 (Filter: 中文说明 / 英文原名)", filter_text)
         if c_filter then filter_text = v_filter end
 
         imgui.spacing()
-        imgui.text("提示：红色/橙色表示【常态底噪 >= 0.10】的形态键，这类键静止时非零，需要在 signals.json 中切除底噪。")
+        imgui.text_colored("提示：红色/橙色 =【常态底噪 >= 0.10】的形态键，这些键静止时未归零，需要在映射中切除底噪死区。", 0xFF55FFFF)
         imgui.separator()
 
-        -- Filter and sort list
-        local sorted_list = {}
+        -- Prepare sorted and filtered display list
+        local display_list = {}
         local f_lower = filter_text:lower()
-        for key, s in pairs(stats) do
-            local visible = true
-            if s.category == "facs" and not show_facs_mesh then visible = false end
-            if s.category == "sks" and not show_sks_signals then visible = false end
-            if s.category == "motion" and not show_motion_deforms then visible = false end
-
-            if visible then
-                local full_search = (key .. " " .. s.desc):lower()
-                if filter_text == "" or full_search:find(f_lower, 1, true) then
-                    table.insert(sorted_list, { key = key, s = s })
-                end
+        for i = 0, 95 do
+            local s = stats[i]
+            local match_filter = true
+            if filter_text ~= "" then
+                local full = string.format("[%02d] %s %s", i, s.name, s.desc):lower()
+                if not full:find(f_lower, 1, true) then match_filter = false end
+            end
+            if hide_zero_baseline and s.min < 0.005 and s.max < 0.005 and s.current < 0.005 then
+                match_filter = false
+            end
+            if match_filter then
+                table.insert(display_list, s)
             end
         end
 
-        table.sort(sorted_list, function(a, b)
-            if (a.s.min >= 0.10) ~= (b.s.min >= 0.10) then
-                return a.s.min >= 0.10
-            end
-            return a.s.min > b.s.min
-        end)
+        if sort_by_baseline then
+            table.sort(display_list, function(a, b)
+                if (a.min >= 0.10) ~= (b.min >= 0.10) then
+                    return a.min >= 0.10
+                end
+                return a.min > b.min
+            end)
+        else
+            table.sort(display_list, function(a, b)
+                return a.index < b.index
+            end)
+        end
 
         -- Header
-        imgui.text_colored(string.format("%-34s | %-24s | %-8s | %-8s | %-8s | %-8s", "形态键标识 (Name)", "中文含义/说明 (Description)", "当前值", "常态底噪", "峰值Max", "跨度Span"), 0xFFAAAAAA)
+        imgui.text_colored(string.format("%-6s | %-22s | %-26s | %-8s | %-8s | %-8s | %-8s", 
+            "序号", "原生通道名 (Name)", "中文功能说明 (Description)", "实时当前", "常态底噪", "峰值Max", "波动跨度"), 0xFFAAAAAA)
         imgui.separator()
 
-        for _, item in ipairs(sorted_list) do
-            local s = item.s
+        for _, s in ipairs(display_list) do
             local span = s.max - s.min
             local is_high = (s.min >= 0.10)
             
-            -- Color coding: Red for >= 0.40, Orange for >= 0.10, Green for SKS signals, White otherwise
+            -- Color coding: Red for >= 0.40, Orange for >= 0.10, Yellow for > 0.03, White otherwise
             local color = 0xFFFFFFFF
-            if s.category == "sks" then
-                color = 0xFFFFFF55 -- Cyan-ish for SKS signals
-            elseif s.min >= 0.40 then
-                color = 0xFF5555FF -- Reddish for near 0.5
+            if s.min >= 0.40 then
+                color = 0xFF5555FF -- Reddish (bipolar or high tension)
             elseif is_high then
                 color = 0xFF00AAFF -- Orange
+            elseif s.min >= 0.03 then
+                color = 0xFF00FFFF -- Yellow
             end
 
-            local line = string.format("%-34s | %-24s | %8.3f | %8.3f | %8.3f | %8.3f", 
-                item.key:sub(1, 34), 
-                s.desc:sub(1, 24), 
+            local line = string.format("[%02d]   | %-22s | %-26s | %8.3f | %8.3f | %8.3f | %8.3f", 
+                s.index,
+                s.name:sub(1, 22), 
+                s.desc:sub(1, 26), 
                 s.current, 
                 s.min, 
                 s.max, 
