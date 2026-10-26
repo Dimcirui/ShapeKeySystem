@@ -18,11 +18,13 @@ local function address(o)
     local ok, value = pcall(o.get_address, o)
     return ok and value or nil
 end
-local function vector(value)
+local function scalar_value(value)
+    local x, y, z = value.x, value.y, value.z
+    if finite(x) and finite(y) and finite(z) then return x end
+end
+local function scalar(value)
     if not value then return nil end
-    local ok, v = pcall(function()
-        if finite(value.x) and finite(value.y) and finite(value.z) then return {value.x, value.y, value.z} end
-    end)
+    local ok, v = pcall(scalar_value, value)
     return ok and v or nil
 end
 local function quaternion(value)
@@ -86,7 +88,7 @@ function F.bind(face, calibration, joints, diagnostic)
         pose_reader = next(bones) and Pose.bind(motion, bones) or nil, deformer = Deform.bind(face),
         indices = {}, next_check = 0, status = "pending"}
 end
-function F.read(h, register)
+local function read(h, register, select_bones)
     if not h then return {} end
     local m, now = h.motion, os.clock()
     local count = call(m, "get_JointCount")
@@ -107,11 +109,16 @@ function F.read(h, register)
         end
         h.indices, h.count, h.generation, h.next_check = indices, count, generation, now + 2
     end
-    local out, n = {}, 0
+    local out, n = Deform.existing(h.deformer, h.wanted), 0
+    for _ in pairs(out) do n = n + 1 end
+
     for name, i in pairs(h.indices) do
-        local v = call(m, "getCalculatedLocalPosition(System.Int32)", i)
-        local a = vector(v)
-        if a then out[name], n = a[1], n + 1 end
+        if out[name] == nil then
+
+            local v = call(m, "getCalculatedLocalPosition(System.Int32)", i)
+            local value = scalar(v)
+            if value ~= nil then out[name], n = value, n + 1 end
+        end
     end
     local inputs, present = Deform.inputs(), 0
     for _, name in ipairs(inputs) do if finite(out[name]) then present = present + 1 end end
@@ -122,7 +129,8 @@ function F.read(h, register)
         end
     elseif h.deformer then h.deformer.status = "not_needed" end
     local c = (h.pose_reader or not h.real_blink.eyeBlinkLeft or not h.real_blink.eyeBlinkRight) and controller(h)
-    local sampled = h.pose_reader and Pose.read(h.pose_reader, c) or {}
+    local needed = select_bones and select_bones(out)
+    local sampled = h.pose_reader and Pose.read(h.pose_reader, c, needed) or {}
     local poses, bone_count = {}, 0
     for name, bone in pairs(h.bones) do
         local pose = sampled[bone.name]
@@ -148,6 +156,10 @@ function F.read(h, register)
         if count > 64 then eye_cache = {[key] = eye_cache[key]} end
     end
     return out
+end
+function F.read(h, register, select_bones)
+    local values = read(h, register, select_bones)
+    return values
 end
 function F.snapshot(h)
     if not h then return {status = "unavailable"} end

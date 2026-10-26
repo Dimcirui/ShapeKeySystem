@@ -97,7 +97,7 @@ local function sample(h, frame, spec, mirrored)
     end
     if p or q then return {position = p, rotation = q} end
 end
-local function read(h, controller)
+local function read(h, controller, specs)
     local m, now = h.motion, os.clock()
     local nlayer = call(m, "getLayerCount")
     if not finite(nlayer) or nlayer < 0 or nlayer > 64 or not buffers(h) then return {} end
@@ -124,7 +124,7 @@ local function read(h, controller)
                             or name:find("_LipSync_", 1, true) and "lipsync" or "other"
                         -- Controller layer IDs take precedence over clip-name hints.
                         if li == blink then role = "blink" elseif li == lipsync then role = "lipsync" end
-                        for _, spec in ipairs(h.specs) do
+                        for _, spec in ipairs(specs) do
                             local allowed = (role ~= "blink" or eyelid(spec.name)) and (role ~= "lipsync" or mouth(spec.name))
                             if allowed then
                                 local pose = sample(h, frame, spec, mirrored)
@@ -152,7 +152,7 @@ local function read(h, controller)
                     end
                 end
             end
-            for _, spec in ipairs(h.specs) do
+            for _, spec in ipairs(specs) do
                 local sum = sums[spec.name]
                 if sum then
                     local n = spec.neutral
@@ -183,8 +183,17 @@ local function read(h, controller)
     end
     return result
 end
-function P.read(h, controller)
-    local ok, poses = pcall(read, h, controller)
+function P.read(h, controller, needed)
+    local specs = h.specs
+    if needed then
+        local selected = h.selected or {}
+        h.selected = selected
+        for i = #selected, 1, -1 do selected[i] = nil end
+        for _, spec in ipairs(specs) do if needed[spec.name] then selected[#selected + 1] = spec end end
+        specs = selected
+    end
+    if #specs == 0 then return {} end
+    local ok, poses = pcall(read, h, controller, specs)
     if not ok then
         local why = tostring(poses)
         if not h.error_seen[why] and #h.errors < 16 then h.error_seen[why] = true; h.errors[#h.errors + 1] = why end

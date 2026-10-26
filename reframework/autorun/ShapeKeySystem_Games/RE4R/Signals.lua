@@ -44,11 +44,16 @@ function S.hashes(mesh)
     return out
 end
 
-function S.writable(name, mesh, idx)
+function S.write_context(mesh)
+    return {hashes = call(mesh, "get_ChannelNameHash")}
+end
+
+function S.writable(name, mesh, idx, context)
     if type(name) ~= "string" or name == "" or name:sub(1, 1) == "#"
         or name:find("^Face__geo__") or name:find("^crct_") or protected[Hash.hash(name)] then return false end
     if mesh and idx ~= nil then
-        local arr = call(mesh, "get_ChannelNameHash")
+        local arr
+        if context then arr = context.hashes else arr = call(mesh, "get_ChannelNameHash") end
         local h = arr and Hash.hash_at(arr, idx, true)
         return h ~= nil and not protected[h]
     end
@@ -83,8 +88,7 @@ S.measure = B.measure
 function S.read(h, P, inv_full)
     local data = h.calibration or data
     local taps = {}
-    local motion_values = NativeFace.read(h.animation, not h.read_only)
-    h.motion_values = motion_values
+    local motion_values = {}
     local mesh = h.mesh
     local cn, wc = call(mesh, "get_BlendShapeChannelNum"), call(mesh, "get_BlendShapeChannelWeightCount")
     local length = call(call(mesh, "get_ChannelWeightList"), "get_Length")
@@ -99,7 +103,10 @@ function S.read(h, P, inv_full)
                 if idx ~= nil then
                     if not bound then state = "bounds_unavailable"
                     elseif idx >= limit then state = "out_of_bounds"
-                    else v = call(mesh, "getBlendShapeChannelWeightParam", idx); state = finite(v) and "ok" or "read_failed" end
+                    else
+                        v = call(mesh, "getBlendShapeChannelWeightParam", idx)
+                        state = finite(v) and "ok" or "read_failed"
+                    end
                 end
                 if not finite(v) and finite(motion_values[name]) then
                     v, state = motion_values[name], "motion"
@@ -111,6 +118,25 @@ function S.read(h, P, inv_full)
         end
         return value
     end
+    local function select_bones(curves)
+        motion_values = curves
+        if h.read_only then return end
+        local provided, needed = {}, {}
+        for _, rule in ipairs(data.rules) do
+            if not rule.joint and not rule.fallback and rule.taps and finite(source(rule)) then provided[rule.key] = true end
+        end
+        for _, rule in ipairs(data.rules) do
+            if rule.joint and (not rule.fallback or not provided[rule.key]) then
+                local spec = data.joints[rule.joint]
+                needed[spec.bone or rule.joint] = true
+            end
+        end
+        -- Gaze consumes these poses outside BoneSignals rules.
+        needed.L_Eye, needed.R_Eye = true, true
+        return needed
+    end
+    motion_values = NativeFace.read(h.animation, not h.read_only, select_bones)
+    h.motion_values = motion_values
     local sample_bone = B.sampler(h.joints)
     local actual = {}
     local function real_sample(name)
@@ -127,7 +153,7 @@ function S.read(h, P, inv_full)
         if h.joints[name] then return real_sample(name) end
         return NativeFace.sample(h.animation, name)
     end
-    local values, measured = B.evaluate(data, sample, source)
+    local values, measured = B.evaluate(data, sample, source, not h.read_only)
     NativeFace.apply(h.animation, values)
     for _, key in ipairs(h.keys) do P[key] = (values[by_key[key]] or 0) * inv_full end
     return values, measured, taps

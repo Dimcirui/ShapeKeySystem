@@ -22,15 +22,21 @@ local function length(a)
     local n = call(a, "get_Length")
     return type(n) == "number" and n >= 0 and n <= 4096 and n % 1 == 0 and n or nil
 end
+local function uint32(value)
+    local n = type(value) == "number" and math.tointeger(value)
+    return n and n >= 0 and n <= 0xFFFFFFFF and n or nil
+end
 local function list(a, n)
     local out = {}
     for i = 0, n - 1 do
-        local v = call(a, "get_Item(System.Int32)", i)
-        if math.type(v) ~= "integer" or v < 0 or v > 0xFFFFFFFF then return nil end
+        local raw = call(a, "get_Item(System.Int32)", i)
+        local v = uint32(raw)
+        if v == nil then return nil, {index = i, value_type = type(raw), value = tostring(raw):sub(1, 80)} end
         out[#out + 1] = v
     end
     return out
 end
+D.hash_list = list
 local function same(a, b)
     if not a or not b or #a ~= #b then return false end
     for i = 1, #a do if a[i] ~= b[i] then return false end end
@@ -58,9 +64,10 @@ function D.bind(face)
     end
     return {motion = motion, wanted = requested, next_check = 0, index = {}, status = "pending"}
 end
-function D.read(h, register)
+local function read(h, register)
     if not h then return {} end
     local motion, now = h.motion, os.clock()
+    if h.bad_until and now < h.bad_until then return {} end
     local hashes, values = call(motion, "get_DeformNameHashes"), call(motion, "get_DeformValues")
     local hn, vn, ha = length(hashes), length(values), address(hashes)
     if not hn or not vn then h.status = "unavailable"; return {} end
@@ -68,7 +75,7 @@ function D.read(h, register)
     if changed or now >= h.next_check then
         h.next_check = now + 2
         local current = list(hashes, hn)
-        if not current then h.status = "unreadable"; return {} end
+        if not current then h.status, h.bad_until = "unreadable", now + 2; return {} end
         local index = {}
         for i, hash in ipairs(current) do index[hash] = i - 1 end
         local requested = {}
@@ -96,15 +103,78 @@ function D.read(h, register)
         if h.status == "ready" then h.error = nil end
     end
     local out = {}
+
     for _, name in ipairs(names) do
         local i = h.index[wanted[name]]
         if i ~= nil and i < vn then
+
             local value = call(values, "get_Item(System.Int32)", i)
             if type(value) == "number" and value == value and math.abs(value) < math.huge then out[name] = value end
         end
     end
     return out
 end
+function D.read(h, register)
+    local values = read(h, register)
+    return values
+end
+
+-- Prefer already registered inputs without changing the engine's registration table.
+function D.existing(h, requested)
+    if not h then return {} end
+    local motion, now = h.motion, os.clock()
+    local cache = h.existing
+    -- Empty or unreadable tables are retried on a timer; the caller uses extra-joint meanwhile.
+    if cache and #cache.matched == 0 and cache.requested == requested and now < cache.due then
+        return {}
+    end
+    local hashes = call(motion, "get_DeformNameHashes")
+    local hn, ha = length(hashes), address(hashes)
+    if not hn then
+        h.existing = {requested = requested, matched = {}, status = "array_unavailable", due = now + 2}
+        return {}
+    end
+    if not cache or cache.count ~= hn or cache.requested ~= requested or now >= cache.due then
+        local current, failure = list(hashes, hn)
+        if not current then
+            h.existing = {address = ha, count = hn, requested = requested, matched = {},
+                status = "index_unreadable", error = failure, due = now + 2}
+            return {}
+        end
+        local index, matched = {}, {}
+        for i, hash in ipairs(current) do index[hash] = i - 1 end
+        for _, item in ipairs(requested) do
+            local i = index[item.hash]
+            if i ~= nil then matched[#matched + 1] = {name = item.name, hash = item.hash, index = i} end
+        end
+        cache = {address = ha, count = hn, requested = requested, matched = matched, due = now + 2,
+            status = #matched > 0 and "ready" or "no_matching_inputs"}
+        h.existing = cache
+    end
+    local out = {}
+    if #cache.matched > 0 then
+        local values = call(motion, "get_DeformValues")
+        local vn = length(values)
+        if vn then
+            for _, item in ipairs(cache.matched) do
+                -- Validate the live index before using its value, including wrapper/address changes.
+                local mapped = item.index >= 0 and item.index < hn
+                    and uint32(call(hashes, "get_Item(System.Int32)", item.index)) == item.hash
+                if mapped and item.index < vn then
+                    local value = call(values, "get_Item(System.Int32)", item.index)
+                    if type(value) == "number" and value == value and math.abs(value) < math.huge then
+                        out[item.name] = value
+                    end
+                elseif not mapped then
+                    cache.status, cache.due = "mapping_changed", now
+                end
+            end
+        end
+    end
+    cache.address = ha
+    return out
+end
+
 function D.snapshot(h)
     return h and {status = h.status, count = h.hash_count, error = h.error} or {status = "unavailable"}
 end

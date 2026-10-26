@@ -77,9 +77,9 @@ end
 
 -- sample(name) -> local position, local rotation of the calibrated joint;
 -- source(rule) -> value for a rule without a joint, or nil.
-function B.evaluate(calibration, sample, source)
+function B.evaluate(calibration, sample, source, lazy_fallback)
     local values, fallback, measured = {}, {}, {}
-    for _, rule in ipairs(calibration.rules) do
+    local function evaluate(rule)
         local value
         if rule.joint then
             local name = rule.joint
@@ -95,6 +95,14 @@ function B.evaluate(calibration, sample, source)
             local v = math.max(0, math.min(1, (value - rule.lo) / (rule.hi - rule.lo))) * (rule.gain or 1)
             local target = rule.fallback and fallback or values
             target[rule.key] = math.max(0, math.min(1, (target[rule.key] or 0) + v))
+        end
+    end
+    for _, rule in ipairs(calibration.rules) do
+        if not lazy_fallback or not rule.fallback then evaluate(rule) end
+    end
+    if lazy_fallback then
+        for _, rule in ipairs(calibration.rules) do
+            if rule.fallback and values[rule.key] == nil then evaluate(rule) end
         end
     end
     -- A readable zero is an available source; only absent outputs use bone fallbacks.
