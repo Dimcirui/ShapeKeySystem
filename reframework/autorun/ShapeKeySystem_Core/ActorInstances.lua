@@ -20,11 +20,13 @@ local M = { state = { rev = 0, instances = {}, errors = {} } }
 M.faces = nil   -- function returning the faces to drive (API sets it with Core/Actors.lua)
 local adapter, rigs, frame, next_scan = nil, {}, 0, 0
 local RANK = { global = 3, own = 2, model = 1, default = 0 }
+local auto_profiles, auto_registry, auto_count = {}, nil, 0
 
 function M.init(game)
     adapter = game
     rigs, frame, next_scan = {}, 0, 0
     M.state.instances, M.state.errors = {}, {}
+    auto_profiles, auto_registry, auto_count = {}, nil, 0
 end
 
 function M.release(reason)
@@ -107,9 +109,37 @@ local function sculpt_values(part, binding)
     return values
 end
 
+local function automatic_profile(raw, fallback)
+    if not adapter.instance_auto_profile then return fallback end
+    if auto_registry ~= Profile.registry or auto_count >= 128 then
+        auto_profiles, auto_registry, auto_count = {}, Profile.registry, 0
+    end
+    local key = tostring(fallback) .. "|" .. raw.psig
+    for _, part in ipairs(raw.parts) do key = key .. "|" .. tostring(part.layout or part.fingerprint) end
+    local cached = auto_profiles[key]
+    if cached then return cached end
+    local all = {}
+    for _, part in ipairs(raw.parts) do
+        for _, name in ipairs(part.names) do if name ~= "" then all[#all + 1] = name end end
+    end
+    local chosen = fallback
+    if Profile.match_count(fallback, all, Names) == 0 then
+        local best = 1
+        for _, entry in ipairs(Profile.list) do
+            local hits = Profile.match_count(entry.id, all, Names)
+            if hits > best or hits == best and hits >= 2 and entry.id == "arkit" then
+                chosen, best = entry.id, hits
+            end
+        end
+    end
+    auto_profiles[key], auto_count = chosen, auto_count + 1
+    return chosen
+end
+
 local function build(raw, options, old)
     local binding, bindings, warnings = binding_of(raw.parts)
-    local id = binding and binding.data.profile or options.profile
+    -- An unbound background actor matches its own mesh, just like the edited character.
+    local id = binding and binding.data.profile or automatic_profile(raw, options.profile)
     local resolved, _, message = Profile.resolve(id)
     if not resolved then error(L.f("实例 Profile %s：%s", tostring(id), L.tr(tostring(message))), 0) end
     local program, _, why = Profile.compile(resolved, {})
@@ -226,10 +256,21 @@ local function driver_target(rig, norm, name)
 end
 
 local function valid(rig)
-    return Scene.children_signature(rig.parent) == rig.psig
+    return Scene.runtime_signature(rig.parent) == rig.psig
+end
+
+local function has_work(rig)
+    if not adapter.skip_empty_actors then return true end
+    -- Empty actors remain discoverable and selectable. Only their per-frame work sleeps.
+    if #rig.targets > 0 or #rig.manual > 0 then return true end
+    local values = rig.actor and Drivers.actor_values[rig.actor]
+    if values and next(values) then return true end
+    for _, hit in pairs(rig.driven) do if hit and hit.held then return true end end
+    return false
 end
 
 local function drive(rig, options)
+    if not has_work(rig) then return true end
     if not valid(rig) then return false end
     for key in pairs(rig.P) do rig.P[key] = nil end
     X.read(rig, rig.P, options.inv_full, false, rig.eye_settings, rig.use_eyes)
@@ -339,6 +380,7 @@ function M.prepare()
     if not adapter or not adapter.prepare_mesh then return end
     for i = #rigs, 1, -1 do
         local ok, alive = pcall(function()
+            if not has_work(rigs[i]) then return true end
             if not valid(rigs[i]) then return false end
             for _, part in ipairs(rigs[i].parts) do
                 if Guard.mesh_ready(part.mesh) then adapter.prepare_mesh(part.mesh) end
