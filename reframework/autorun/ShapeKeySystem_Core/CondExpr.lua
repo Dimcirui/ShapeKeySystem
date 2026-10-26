@@ -146,6 +146,25 @@ function E.edit(data)
     return true
 end
 
+-- copy a sculpt preset's non-zero merged values into a clip of the working copy, as they are
+-- (keys already in the clip are overwritten, the others kept; per-part overrides are not read).
+-- Returns the number of keys copied.
+function E.import_values(clip, values)
+    local c = E.current and E.current.data.clips[clip]
+    if not c then return false, "E_NOT_FOUND", "no clip " .. tostring(clip) end
+    local n = 0
+    for k, v in pairs(type(values) == "table" and values or {}) do
+        v = tonumber(v)
+        if type(k) == "string" and v and v ~= 0 then c.values[k] = v + 0.0; n = n + 1 end
+    end
+    if n > 0 then
+        E.current.dirty = true
+        slot_cache = nil
+        active_data = nil
+    end
+    return true, nil, nil, n
+end
+
 function E.save(as_name)
     local cur = E.current
     if not cur then return false, "E_NOT_FOUND", "no condition set" end

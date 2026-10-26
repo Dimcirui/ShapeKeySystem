@@ -1049,7 +1049,10 @@
   "编辑：%s": "Editing: %s",
   "%s（玩家）": "%s (player)",
   "捏脸、表情配置和驱动都作用于这里选中的角色": "Sculpt, expression config and drivers apply to the character selected here",
-  "RE4R 减少表情驱动开销；修复切换角色后后台表情停止": "RE4R: reduce expression-driver overhead; keep background expressions running when switching characters"
+  "RE4R 减少表情驱动开销；修复切换角色后后台表情停止": "RE4R: reduce expression-driver overhead; keep background expressions running when switching characters",
+  "已从捏脸配置「%s」导入 %d 个形态键": "Sculpt config \"%s\": imported %d shape keys",
+  "从捏脸配置导入…": "Import from sculpt config…",
+  "把该捏脸配置里所有不为 0 的形态键值原样加入这个组合；组合里已有的同名键会被覆盖": "Adds every non-zero shape key value of that sculpt config to this combination as is; keys already in the combination are overwritten"
  },
  "untranslated": [
   "Ag国",
