@@ -227,10 +227,12 @@ end
 local cached_root = nil
 local cached_in_cg = nil
 local last_cache_time = 0
+local cached_head = nil
 
 function R.invalidate_root_cache()
     cached_root = nil
     cached_in_cg = nil
+    cached_head = nil
 end
 
 function R.root(scene)
@@ -247,12 +249,13 @@ function R.root(scene)
 
     if cached_root then
         local go = call(cached_root, "get_GameObject")
-        if go and call(go, "get_Valid") == true and call(go, "get_DrawSelf") == true and has_leon_head_mesh(cached_root) then
-            if not in_cg or (now - last_cache_time < 1.5) then
+        if go and call(go, "get_Valid") == true and call(go, "get_DrawSelf") == true then
+            if not in_cg or (now - last_cache_time < 2.0) then
                 return cached_root
             end
         end
         cached_root = nil
+        cached_head = nil
     end
 
     if not in_cg then
@@ -290,7 +293,20 @@ end
 function R.find(root)
     local scene = R.scene()
     local current = R.root(scene)
-    if not current or root and R.address(root) ~= R.address(current) then return nil end
+    if not current or root and R.address(root) ~= R.address(current) then
+        cached_head = nil
+        return nil
+    end
+
+    -- Fast-path: return cached head directly if valid and part of current root
+    if cached_head and cached_head.root and R.address(cached_head.root) == R.address(current) then
+        local face_go = call(cached_head.face, "get_GameObject")
+        if face_go and call(face_go, "get_Valid") == true and call(face_go, "get_DrawSelf") == true then
+            return cached_head
+        end
+        cached_head = nil
+    end
+
     local found, seen, visited = {}, {}, 0
     local function visit(tr, depth)
         local address = R.address(tr)
@@ -319,7 +335,10 @@ function R.find(root)
         end
     end
     visit(current, 0)
-    if #found >= 1 then return found[1] end
+    if #found >= 1 then
+        cached_head = found[1]
+        return cached_head
+    end
 end
 
 local function hook_timeline_reset()

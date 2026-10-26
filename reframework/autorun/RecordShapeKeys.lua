@@ -12,6 +12,7 @@ local record_frame_count = 0
 local filter_text = ""
 local auto_stop_seconds = 15
 local use_timer = true
+local ui_is_open = false
 
 local sort_by_baseline = true
 local hide_zero_baseline = false
@@ -179,6 +180,9 @@ end
 
 -- Sampling logic every frame (Exclusively for 96 Native FACS Channels)
 re.on_frame(function()
+    if not is_recording and not ui_is_open then
+        return
+    end
     pcall(function()
         local head = R.find()
         if not head or not head.face then return end
@@ -243,7 +247,9 @@ end)
 
 -- UI Drawing logic
 re.on_draw_ui(function()
-    if imgui.tree_node("RE9 原生96 FACS形态键监测与底噪录制") then
+    local opened = imgui.tree_node("RE9 原生96 FACS形态键监测与底噪录制")
+    ui_is_open = (opened == true)
+    if opened then
         imgui.spacing()
         local head = R.find()
         if head then
