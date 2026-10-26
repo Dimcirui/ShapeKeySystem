@@ -79,50 +79,42 @@ local H_JW_SP_STR_R = Hash.hash('HeadSkinned_blendShape.Strtch_JwOpn_R')
 function M.read_driver(head, motion_context)
     if not head or not head.root then return nil end
     local root_go = R.call(head.root, 'get_GameObject')
-    local driver = root_go and R.component(root_go, sdk.typeof('app.PlayerFacialAnimationDriver'))
+    local drv_t = sdk.typeof('app.PlayerFacialAnimationDriver')
+    local driver = drv_t and root_go and R.component(root_go, drv_t)
     
     local cur_vowel = driver and driver:get_field('_CurrentVowel')
     local cur_vol = driver and (driver:get_field('_CurrentVolume') or 0.0) or 0.0
 
-    local mesh = head.mesh or (head.face and R.mesh(head.face))
-    local get_df = function(h, direct_idx)
-        local val = nil
-        if mesh and direct_idx then
-            val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", direct_idx)
-        end
-        if (val == nil or val ~= val or val <= 0.001) and motion_context then
-            local mv = Motion.deform_value(motion_context, h)
-            if mv and mv == mv and mv > (val or 0) then val = mv end
-        end
-        return (val and val == val) and val or 0.0
+    local get_df = function(h)
+        return motion_context and Motion.deform_value(motion_context, h) or 0.0
     end
 
     -- 1. I vowel: Corner pull + Lower lip depress / Stretch
-    local crn_lwr = math.max(get_df(H_CRN_LWR_L, 84), get_df(H_CRN_LWR_R, 85))
-    local str_crn = math.max(get_df(H_STR_CRN_L, 86), get_df(H_STR_CRN_R, 87))
-    local crn04   = math.max(get_df(H_CRN04_L, 2), get_df(H_CRN04_R, 3))
-    local crn05   = math.max(get_df(H_CRN05_L, 4), get_df(H_CRN05_R, 5))
+    local crn_lwr = math.max(get_df(H_CRN_LWR_L), get_df(H_CRN_LWR_R))
+    local str_crn = math.max(get_df(H_STR_CRN_L), get_df(H_STR_CRN_R))
+    local crn04   = math.max(get_df(H_CRN04_L), get_df(H_CRN04_R))
+    local crn05   = math.max(get_df(H_CRN05_L), get_df(H_CRN05_R))
     local v_i = math.max(crn_lwr, str_crn, crn04, crn05)
 
     -- 2. U vowel: Pucker + Funnel combination / Pucker 03 / Pucker 01
-    local pkr_fnl = math.max(get_df(H_PKR_FNL_TL, 92), get_df(H_PKR_FNL_TR, 93), get_df(H_PKR_FNL_BL, 94), get_df(H_PKR_FNL_BR, 95))
-    local pkr03   = math.max(get_df(H_PKR03_L, 24), get_df(H_PKR03_R, 25))
-    local pkr01   = math.max(get_df(H_PKR01_L, 20), get_df(H_PKR01_R, 21))
+    local pkr_fnl = math.max(get_df(H_PKR_FNL_TL), get_df(H_PKR_FNL_TR), get_df(H_PKR_FNL_BL), get_df(H_PKR_FNL_BR))
+    local pkr03   = math.max(get_df(H_PKR03_L), get_df(H_PKR03_R))
+    local pkr01   = math.max(get_df(H_PKR01_L), get_df(H_PKR01_R))
     local v_u = math.max(pkr_fnl, pkr03, pkr01)
 
     -- 3. O vowel: Funnel 04
-    local fnl04 = math.max(get_df(H_FNL04_L, 68), get_df(H_FNL04_R, 69))
+    local fnl04 = math.max(get_df(H_FNL04_L), get_df(H_FNL04_R))
     local v_o = fnl04
 
     -- 4. E vowel: Upper lip raise 05 / 01
-    local upr05 = math.max(get_df(H_UPR05_L, 66), get_df(H_UPR05_R, 67))
-    local upr01 = math.max(get_df(H_UPR01_L, 62), get_df(H_UPR01_R, 63))
+    local upr05 = math.max(get_df(H_UPR05_L), get_df(H_UPR05_R))
+    local upr01 = math.max(get_df(H_UPR01_L), get_df(H_UPR01_R))
     local v_e = math.max(upr05, upr01)
 
     -- 5. A vowel: Speech-coupled open mouth (CrnPl_JwOpn / Strtch_JwOpn)
     -- Decoupled from pure JwOpn_00_L/R so chin movement/breathing never triggers A!
-    local jw_sp_crn = math.max(get_df(H_JW_SP_CRN_L, 76), get_df(H_JW_SP_CRN_R, 77))
-    local jw_sp_str = math.max(get_df(H_JW_SP_STR_L, 78), get_df(H_JW_SP_STR_R, 79))
+    local jw_sp_crn = math.max(get_df(H_JW_SP_CRN_L), get_df(H_JW_SP_CRN_R))
+    local jw_sp_str = math.max(get_df(H_JW_SP_STR_L), get_df(H_JW_SP_STR_R))
     local speech_a = math.max(jw_sp_crn, jw_sp_str)
 
     local weights = {0, 0, 0, 0, 0}

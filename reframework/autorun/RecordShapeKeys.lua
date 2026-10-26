@@ -4,6 +4,7 @@
 
 local R = require('ShapeKeySystem_Games.RE9.Runtime')
 local Hash = require('ShapeKeySystem_Core.NameHash')
+pcall(R.init)
 
 local is_recording = false
 local record_start_time = 0
@@ -25,8 +26,8 @@ local FACS_CHANNEL_INFO = {
     [5]  = { name = "CrnPl_05_R",        desc = "嘴角上提05右(酒窝)" },
     [6]  = { name = "CrnPl_09_L",        desc = "嘴角平提09左" },
     [7]  = { name = "CrnPl_09_R",        desc = "嘴角平提09右" },
-    [8]  = { name = "JwOpn_00_L",        desc = "物理下颌骨张开左(下巴)" },
-    [9]  = { name = "JwOpn_00_R",        desc = "物理下颌骨张开右(下巴)" },
+    [8]  = { name = "JwOpn_00_L",        desc = "下颚张开左(张嘴/发音A)" },
+    [9]  = { name = "JwOpn_00_R",        desc = "下颚张开右(张嘴/发音A)" },
     [10] = { name = "NekTns_L",          desc = "颈部紧绷左" },
     [11] = { name = "NekTns_R",          desc = "颈部紧绷右" },
     [12] = { name = "ChnRs_04_L",        desc = "下巴抬起左" },
@@ -37,12 +38,12 @@ local FACS_CHANNEL_INFO = {
     [17] = { name = "Strtch_04_R",       desc = "嘴唇拉伸04右" },
     [18] = { name = "Strtch_08_L",       desc = "嘴唇拉伸08左" },
     [19] = { name = "Strtch_08_R",       desc = "嘴唇拉伸08右" },
-    [20] = { name = "Pkr_01_L",          desc = "噘嘴01左" },
-    [21] = { name = "Pkr_01_R",          desc = "噘嘴01右" },
-    [22] = { name = "Pkr_02_L",          desc = "噘嘴02左" },
-    [23] = { name = "Pkr_02_R",          desc = "噘嘴02右" },
-    [24] = { name = "Pkr_03_L",          desc = "噘嘴03左(发音U)" },
-    [25] = { name = "Pkr_03_R",          desc = "噘嘴03右(发音U)" },
+    [20] = { name = "Pkr_01_L",          desc = "嘟嘴01左" },
+    [21] = { name = "Pkr_01_R",          desc = "嘟嘴01右" },
+    [22] = { name = "Pkr_02_L",          desc = "嘟嘴02左" },
+    [23] = { name = "Pkr_02_R",          desc = "嘟嘴02右" },
+    [24] = { name = "Pkr_03_L",          desc = "嘟嘴03左(发音U)" },
+    [25] = { name = "Pkr_03_R",          desc = "嘟嘴03右(发音U)" },
     [26] = { name = "NosWrnkl_03_L",     desc = "皱鼻03左" },
     [27] = { name = "NosWrnkl_03_R",     desc = "皱鼻03右" },
     [28] = { name = "NosWrnkl_04_L",     desc = "皱鼻04左" },
@@ -51,8 +52,8 @@ local FACS_CHANNEL_INFO = {
     [31] = { name = "NosWrnkl_05_R",     desc = "皱鼻05右" },
     [32] = { name = "BrInDn_00_L",       desc = "眉头下压/皱眉左" },
     [33] = { name = "BrInDn_00_R",       desc = "眉头下压/皱眉右" },
-    [34] = { name = "BrInRs_00_L",       desc = "眉头上提/挑眉左(困惑)" },
-    [35] = { name = "BrInRs_00_R",       desc = "眉头上提/挑眉右(困惑)" },
+    [34] = { name = "BrInRs_00_L",       desc = "眉头挑起左(困惑)" },
+    [35] = { name = "BrInRs_00_R",       desc = "眉头挑起右(困惑)" },
     [36] = { name = "BrOutRs_00_L",      desc = "眉梢上提左(惊讶)" },
     [37] = { name = "BrOutRs_00_R",      desc = "眉梢上提右(惊讶)" },
     [38] = { name = "BrLr_00_L",         desc = "整眉压低左" },
@@ -67,8 +68,8 @@ local FACS_CHANNEL_INFO = {
     [47] = { name = "LpRolIn_04_R",      desc = "抿唇卷唇04右" },
     [48] = { name = "LpRolIn_05_L",      desc = "抿唇卷唇05左" },
     [49] = { name = "LpRolIn_05_R",      desc = "抿唇卷唇05右" },
-    [50] = { name = "UprLdDn_00_L",      desc = "上眼睑下落/眨眼闭眼左" },
-    [51] = { name = "UprLdDn_00_R",      desc = "上眼睑下落/眨眼闭眼右" },
+    [50] = { name = "UprLdDn_00_L",      desc = "眨眼闭眼00左" },
+    [51] = { name = "UprLdDn_00_R",      desc = "眨眼闭眼00右" },
     [52] = { name = "UprLdDn_01_L",      desc = "眼睑下落01左" },
     [53] = { name = "UprLdDn_01_R",      desc = "眼睑下落01右" },
     [54] = { name = "UprLdDn_03_L",      desc = "眼睑下落03左" },
@@ -93,18 +94,18 @@ local FACS_CHANNEL_INFO = {
     [73] = { name = "CrnDprs_01_R",      desc = "嘴角下压01右" },
     [74] = { name = "CrnDprs_02_L",      desc = "嘴角下压02左" },
     [75] = { name = "CrnDprs_02_R",      desc = "嘴角下压02右" },
-    [76] = { name = "CrnPl_JwOpn_L",     desc = "嘴角张开(发音A)左" },
-    [77] = { name = "CrnPl_JwOpn_R",     desc = "嘴角张开(发音A)右" },
-    [78] = { name = "Strtch_JwOpn_L",    desc = "嘴周张开拉伸(发音A)左" },
-    [79] = { name = "Strtch_JwOpn_R",    desc = "嘴周张开拉伸(发音A)右" },
-    [80] = { name = "Sqnt_UprLdDn_L",    desc = "眯眼闭眼组合左" },
-    [81] = { name = "Sqnt_UprLdDn_R",    desc = "眯眼闭眼组合右" },
-    [82] = { name = "LdT_UprLdDn_L",     desc = "眼睑紧绷闭眼组合左" },
-    [83] = { name = "LdT_UprLdDn_R",     desc = "眼睑紧绷闭眼组合右" },
-    [84] = { name = "CrnPl_LwrLpDprs_L", desc = "下唇下压平拉(发音I)左" },
-    [85] = { name = "CrnPl_LwrLpDprs_R", desc = "下唇下压平拉(发音I)右" },
-    [86] = { name = "Strtch_CrnPl_L",    desc = "嘴角强力拉伸(发音I)左" },
-    [87] = { name = "Strtch_CrnPl_R",    desc = "嘴角强力拉伸(发音I)右" },
+    [76] = { name = "LwrLpDprs_00_L",    desc = "下唇下压00左(发音I)" },
+    [77] = { name = "LwrLpDprs_00_R",    desc = "下唇下压00右(发音I)" },
+    [78] = { name = "LwrLpDprs_03_L",    desc = "下唇下压03左" },
+    [79] = { name = "LwrLpDprs_03_R",    desc = "下唇下压03右" },
+    [80] = { name = "LpPush_00_L",       desc = "嘴唇外推00左" },
+    [81] = { name = "LpPush_00_R",       desc = "嘴唇外推00右" },
+    [82] = { name = "LpPush_01_L",       desc = "嘴唇外推01左" },
+    [83] = { name = "LpPush_01_R",       desc = "嘴唇外推01右" },
+    [84] = { name = "MouthW_00_L",       desc = "咧嘴张宽00左(发音I)" },
+    [85] = { name = "MouthW_00_R",       desc = "咧嘴张宽00右(发音I)" },
+    [86] = { name = "MouthW_01_L",       desc = "咧嘴张宽01左" },
+    [87] = { name = "MouthW_01_R",       desc = "咧嘴张宽01右" },
     [88] = { name = "LpBit_TL",          desc = "咬唇上左" },
     [89] = { name = "LpBit_TR",          desc = "咬唇上右" },
     [90] = { name = "LpBit_BL",          desc = "咬唇下左" },
@@ -178,62 +179,78 @@ end
 
 -- Sampling logic every frame (Exclusively for 96 Native FACS Channels)
 re.on_frame(function()
-    local head = R.find()
-    if not head or not head.face then return end
-    local mesh = head.mesh or R.mesh(head.face)
-    if not mesh then return end
+    pcall(function()
+        local head = R.find()
+        if not head or not head.face then return end
+        local mesh = head.mesh or R.mesh(head.face)
+        if not mesh then return end
 
-    local face_go = R.call(head.face, 'get_GameObject')
-    local root_go = head.root and R.call(head.root, 'get_GameObject')
-    local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
-    local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
-    local dm = fm or rm
-    local dvals = dm and R.call(dm, "get_DeformValues")
-    local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
+        local face_go = R.call(head.face, 'get_GameObject')
+        local root_go = head.root and R.call(head.root, 'get_GameObject')
+        local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
+        local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
+        local dm = fm or rm
+        local dvals = dm and R.call(dm, "get_DeformValues")
+        local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
 
-    if is_recording then
-        record_frame_count = record_frame_count + 1
-        if use_timer and auto_stop_seconds > 0 then
-            if (os.clock() - record_start_time) >= auto_stop_seconds then
-                is_recording = false
-                save_stats_to_file()
+        if is_recording then
+            record_frame_count = record_frame_count + 1
+            if use_timer and auto_stop_seconds > 0 then
+                if (os.clock() - record_start_time) >= auto_stop_seconds then
+                    is_recording = false
+                    save_stats_to_file()
+                end
             end
         end
-    end
 
-    local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
-    for i = 0, 95 do
-        local val = nil
-        if i < cn then
-            val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
-        end
-        -- Fallback to motion deform value if mesh returned nil or zero but motion has deform
-        if (val == nil or val ~= val or val <= 0.0001) and dvals and i < dlen then
-            local mv = R.call(dvals, "get_Item", i)
-            if mv and mv == mv and mv > (val or 0) then val = mv end
-        end
+        local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
+        for i = 0, 95 do
+            local val = nil
+            if i < cn then
+                val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
+                if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
+                if val == nil then val = R.call(mesh, "getBlendShapeChannelWeight", i) end
+            end
+            -- Fallback to motion deform value if mesh returned nil or zero but motion has deform
+            if (val == nil or val ~= val or val <= 0.0001) and dvals and i < dlen then
+                local mv = R.call(dvals, "get_Item", i)
+                if mv and mv == mv and mv > (val or 0) then val = mv end
+            end
 
-        if type(val) == "number" and val == val then
-            local s = stats[i]
-            s.current = val
-            if s.count == 0 then
-                s.min = val
-                s.max = val
-                s.sum = val
-                s.count = 1
-            elseif is_recording then
-                if val < s.min then s.min = val end
-                if val > s.max then s.max = val end
-                s.sum = s.sum + val
-                s.count = s.count + 1
+            if type(val) == "number" and val == val then
+                local s = stats[i]
+                s.current = val
+                if s.count == 0 then
+                    s.min = val
+                    s.max = val
+                    s.sum = val
+                    s.count = 1
+                elseif not is_recording then
+                    -- 实时预览模式：即使未按录制，也动态更新最小/最大值以展现动态波形
+                    if val < s.min then s.min = val end
+                    if val > s.max then s.max = val end
+                else
+                    -- 正式录制模式：累加帧数以计算均值底噪
+                    if val < s.min then s.min = val end
+                    if val > s.max then s.max = val end
+                    s.sum = s.sum + val
+                    s.count = s.count + 1
+                end
             end
         end
-    end
+    end)
 end)
 
 -- UI Drawing logic
 re.on_draw_ui(function()
     if imgui.tree_node("RE9 原生96 FACS形态键监测与底噪录制") then
+        imgui.spacing()
+        local head = R.find()
+        if head then
+            imgui.text_colored(string.format("网格状态: [已连接] 找到头部网格 (通道数: %d)", head.count or 0), 0xFF00FF00)
+        else
+            imgui.text_colored("网格状态: [未连接] 正在寻找里昂头部网格 (cp_A000)...", 0xFF5555FF)
+        end
         imgui.spacing()
         if not is_recording then
             if imgui.button("开始录制 (Start Recording)", 200, 32) then
@@ -338,10 +355,10 @@ re.on_draw_ui(function()
                 color = 0xFF00FFFF -- Yellow
             end
 
-            local line = string.format("[%02d]   | %-22s | %-26s | %8.3f | %8.3f | %8.3f | %8.3f", 
+            local line = string.format("[%02d] | %-16s | %-20s | %6.3f | %6.3f | %6.3f | %6.3f", 
                 s.index,
-                s.name:sub(1, 22), 
-                s.desc:sub(1, 26), 
+                s.name, 
+                s.desc, 
                 s.current, 
                 s.min, 
                 s.max, 

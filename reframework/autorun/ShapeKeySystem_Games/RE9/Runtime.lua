@@ -6,6 +6,12 @@ local R = {}
 local mesh_type, motion_type, scene_type
 local gui_field_canDemoSkip = nil
 
+local function ensure_types()
+    if not scene_type then scene_type = sdk.find_type_definition("via.SceneManager") end
+    if not mesh_type then mesh_type = sdk.typeof("via.render.Mesh") end
+    if not motion_type then motion_type = sdk.typeof("via.motion.Motion") end
+end
+
 local TARGET_PREFIXES = { "ch0100", "ch01", "cp_a000" }
 
 function R.call(object, method, ...)
@@ -26,7 +32,10 @@ function R.integer(value, cap)
 end
 
 function R.component(go, kind) return call(go, "getComponent(System.Type)", kind) end
-function R.mesh(face) return R.component(call(face, "get_GameObject"), mesh_type) end
+function R.mesh(face)
+    ensure_types()
+    return R.component(call(face, "get_GameObject"), mesh_type)
+end
 
 function R.path(mesh)
     local path = call(call(mesh, "getMesh"), "get_ResourcePath")
@@ -34,6 +43,7 @@ function R.path(mesh)
 end
 
 function R.scene()
+    ensure_types()
     local manager = sdk.get_native_singleton("via.SceneManager")
     if not manager or not scene_type then return nil end
     local ok, scene = pcall(sdk.call_native_func, manager, scene_type, "get_CurrentScene")
@@ -86,8 +96,12 @@ end
 
 function R.is_head(face)
     local go = call(face, "get_GameObject")
-    return call(go, "get_Name") ~= "Shadow"
-        and R.path(R.mesh(face)) == "character/ch/ch01/0100/10/00/ch0100_10_00.mesh"
+    if not go or call(go, "get_Name") == "Shadow" then return false end
+    local p = R.path(R.mesh(face))
+    local gname = tostring(call(go, "get_Name") or "")
+    return p == "character/ch/ch01/0100/10/00/ch0100_10_00.mesh"
+        or p:find("ch0100_10_00%.mesh") ~= nil
+        or gname == "10" or gname == "ch0100_10_00"
 end
 
 function R.bounds(mesh)
@@ -116,8 +130,14 @@ local function has_leon_head_mesh(tr)
         local go = call(node, "get_GameObject")
         if go and call(go, "get_Name") ~= "Shadow" then
             local m = R.mesh(node)
-            if m and R.path(m) == "character/ch/ch01/0100/10/00/ch0100_10_00.mesh" then
-                return true
+            if m then
+                local p = R.path(m)
+                local gname = tostring(call(go, "get_Name") or "")
+                if p == "character/ch/ch01/0100/10/00/ch0100_10_00.mesh"
+                    or p:find("ch0100_10_00%.mesh") ~= nil
+                    or gname == "10" or gname == "ch0100_10_00" then
+                    return true
+                end
             end
         end
         local child = call(node, "get_Child")
@@ -315,11 +335,8 @@ local function hook_timeline_reset()
 end
 
 function R.init()
-    scene_type = sdk.find_type_definition("via.SceneManager")
-    if not scene_type or not sdk.find_type_definition("via.render.Mesh")
-        or not sdk.find_type_definition("via.motion.Motion") then return false, "RE9 场景或网格类型不可用" end
-    mesh_type, motion_type = sdk.typeof("via.render.Mesh"), sdk.typeof("via.motion.Motion")
+    ensure_types()
     pcall(hook_timeline_reset)
-    return mesh_type ~= nil and motion_type ~= nil
+    return mesh_type ~= nil and motion_type ~= nil and scene_type ~= nil
 end
 return R

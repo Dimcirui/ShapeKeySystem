@@ -148,6 +148,9 @@ function S.bind(face, requested, mode)
 end
 
 function S.read(h, P, inv_full, diagnostic)
+    if not h or type(h) ~= "table" or not h.keys then return {}, {} end
+    P = P or {}
+    inv_full = inv_full or 1
     local head = R.find()
     local valid = head and h.identity ~= nil and head.identity == h.identity
     local hashes = valid and R.call(head.mesh, "get_ChannelNameHash")
