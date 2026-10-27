@@ -160,7 +160,7 @@ function S.read(h, P, inv_full, diagnostic)
     local scalars={}
     h.motion_requests=0
     if valid then
-        VirtualFACS.evaluate(head, open_motion())
+        pcall(VirtualFACS.evaluate, head, open_motion())
     end
     local function open_motion()
         if motion_context==nil then
