@@ -522,12 +522,16 @@ end
 
 -- Sampling logic every frame
 re.on_frame(function()
+    
     if not is_recording and not ui_is_open then
         return
     end
     pcall(function()
         local head = R.find()
         if not head or not head.face then return end
+
+        
+
         local mesh = head.mesh or R.mesh(head.face)
         local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
 
