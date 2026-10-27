@@ -84,16 +84,41 @@ function VF.evaluate(head, motion_context)
     for i = 0, #DEF_LIST do LIVE_VALUES[i] = 0.0 end
 
     pcall(function()
-        -- 1. Read motion deform tracks (from _FacialMotion or motion_context)
-        if motion_context then
-            for i = 0, #DEF_LIST do
-                local item = DEF_LIST[i]
-                local val = Motion.deform_value(motion_context, Hash.hash(item.name))
-                if type(val) == "number" and val == val then
-                    local net = val - (item.baseline or 0.0)
-                    if net > 0.001 then
-                        LIVE_VALUES[i] = math.max(0.0, math.min(1.0, net))
-                    end
+        -- 1. Resolve Deform Values buffer (dvals)
+        local dvals = nil
+        if motion_context and motion_context.deform_values then
+            dvals = motion_context.deform_values
+        elseif motion_context and (motion_context.deform_motion or motion_context.motion) then
+            local dm = motion_context.deform_motion or motion_context.motion
+            dvals = R.call(dm, "get_DeformValues")
+        elseif head then
+            local face_go = head.face and R.call(head.face, 'get_GameObject')
+            local root_go = head.root and R.call(head.root, 'get_GameObject')
+            local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
+            local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
+            local dm = fm or rm
+            if dm then dvals = R.call(dm, "get_DeformValues") end
+        end
+
+        local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
+
+        -- 2. Read all 96 motion deform tracks
+        for i = 0, #DEF_LIST do
+            local item = DEF_LIST[i]
+            local val = nil
+            if dvals and i < dlen then
+                val = R.call(dvals, "get_Item", i)
+            elseif motion_context then
+                val = Motion.deform_by_index(motion_context, i)
+                if val == nil then
+                    val = Motion.deform_value(motion_context, Hash.hash(item.name))
+                end
+            end
+
+            if type(val) == "number" and val == val then
+                local net = val - (item.baseline or 0.0)
+                if net > 0.001 then
+                    LIVE_VALUES[i] = math.max(0.0, math.min(1.0, net))
                 end
             end
         end

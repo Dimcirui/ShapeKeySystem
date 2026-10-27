@@ -75,16 +75,20 @@ end
 local joint_cache = {}
 local cached_face_identity = nil
 
-local function get_bone_info(face, bone_name, omitted)
+local function get_bone_info(head, bone_name, omitted)
     if omitted and omitted[bone_name] then return nil, 'omitted' end
-    local face_id = R.address(face)
+    local face = head and head.face
+    local face_id = face and R.address(face) or "nil"
     if face_id ~= cached_face_identity then
         joint_cache = {}
         cached_face_identity = face_id
     end
     local cached = joint_cache[bone_name]
     if cached == nil then
-        local joint = R.call(face, 'getJointByName(System.String)', bone_name)
+        local joint = face and R.call(face, 'getJointByName(System.String)', bone_name)
+        if not joint and head and head.root then
+            joint = R.call(head.root, 'getJointByName(System.String)', bone_name)
+        end
         if joint and R.call(joint, 'get_Name()') == bone_name then
             local base_rot = quaternion(R.call(joint, 'get_BaseLocalRotation()'))
             local base_pos = position(R.call(joint, 'get_BaseLocalPosition()'))
@@ -115,7 +119,7 @@ function M.evaluate(head, rule, diagnostic, fallback, omitted, frame)
         local pose=entry and entry.pose
         if entry and not pose then return nil,nil,entry.state end
         if not pose then
-            local binfo, err = get_bone_info(head.face, term.bone, omitted)
+            local binfo, err = get_bone_info(head, term.bone, omitted)
             local state
             if not binfo then
                 state = err or ('joint_unavailable:' .. term.bone)
