@@ -160,53 +160,100 @@
     {
       "name": "い",
       "group": "mouth",
-      "s": "re9.vowel.I",
       "any": [
         "い",
         "い1",
         "い2",
         "イ"
-      ]
+      ],
+      "sum": [
+        {
+          "s": "stretch.L",
+          "k": 0.5
+        },
+        {
+          "s": "stretch.R",
+          "k": 0.5
+        }
+      ],
+      "note": "嘴角向两侧平拉（I元音发音口型）"
     },
     {
       "name": "う",
       "group": "mouth",
-      "s": "re9.vowel.U",
       "any": [
         "う",
         "う1",
         "う2",
         "ウ"
-      ]
+      ],
+      "sum": [
+        {
+          "s": "funnelTogether.L",
+          "k": 0.5
+        },
+        {
+          "s": "funnelTogether.R",
+          "k": 0.5
+        }
+      ],
+      "note": "嘴唇向中间收拢收缩（U元音发音口型）"
     },
     {
       "name": "え",
       "group": "mouth",
-      "s": "re9.vowel.E",
       "any": [
         "え1",
         "え2",
         "え3",
         "エ",
         "え"
-      ]
+      ],
+      "sum": [
+        {
+          "s": "jawOpen",
+          "k": 0.5
+        },
+        {
+          "s": "stretch.L",
+          "k": 0.25
+        },
+        {
+          "s": "stretch.R",
+          "k": 0.25
+        }
+      ],
+      "note": "半张嘴加嘴角横拉（E元音发音口型）"
     },
     {
       "name": "お",
       "group": "mouth",
-      "s": "re9.vowel.O",
       "any": [
         "お1",
         "お2",
         "お3",
         "オ",
         "お"
-      ]
+      ],
+      "sum": [
+        {
+          "s": "jawOpen",
+          "k": 0.5
+        },
+        {
+          "s": "funnelTogether.L",
+          "k": 0.25
+        },
+        {
+          "s": "funnelTogether.R",
+          "k": 0.25
+        }
+      ],
+      "note": "半张嘴加嘴唇圆弧收窄（O元音发音口型）"
     },
     {
       "name": "あ",
       "group": "mouth",
-      "s": "re9.vowel.A",
       "any": [
         "あ",
         "あ２",
@@ -216,7 +263,8 @@
         "あ1",
         "ア"
       ],
-      "note": "由原生发音/说话口型驱动，彻底解耦物理下颌骨（JwOpn），避免微动下巴乱张嘴"
+      "note": "由真实物理下颌骨张开度驱动，真实反映说话、喘息、张嘴",
+      "s": "jawOpen"
     },
     {
       "name": "ウィンク２",
