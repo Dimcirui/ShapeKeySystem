@@ -76,12 +76,64 @@ local H_JW_SP_STR_L = Hash.hash('HeadSkinned_blendShape.Strtch_JwOpn_L')
 local H_JW_SP_STR_R = Hash.hash('HeadSkinned_blendShape.Strtch_JwOpn_R')
 
 -- Native PlayerFacialAnimationDriver + FACS mouth deforms reader
+local cached_driver = nil
+local last_driver_check = 0
+
+local function get_facial_driver(head)
+    local now = os.clock()
+    if cached_driver and (now - last_driver_check) < 0.5 then
+        return cached_driver
+    end
+    last_driver_check = now
+
+    -- 1. Try resolving via CharacterManager -> PlayerContext -> PlayerUpdaterBase -> ManagedDrivers
+    pcall(function()
+        local cm = sdk.get_managed_singleton("app.CharacterManager")
+        local pc = cm and cm:call("getPlayerContextRefFast")
+        local updater = pc and pc:get_field("<Updater>k__BackingField")
+        if updater then
+            local board = updater:call("get_ManagedDrivers")
+            if board then
+                local drivers = board:get_field("Drivers")
+                local count = drivers and drivers:call("get_Count") or 0
+                for i = 0, count - 1 do
+                    local d = drivers:call("get_Item", i)
+                    if d then
+                        local t = d:get_type_definition()
+                        local tname = t and t:get_full_name() or ""
+                        if tname:find("FacialAnimationDriver") then
+                            cached_driver = d
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if cached_driver then return cached_driver end
+
+    -- 2. Fallback: check root_go / face_go components
+    if head then
+        for _, obj in ipairs({head.root, head.face}) do
+            if obj then
+                local go = R.call(obj, 'get_GameObject')
+                local drv_t = sdk.typeof('app.PlayerFacialAnimationDriver') or sdk.typeof('app.CharacterFacialAnimationDriver')
+                local comp = drv_t and go and R.component(go, drv_t)
+                if comp then
+                    cached_driver = comp
+                    return cached_driver
+                end
+            end
+        end
+    end
+    cached_driver = nil
+    return nil
+end
+
 function M.read_driver(head, motion_context)
-    if not head or not head.root then return nil end
-    local root_go = R.call(head.root, 'get_GameObject')
-    local drv_t = sdk.typeof('app.PlayerFacialAnimationDriver')
-    local driver = drv_t and root_go and R.component(root_go, drv_t)
-    
+    if not head then return nil end
+    local driver = get_facial_driver(head)
+
     local cur_vowel = driver and driver:get_field('_CurrentVowel')
     local cur_vol = driver and (driver:get_field('_CurrentVolume') or 0.0) or 0.0
 
@@ -112,7 +164,6 @@ function M.read_driver(head, motion_context)
     local v_e = math.max(upr05, upr01)
 
     -- 5. A vowel: Speech-coupled open mouth (CrnPl_JwOpn / Strtch_JwOpn)
-    -- Decoupled from pure JwOpn_00_L/R so chin movement/breathing never triggers A!
     local jw_sp_crn = math.max(get_df(H_JW_SP_CRN_L), get_df(H_JW_SP_CRN_R))
     local jw_sp_str = math.max(get_df(H_JW_SP_STR_L), get_df(H_JW_SP_STR_R))
     local speech_a = math.max(jw_sp_crn, jw_sp_str)
@@ -142,7 +193,6 @@ function M.read_driver(head, motion_context)
         if v_e > 0.05 then weights[4] = v_e; any_deform = true end
         if v_o > 0.05 then weights[5] = v_o; any_deform = true end
 
-        -- A is driven only by speech-coupled opening, suppressed by other vowels
         local other_vowels = math.max(weights[2], weights[3], weights[4], weights[5])
         local a_val = math.max(0, speech_a - other_vowels * 0.8)
         if a_val > 0.05 then
@@ -150,7 +200,8 @@ function M.read_driver(head, motion_context)
             any_deform = true
         end
 
-        if not any_deform and not driver then
+        -- If neither voice driver nor deform curves are active, return nil to allow bone solver to run!
+        if not any_deform then
             return nil
         end
     end
