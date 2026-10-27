@@ -642,26 +642,75 @@ local probe_active = false
 local probe_bone_index = 1
 local probe_phase = 0 -- 0: idle, 1: baseline, 2: manipulate & verify, 3: restore
 local probe_frame_in_phase = 0
+local freeze_face_anim = true -- 测试期间自动断开/冻结面部表情动画，排除一切动作干扰
 
 local probe_results = {}
 local probe_baseline_weights = {}
 local probe_status_msg = "待命 (点击下方按钮立即开始 285 根全量测试)"
 local probe_last_test_summary = nil
 
+local saved_motion_states = {}
+
+local function freeze_facial_animation(head)
+    saved_motion_states = {}
+    if not head or not head.face then return end
+    local face_go = R.call(head.face, 'get_GameObject')
+    if not face_go then return end
+    
+    local fm = R.component(face_go, sdk.typeof('via.motion.Motion'))
+    if fm then
+        local orig_enabled = R.call(fm, "get_Enabled")
+        saved_motion_states.fm = fm
+        saved_motion_states.orig_enabled = (orig_enabled ~= false)
+        
+        -- Store layer speeds and zero them
+        local layer_count = R.call(fm, "getLayerCount") or 0
+        saved_motion_states.layers = {}
+        for i = 0, layer_count - 1 do
+            local layer = R.call(fm, "getLayer(System.UInt32)", i)
+            if layer then
+                local spd = R.call(layer, "get_Speed")
+                table.insert(saved_motion_states.layers, { layer = layer, speed = spd })
+                pcall(layer.call, layer, "set_Speed", 0.0)
+            end
+        end
+        
+        pcall(fm.call, fm, "set_Enabled", false)
+    end
+end
+
+local function restore_facial_animation()
+    if saved_motion_states.fm then
+        pcall(saved_motion_states.fm.call, saved_motion_states.fm, "set_Enabled", saved_motion_states.orig_enabled)
+        if saved_motion_states.layers then
+            for _, linfo in ipairs(saved_motion_states.layers) do
+                pcall(linfo.layer.call, linfo.layer, "set_Speed", linfo.speed or 1.0)
+            end
+        end
+    end
+    saved_motion_states = {}
+end
+
 local function start_full_285_probe()
+    local head = R.find()
+    if freeze_face_anim and head then
+        freeze_facial_animation(head)
+    end
     probe_active = true
     probe_bone_index = 1
     probe_phase = 1
     probe_frame_in_phase = 0
     probe_results = {}
     probe_baseline_weights = {}
-    probe_status_msg = "全量 285 根骨骼探测已启动..."
+    probe_status_msg = "全量 285 根骨骼探测已启动 (面部表情动画已断开)..."
     probe_last_test_summary = nil
 end
 
 local function finish_probe_test()
     probe_active = false
     probe_phase = 0
+    restore_facial_animation()
+    
     local responsive_count = 0
     for _, res in ipairs(probe_results) do
         if #res.affected_shapekeys > 0 then
@@ -669,19 +718,18 @@ local function finish_probe_test()
         end
     end
     
-    probe_status_msg = string.format("探测完成! 285 根骨骼全部实测完毕，响应驱动 %d 根。", responsive_count)
+    probe_status_msg = string.format("探测完成! 285 根骨骼全部实测完毕，响应驱动 %d 根 (表情动画已恢复)。", responsive_count)
     
     probe_last_test_summary = {
         total_bones_tested = #probe_results,
         responsive_bones_count = responsive_count,
+        facial_animation_frozen = freeze_face_anim,
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         details = probe_results
     }
     
     json.dump_file("ShapeKeySystem/active_bone_probe_results.json", probe_last_test_summary, 2)
 end
-
--- Hook into UpdateMotion: forcefully translate and rotate the target bone
 re.on_application_entry("UpdateMotion", function()
     if not probe_active or probe_phase ~= 2 then return end
     local head = R.find()
@@ -826,6 +874,8 @@ re.on_draw_ui(function()
         imgui.separator()
         imgui.text_colored("【实验】全量 285 根骨骼全覆盖主动操控 / 形态键响应探测器", 0xFF00FFFF)
         imgui.text_colored("规则: 严格从第 1 根到第 285 根逐一强行位移(-30mm)与旋转(30度)，实测96个形态键是否有任何反应。", 0xFFAAAAAA)
+        local changed_freeze, new_freeze = imgui.checkbox("测试期间自动冻结/断开脸部表情动画 (消除眨眼/说话干扰)", freeze_face_anim)
+        if changed_freeze then freeze_face_anim = new_freeze end
         imgui.spacing()
 
         if not probe_active then
@@ -837,7 +887,8 @@ re.on_draw_ui(function()
             if imgui.button("中断测试 (Cancel)", 150, 30) then
                 probe_active = false
                 probe_phase = 0
-                probe_status_msg = "测试已中断"
+                restore_facial_animation()
+                probe_status_msg = "测试已中断 (面部表情动画已恢复)"
             end
         end
 
