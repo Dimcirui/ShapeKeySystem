@@ -159,9 +159,6 @@ function S.read(h, P, inv_full, diagnostic)
     local motion_context,motion_error
     local scalars={}
     h.motion_requests=0
-    if valid then
-        pcall(VirtualFACS.evaluate, head, open_motion())
-    end
     local function open_motion()
         if motion_context==nil then
             motion_context,motion_error=Motion.open(head,h.motion_cache)
@@ -175,6 +172,10 @@ function S.read(h, P, inv_full, diagnostic)
         if term.kind=='pos'and not term.motion_neutral_position then return nil,'motion_position_neutral_unavailable'end
         return Motion.read(motion_context,term.bone,term.motion_neutral,detail,
             term.kind=='pos'and term.motion_neutral_position or nil)
+    end
+    -- Evaluate the 96 Native FACS table using open_motion
+    if valid then
+        pcall(VirtualFACS.evaluate, head, open_motion())
     end
     h.sources, h.measurements, h.bone_status, h.bone_joints = {}, {}, {}, {}
     for _, key in ipairs(h.keys) do
