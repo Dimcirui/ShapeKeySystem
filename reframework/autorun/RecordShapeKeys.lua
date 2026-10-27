@@ -1,7 +1,7 @@
 -- RecordShapeKeys.lua
 -- RE9 原生96 FACS形态键监测与底噪录制工具 (RE9 Native 96 FACS Baseline Monitor & Recorder)
 -- 专用于监测并录制 RE9 引擎本身的 96 个原生面部 FACS 形态键（00 ~ 95）
--- 无论当前角色使用原版网格还是装备了 Mod，均真实提取 RE9 原生面部表情数据，保留所有 0.000 静止键
+-- 严格按 00 ~ 95 自然序号排列，保留所有 0.000 静止键与实时动态
 
 local R = require('ShapeKeySystem_Games.RE9.Runtime')
 local Hash = require('ShapeKeySystem_Core.NameHash')
@@ -118,11 +118,6 @@ local FACS_CHANNEL_INFO = {
     [95] = { name = "Pkr_Fnl_BR",        desc = "嘟嘴漏斗右下" },
 }
 
--- Pre-calculate hash for every native channel
-for i = 0, 95 do
-    FACS_CHANNEL_INFO[i].hash = Hash.hash(FACS_CHANNEL_INFO[i].name)
-end
-
 local stats = {}
 for i = 0, 95 do
     local info = FACS_CHANNEL_INFO[i]
@@ -130,7 +125,6 @@ for i = 0, 95 do
         index = i,
         name = info.name,
         desc = info.desc,
-        hash = info.hash,
         min = 0.0,
         max = 0.0,
         sum = 0.0,
@@ -180,26 +174,6 @@ local function save_stats_to_file()
     return ok
 end
 
--- Deform hash to index cache on Motion
-local cached_motion_id = nil
-local deform_indices = {}
-
-local function get_deform_index(dm, hash)
-    if not dm then return nil end
-    local addr = R.address(dm)
-    if addr ~= cached_motion_id then
-        cached_motion_id = addr
-        deform_indices = {}
-        local dhashes = R.call(dm, "get_DeformNameHashes")
-        local len = dhashes and (R.call(dhashes, "get_Length") or R.call(dhashes, "get_Count")) or 0
-        for i = 0, len - 1 do
-            local h = Hash.hash_at(dhashes, i, true)
-            if h then deform_indices[h] = i end
-        end
-    end
-    return deform_indices[hash]
-end
-
 -- Sampling logic every frame (Exclusively for 96 Native FACS Channels)
 re.on_frame(function()
     if not is_recording and not ui_is_open then
@@ -218,18 +192,7 @@ re.on_frame(function()
         local dvals = dm and R.call(dm, "get_DeformValues")
         local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
 
-        -- 判断当前网格是否为原版里昂头部（96通道且第0通道为 CrnPl_01_L）
-        local is_native_mesh = false
-        if mesh then
-            local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
-            if cn == 96 then
-                local dhashes = R.call(mesh, "get_ChannelNameHash")
-                local h0 = dhashes and Hash.hash_at(dhashes, 0, true)
-                if h0 == FACS_CHANNEL_INFO[0].hash then
-                    is_native_mesh = true
-                end
-            end
-        end
+        local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
 
         if is_recording then
             record_frame_count = record_frame_count + 1
@@ -243,23 +206,17 @@ re.on_frame(function()
 
         for i = 0, 95 do
             local val = nil
-            local info = FACS_CHANNEL_INFO[i]
 
-            -- 1. 如果是原版里昂网格，直接读取网格顶点通道权重
-            if is_native_mesh and mesh then
+            -- 1. 优先读取网格当前通道权重（原版网格直接读取原生权重；Mod网格读取当前实时驱动权重）
+            if mesh and i < cn then
                 val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
                 if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
                 if val == nil then val = R.call(mesh, "getBlendShapeChannelWeight", i) end
             end
 
-            -- 2. 如果是装备了Mod的网格（或网格通道为空），从引擎底层的 Motion 原生Deform轨道读取真实数据
-            if (val == nil or not is_native_mesh) and dm and dvals then
-                local didx = get_deform_index(dm, info.hash)
-                if didx and didx < dlen then
-                    val = R.call(dvals, "get_Item", didx)
-                elseif i < dlen then
-                    val = R.call(dvals, "get_Item", i)
-                end
+            -- 2. 若网格未读出但动作组件有对应轨道，尝试从动作组件Deform轨道补充
+            if (val == nil or val ~= val) and dvals and i < dlen then
+                val = R.call(dvals, "get_Item", i)
             end
 
             if type(val) ~= "number" or val ~= val then
@@ -298,14 +255,7 @@ re.on_draw_ui(function()
         if head then
             local mesh = head.mesh or R.mesh(head.face)
             local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
-            local is_mod_mesh = (cn ~= 96)
-            if is_mod_mesh then
-                imgui.text_colored(string.format("网格状态: [已连接] 当前装备Mod模型 (网格通道数: %d)", cn), 0xFF00FFFF)
-                imgui.text_colored("采样来源: [底层动作引擎 via.motion.Motion] 正在实时提取 RE9 原生 96 FACS 真实表情数据", 0xFF00FF00)
-            else
-                imgui.text_colored("网格状态: [已连接] 原版里昂头部网格 (96 原生 FACS 通道)", 0xFF00FF00)
-                imgui.text_colored("采样来源: [原生网格顶点缓存 via.render.Mesh]", 0xFFAAAAAA)
-            end
+            imgui.text_colored(string.format("网格状态: [已连接] 头部网格 (通道数: %d)", cn), 0xFF00FF00)
         else
             imgui.text_colored("网格状态: [未连接] 正在寻找头部网格 (cp_A000)...", 0xFF5555FF)
         end
