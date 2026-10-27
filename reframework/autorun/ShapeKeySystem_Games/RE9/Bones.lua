@@ -89,9 +89,9 @@ local function get_bone_info(head, bone_name, omitted)
         if not joint and head and head.root then
             joint = R.call(head.root, 'getJointByName(System.String)', bone_name)
         end
-        if joint and R.call(joint, 'get_Name()') == bone_name then
-            local base_rot = quaternion(R.call(joint, 'get_BaseLocalRotation()'))
-            local base_pos = position(R.call(joint, 'get_BaseLocalPosition()'))
+        if joint and R.call(joint, 'get_Name') == bone_name then
+            local base_rot = quaternion(R.call(joint, 'get_BaseLocalRotation'))
+            local base_pos = position(R.call(joint, 'get_BaseLocalPosition'))
             cached = {
                 joint = joint,
                 base_rotation = base_rot,
@@ -130,10 +130,10 @@ function M.evaluate(head, rule, diagnostic, fallback, omitted, frame)
                 pose.base_position = binfo.base_position
                 pose.neutral_rotation = binfo.neutral_rotation
                 if kind=='rot'or diagnostic then
-                    pose.rotation=quaternion(R.call(joint,'get_LocalRotation()'))
+                    pose.rotation=quaternion(R.call(joint,'get_LocalRotation'))
                 end
                 if kind=='pos'or diagnostic then
-                    pose.position=position(R.call(joint,'get_LocalPosition()'))
+                    pose.position=position(R.call(joint,'get_LocalPosition'))
                 end
                 if kind=='rot'and not(pose.base_rotation and pose.rotation)
                     or kind=='pos'and not(pose.base_position and pose.position)then

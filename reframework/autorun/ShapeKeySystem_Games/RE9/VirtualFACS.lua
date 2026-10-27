@@ -1,6 +1,6 @@
 -- ShapeKeySystem: Virtual 96 RE9 FACS Evaluation Engine (Bulletproof)
 -- Safely extracts official PlayerFacialAnimationDriver + _FacialMotion deforms
--- into a normalized 96-channel Virtual FACS table (00..95).
+-- into a normalized 96-channel Virtual FACS table (00..95) by exact name hash.
 
 local Hash = require("ShapeKeySystem_Core.NameHash")
 local R = require("ShapeKeySystem_Games.RE9.Runtime")
@@ -13,17 +13,40 @@ local DEF_LIST = Defs.DEFINITIONS
 local NAME_TO_IDX = {}
 local SHORT_TO_IDX = {}
 
+-- Pre-calculate hashes for each definition
 for idx = 0, #DEF_LIST do
     local item = DEF_LIST[idx]
     if item then
         NAME_TO_IDX[item.name] = idx
         SHORT_TO_IDX[item.short] = idx
+        item.hash = Hash.hash(item.name)
+        item.raw_hash = Hash.hash(item.short)
     end
 end
 
 -- Live 96 channel values buffer
 local LIVE_VALUES = {}
 for i = 0, #DEF_LIST do LIVE_VALUES[i] = 0.0 end
+
+-- Motion Deform hash-to-index cache
+local cached_motion_id = nil
+local deform_indices = {}
+
+local function get_deform_index(dm, h1, h2)
+    if not dm then return nil end
+    local addr = R.address(dm)
+    if addr ~= cached_motion_id then
+        cached_motion_id = addr
+        deform_indices = {}
+        local dhashes = R.call(dm, "get_DeformNameHashes")
+        local len = dhashes and (R.call(dhashes, "get_Length") or R.call(dhashes, "get_Count")) or 0
+        for i = 0, len - 1 do
+            local h = Hash.hash_at(dhashes, i, true)
+            if h then deform_indices[h] = i end
+        end
+    end
+    return deform_indices[h1] or (h2 and deform_indices[h2])
+end
 
 -- Driver tracking
 local cached_driver = nil
@@ -84,79 +107,51 @@ function VF.evaluate(head, motion_context)
     for i = 0, #DEF_LIST do LIVE_VALUES[i] = 0.0 end
 
     pcall(function()
-        -- 1. Resolve Deform Values buffer (dvals)
-        local dvals = nil
-        if motion_context and motion_context.deform_values then
-            dvals = motion_context.deform_values
-        elseif motion_context and (motion_context.deform_motion or motion_context.motion) then
-            local dm = motion_context.deform_motion or motion_context.motion
-            dvals = R.call(dm, "get_DeformValues")
-        elseif head then
-            local face_go = head.face and R.call(head.face, 'get_GameObject')
-            local root_go = head.root and R.call(head.root, 'get_GameObject')
-            local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
-            local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
-            local dm = fm or rm
-            if dm then dvals = R.call(dm, "get_DeformValues") end
-        end
+        if not head then return end
+        local mesh = head.mesh or (head.face and R.mesh(head.face))
+        local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
+        local is_native_mesh = (cn == 96)
 
+        -- 1. Resolve Deform Motion and Values buffer
+        local face_go = head.face and R.call(head.face, 'get_GameObject')
+        local root_go = head.root and R.call(head.root, 'get_GameObject')
+        local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
+        local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
+
+        local driver = resolve_driver(head)
+        local fmotion = driver and driver:get_field("_FacialMotion")
+        local dm = fmotion or fm or rm or (motion_context and (motion_context.deform_motion or motion_context.motion))
+
+        local dvals = dm and R.call(dm, "get_DeformValues")
         local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
 
-        -- 2. Read all 96 motion deform tracks
+        -- 2. Read all 96 motion deform tracks with hash matching
         for i = 0, #DEF_LIST do
             local item = DEF_LIST[i]
             local val = nil
-            if dvals and i < dlen then
-                val = R.call(dvals, "get_Item", i)
-            elseif motion_context then
-                val = Motion.deform_by_index(motion_context, i)
-                if val == nil then
-                    val = Motion.deform_value(motion_context, Hash.hash(item.name))
+
+            -- Native mesh channel check
+            if is_native_mesh and mesh and i < cn then
+                val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
+                if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
+            end
+
+            -- Hash lookup on Motion Deform tracks
+            if (val == nil or not is_native_mesh) and dm and dvals then
+                local didx = get_deform_index(dm, item.hash, item.raw_hash)
+                if didx and didx < dlen then
+                    val = R.call(dvals, "get_Item", didx)
                 end
             end
 
             if type(val) == "number" and val == val then
                 local net = val - (item.baseline or 0.0)
-                if net > 0.001 then
+                if net > 0.0005 then
                     LIVE_VALUES[i] = math.max(0.0, math.min(1.0, net))
                 end
             end
         end
 
-        -- 2. Inject Vowel Phonemes from PlayerFacialAnimationDriver
-        local driver = resolve_driver(head)
-        local cur_vowel = driver and driver:get_field("_CurrentVowel") or 0
-        local cur_vol = driver and (driver:get_field("_CurrentVolume") or 0.0) or 0.0
-
-        if cur_vowel ~= 0 and cur_vol > 0.001 then
-            local vowel_strength = math.min(1.0, math.max(0.3, cur_vol * 1.5))
-            if cur_vowel == 1 then -- Vowel A: Jaw open
-                local jw_l = SHORT_TO_IDX["JwOpn_00_L"]
-                local jw_r = SHORT_TO_IDX["JwOpn_00_R"]
-                if jw_l then LIVE_VALUES[jw_l] = math.max(LIVE_VALUES[jw_l], 0.85 * vowel_strength) end
-                if jw_r then LIVE_VALUES[jw_r] = math.max(LIVE_VALUES[jw_r], 0.85 * vowel_strength) end
-            elseif cur_vowel == 2 then -- Vowel I: Stretch
-                local str_l = SHORT_TO_IDX["Strtch_04_L"]
-                local str_r = SHORT_TO_IDX["Strtch_04_R"]
-                if str_l then LIVE_VALUES[str_l] = math.max(LIVE_VALUES[str_l], 0.80 * vowel_strength) end
-                if str_r then LIVE_VALUES[str_r] = math.max(LIVE_VALUES[str_r], 0.80 * vowel_strength) end
-            elseif cur_vowel == 3 then -- Vowel U: Pucker
-                local pkr_l = SHORT_TO_IDX["Pkr_01_L"]
-                local pkr_r = SHORT_TO_IDX["Pkr_01_R"]
-                if pkr_l then LIVE_VALUES[pkr_l] = math.max(LIVE_VALUES[pkr_l], 0.85 * vowel_strength) end
-                if pkr_r then LIVE_VALUES[pkr_r] = math.max(LIVE_VALUES[pkr_r], 0.85 * vowel_strength) end
-            elseif cur_vowel == 4 then -- Vowel E: Half jaw + Stretch
-                local jw_l = SHORT_TO_IDX["JwOpn_00_L"]
-                local str_l = SHORT_TO_IDX["Strtch_04_L"]
-                if jw_l then LIVE_VALUES[jw_l] = math.max(LIVE_VALUES[jw_l], 0.50 * vowel_strength) end
-                if str_l then LIVE_VALUES[str_l] = math.max(LIVE_VALUES[str_l], 0.65 * vowel_strength) end
-            elseif cur_vowel == 5 then -- Vowel O: Funnel
-                local fnl_l = SHORT_TO_IDX["Fnl_04_L"]
-                local fnl_r = SHORT_TO_IDX["Fnl_04_R"]
-                if fnl_l then LIVE_VALUES[fnl_l] = math.max(LIVE_VALUES[fnl_l], 0.90 * vowel_strength) end
-                if fnl_r then LIVE_VALUES[fnl_r] = math.max(LIVE_VALUES[fnl_r], 0.90 * vowel_strength) end
-            end
-        end
     end)
 
     return LIVE_VALUES

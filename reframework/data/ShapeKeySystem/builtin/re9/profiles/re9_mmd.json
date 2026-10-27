@@ -9,38 +9,42 @@
     {
       "name": "上左",
       "group": "brow",
-      "s": "browOuterUp.L",
+      "s": "BrOutRs_00_L",
       "any": [
         "眉上左",
         "眉左上"
-      ]
+      ],
+      "note": "RE9 原生形态键：眉梢上提00左"
     },
     {
       "name": "上右",
       "group": "brow",
-      "s": "browOuterUp.R",
+      "s": "BrOutRs_00_R",
       "any": [
         "眉上右",
         "眉右上"
-      ]
+      ],
+      "note": "RE9 原生形态键：眉梢上提00右"
     },
     {
       "name": "下左",
       "group": "brow",
-      "s": "browDown.L",
+      "s": "BrLr_00_L",
       "any": [
         "眉下左",
         "眉左下"
-      ]
+      ],
+      "note": "RE9 原生形态键：整眉压低左"
     },
     {
       "name": "下右",
       "group": "brow",
-      "s": "browDown.R",
+      "s": "BrLr_00_R",
       "any": [
         "眉下右",
         "眉右下"
-      ]
+      ],
+      "note": "RE9 原生形态键：整眉压低右"
     },
     {
       "name": "口横広げ",
@@ -50,17 +54,25 @@
         "口横広げる",
         "口横伸ばし"
       ],
-      "note": "嘴唇纯横向展宽",
-      "sum": [
+      "note": "嘴唇纯横向展宽：RE9原生CrnPl_05与Strtch_04驱动",
+      "max": [
         {
-          "s": "stretch.L",
-          "k": 0.5
+          "s": "CrnPl_05_L"
         },
         {
-          "s": "stretch.R",
-          "k": 0.5
+          "s": "CrnPl_05_R"
+        },
+        {
+          "s": "Strtch_04_L"
+        },
+        {
+          "s": "Strtch_04_R"
         }
       ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      },
       "unless": [
         "口横広げ左",
         "口横広げ右"
@@ -71,11 +83,11 @@
       "group": "eye",
       "sum": [
         {
-          "s": "eyeWide.L",
+          "s": "BrOutRs_00_L",
           "k": 0.5
         },
         {
-          "s": "eyeWide.R",
+          "s": "BrOutRs_00_R",
           "k": 0.5
         }
       ],
@@ -84,7 +96,7 @@
         "驚き",
         "surprised"
       ],
-      "note": "睁大眼",
+      "note": "RE9 原生形态键：眉梢高挑惊讶",
       "unless": [
         "びっくり左",
         "びっくり右"
@@ -95,11 +107,11 @@
       "group": "brow",
       "sum": [
         {
-          "s": "browInnerUp.L",
+          "s": "BrInRs_00_L",
           "k": 0.5
         },
         {
-          "s": "browInnerUp.R",
+          "s": "BrInRs_00_R",
           "k": 0.5
         }
       ],
@@ -107,7 +119,7 @@
         "困り",
         "眉困り"
       ],
-      "note": "眉心上提",
+      "note": "RE9 原生形态键：眉头挑起(困惑)",
       "unless": [
         "困る左",
         "困る右"
@@ -116,22 +128,26 @@
     {
       "name": "困る左",
       "group": "brow",
-      "s": "browInnerUp.L"
+      "s": "BrInRs_00_L",
+      "note": "RE9 原生形态键：眉头挑起左(困惑)"
     },
     {
       "name": "困る右",
       "group": "brow",
-      "s": "browInnerUp.R"
+      "s": "BrInRs_00_R",
+      "note": "RE9 原生形态键：眉头挑起右(困惑)"
     },
     {
       "name": "怒り左",
       "group": "brow",
-      "s": "browBring.L"
+      "s": "BrInDn_00_L",
+      "note": "RE9 原生形态键：眉头下压/皱眉左"
     },
     {
       "name": "怒り右",
       "group": "brow",
-      "s": "browBring.R"
+      "s": "BrInDn_00_R",
+      "note": "RE9 原生形态键：眉头下压/皱眉右"
     },
     {
       "name": "口横狭く",
@@ -141,29 +157,19 @@
         "口横狭く",
         "口横狭め"
       ],
-      "note": "嘴唇纯横向收窄",
+      "note": "嘴唇横向收窄：RE9原生嘴角收窄Pkr_03驱动",
       "max": [
         {
-          "sum": [
-            {
-              "s": "funnelTogether.L",
-              "k": 0.5
-            },
-            {
-              "s": "funnelTogether.R",
-              "k": 0.5
-            }
-          ]
+          "s": "Pkr_03_L"
         },
         {
-          "s": "upperLipRoll",
-          "k": 0.5
+          "s": "Pkr_03_R"
         }
       ],
-      "unless": [
-        "口横狭め左",
-        "口横狭め右"
-      ]
+      "curve": {
+        "deadzone": 0.025,
+        "gain": 2.2
+      }
     },
     {
       "name": "い",
@@ -172,19 +178,34 @@
         "い",
         "い1",
         "い2",
+        "い3",
         "イ"
       ],
-      "note": "I元音：嘴角纯横向平拉露齿（由CrnPl_09与Strtch_04横拉驱动，与张嘴完全解耦，不产生下巴污染）",
-      "sum": [
+      "note": "I元音：RE9原生嘴角展宽CrnPl_05与上提CrnPl_04驱动",
+      "max": [
         {
-          "s": "stretch.L",
-          "k": 0.5
+          "s": "CrnPl_04_L"
         },
         {
-          "s": "stretch.R",
-          "k": 0.5
+          "s": "CrnPl_04_R"
+        },
+        {
+          "s": "CrnPl_05_L"
+        },
+        {
+          "s": "CrnPl_05_R"
+        },
+        {
+          "s": "Strtch_04_L"
+        },
+        {
+          "s": "Strtch_04_R"
         }
-      ]
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
     },
     {
       "name": "う",
@@ -195,93 +216,91 @@
         "う2",
         "ウ"
       ],
-      "note": "U元音：纯嘴唇向前圆拢收聚（由收嘴与卷唇内聚驱动，呈小圆嘟嘴）",
+      "note": "U元音：RE9原生下唇嘟嘴Pkr_01/02驱动",
       "max": [
         {
-          "sum": [
-            {
-              "s": "funnelTogether.L",
-              "k": 0.5
-            },
-            {
-              "s": "funnelTogether.R",
-              "k": 0.5
-            }
-          ]
+          "s": "Pkr_01_L"
         },
         {
-          "s": "upperLipRoll",
-          "k": 0.6
+          "s": "Pkr_01_R"
+        },
+        {
+          "s": "Pkr_02_L"
+        },
+        {
+          "s": "Pkr_02_R"
         }
-      ]
+      ],
+      "curve": {
+        "deadzone": 0.025,
+        "gain": 2.2
+      }
     },
     {
       "name": "え",
       "group": "mouth",
       "any": [
+        "え",
         "え1",
         "え2",
         "え3",
-        "エ",
-        "え"
+        "エ"
       ],
-      "note": "E元音：半开露齿横展（同时存在张嘴与横拉时精准触发，纯张嘴或纯闭嘴横拉均不触发）",
-      "min": [
+      "note": "E元音：RE9原生展宽与嘴角上提",
+      "max": [
         {
-          "s": "jawOpen",
-          "k": 0.8
+          "s": "CrnPl_04_L"
         },
         {
-          "sum": [
-            {
-              "s": "stretch.L",
-              "k": 0.6
-            },
-            {
-              "s": "stretch.R",
-              "k": 0.6
-            }
-          ]
+          "s": "CrnPl_04_R"
+        },
+        {
+          "s": "CrnPl_05_L"
+        },
+        {
+          "s": "CrnPl_05_R"
         }
-      ]
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
     },
     {
       "name": "お",
       "group": "mouth",
       "any": [
+        "お",
         "お1",
         "お2",
         "お3",
-        "オ",
-        "お"
+        "オ"
       ],
-      "note": "O元音：圆管漏斗开度（张嘴并伴随嘴唇收拢时触发，平拉张嘴时不误触）",
-      "min": [
+      "note": "O元音：RE9原生圆唇Pkr与卷唇LpRolIn驱动",
+      "max": [
         {
-          "s": "jawOpen",
-          "k": 0.7
+          "s": "Pkr_01_L"
         },
         {
-          "max": [
-            {
-              "s": "upperLipRoll",
-              "k": 0.7
-            },
-            {
-              "sum": [
-                {
-                  "s": "funnelTogether.L",
-                  "k": 0.5
-                },
-                {
-                  "s": "funnelTogether.R",
-                  "k": 0.5
-                }
-              ]
-            }
-          ]
+          "s": "Pkr_01_R"
+        },
+        {
+          "s": "LpRolIn_04_L"
+        },
+        {
+          "s": "LpRolIn_04_R"
+        },
+        {
+          "s": "LpRolIn_05_L"
+        },
+        {
+          "s": "LpRolIn_05_R"
         }
-      ]
+      ],
+      "curve": {
+        "deadzone": 0.025,
+        "gain": 2.0
+      }
     },
     {
       "name": "あ",
@@ -292,75 +311,76 @@
         "あ2",
         "あ3",
         "あ4",
+        "あ5",
+        "あ6",
+        "あ7",
+        "あ8",
+        "あ9",
+        "あ10",
         "あ1",
         "ア"
       ],
-      "note": "A元音：垂直自然张嘴（以下颌张开为主，减去横向拉伸与嘴唇收拢，避免微笑/圆唇发音时误触）",
-      "sub": [
+      "note": "A元音：方案3纯原生形态键（彻底剥离下巴JwOpn，呼吸严格闭合）",
+      "max": [
         {
-          "s": "jawOpen",
-          "k": 0.85
+          "s": "LpBit_TL"
         },
         {
-          "sum": [
-            {
-              "s": "stretch.L",
-              "k": 0.35
-            },
-            {
-              "s": "stretch.R",
-              "k": 0.35
-            },
-            {
-              "s": "upperLipRoll",
-              "k": 0.5
-            }
-          ]
+          "s": "LpBit_TR"
         }
-      ]
+      ],
+      "curve": {
+        "deadzone": 0.01,
+        "gain": 1.5
+      }
     },
     {
       "name": "ウィンク２",
       "group": "eye",
-      "s": "blink.L",
+      "s": "UprLdDn_05_L",
       "any": [
+        "ウィンク２",
+        "ウィンク",
+        "ウィンク1",
         "ウインク２",
         "ウィンク２左",
         "ウィンク左２",
-        "ウィンク",
         "ウインク",
         "ウィンク左",
         "wink2",
         "wink"
       ],
-      "note": "左眼闭眼（模型自己的左侧）。没有 ウィンク２ 时用 ウィンク（部分模型是笑眼形状，仍然会闭眼）"
+      "note": "RE9 原生形态键：上眼睑闭合05左(眨眼)"
     },
     {
       "name": "ｳｨﾝｸ２右",
       "group": "eye",
-      "s": "blink.R",
+      "s": "UprLdDn_05_R",
       "any": [
+        "ｳｨﾝｸ２右",
+        "ｳｨﾝク２右",
+        "ウィンク右",
+        "ウィンク右1",
         "ウインク２右",
         "ウィンク右２",
         "ウインク右２",
         "ウィンク２R",
-        "ウィンク右",
         "ウインク右",
         "wink2_r",
         "wink_r"
       ],
-      "note": "右眼闭眼"
+      "note": "RE9 原生形态键：上眼睑闭合05右(眨眼)"
     },
     {
       "name": "まばたき",
       "group": "eye",
       "sum": [
         {
-          "s": "blink.L",
+          "s": "UprLdDn_05_L",
           "k": 0.5
         },
         {
-          "s": "blink.R",
+          "s": "UprLdDn_05_R",
           "k": 0.5
         }
       ],
@@ -375,7 +395,204 @@
         "ウィンク２",
         "ｳｨﾝｸ２右"
       ],
-      "note": "双眼闭眼，只在没有左右 wink 键时使用"
+      "note": "RE9 原生形态键：双眼上眼睑闭合05(眨眼)"
+    },
+    {
+      "name": "ワ",
+      "group": "mouth",
+      "any": [
+        "ワ",
+        "ワ1",
+        "ワ2",
+        "大口"
+      ],
+      "note": "极限大张嘴：方案3纯原生形态键（彻底剥离下巴JwOpn）",
+      "max": [
+        {
+          "s": "LpBit_TL"
+        },
+        {
+          "s": "LpBit_TR"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.5,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "口角下げ",
+      "group": "mouth",
+      "any": [
+        "口角下げ1",
+        "口角下げ",
+        "口角下げ2"
+      ],
+      "unless": [
+        "口角下げ左",
+        "口角下げ右"
+      ],
+      "note": "RE9原生形态键：嘴角下压CrnDprs_00/01/02驱动",
+      "max": [
+        {
+          "s": "CrnDprs_00_L"
+        },
+        {
+          "s": "CrnDprs_00_R"
+        },
+        {
+          "s": "CrnDprs_01_L"
+        },
+        {
+          "s": "CrnDprs_01_R"
+        },
+        {
+          "s": "CrnDprs_02_L"
+        },
+        {
+          "s": "CrnDprs_02_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.046,
+        "gain": 14.0
+      }
+    },
+    {
+      "name": "口上",
+      "group": "mouth",
+      "any": [
+        "口上",
+        "上唇上げ"
+      ],
+      "note": "RE9原生形态键：上唇上提（排除鼻翼键UprLpRs_05，采用真实动上唇的LpBit_T与UprLpRs_01）",
+      "max": [
+        {
+          "s": "LpBit_TL"
+        },
+        {
+          "s": "LpBit_TR"
+        },
+        {
+          "s": "UprLpRs_01_L"
+        },
+        {
+          "s": "UprLpRs_01_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "口下",
+      "group": "mouth",
+      "any": [
+        "口下",
+        "下唇下げ"
+      ],
+      "note": "RE9原生形态键：下唇下拉（LpBit_B与CrnDprs_00）",
+      "max": [
+        {
+          "s": "LpBit_BL"
+        },
+        {
+          "s": "LpBit_BR"
+        },
+        {
+          "s": "CrnDprs_00_L"
+        },
+        {
+          "s": "CrnDprs_00_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.046,
+        "gain": 14.0
+      }
+    },
+    {
+      "name": "にやり２",
+      "group": "mouth",
+      "any": [
+        "にやり２",
+        "にやり２左",
+        "にやり左",
+        "口角上左",
+        "左口角上げ"
+      ],
+      "note": "RE9原生形态键：左嘴角上翘CrnPl_04/05",
+      "max": [
+        {
+          "s": "CrnPl_04_L"
+        },
+        {
+          "s": "CrnPl_05_L"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "にやり２1",
+      "group": "mouth",
+      "any": [
+        "にやり２1",
+        "にやり２右",
+        "にやり右",
+        "口角上右",
+        "右口角上げ"
+      ],
+      "note": "RE9原生形态键：右嘴角上翘CrnPl_04/05",
+      "max": [
+        {
+          "s": "CrnPl_04_R"
+        },
+        {
+          "s": "CrnPl_05_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "口角上げ",
+      "group": "mouth",
+      "any": [
+        "にやり２2",
+        "にやり２3",
+        "口角上げ",
+        "口角上",
+        "にやり"
+      ],
+      "unless": [
+        "にやり２",
+        "にやり２1"
+      ],
+      "note": "RE9原生形态键：双嘴角上提CrnPl_04/05",
+      "max": [
+        {
+          "s": "CrnPl_04_L"
+        },
+        {
+          "s": "CrnPl_04_R"
+        },
+        {
+          "s": "CrnPl_05_L"
+        },
+        {
+          "s": "CrnPl_05_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
     },
     {
       "name": "じと目",
@@ -384,11 +601,11 @@
         {
           "sum": [
             {
-              "s": "eyeSquint.L",
+              "s": "Sqnt_03_L",
               "k": 0.5
             },
             {
-              "s": "eyeSquint.R",
+              "s": "Sqnt_03_R",
               "k": 0.5
             }
           ]
@@ -401,11 +618,11 @@
             {
               "sum": [
                 {
-                  "s": "blink.L",
+                  "s": "UprLdDn_05_L",
                   "k": 0.5
                 },
                 {
-                  "s": "blink.R",
+                  "s": "UprLdDn_05_R",
                   "k": 0.5
                 }
               ]
@@ -414,23 +631,29 @@
         }
       ],
       "any": [
-        "ジト目",
+        "じと目",
+        "じと目0",
+        "じと目1",
+        "じと目2",
+        "じと目3",
+        "じと目4",
+        "じと目5",
         "半目"
       ],
-      "note": "上眼皮半闭；闭眼时自动减弱，避免和闭眼叠加压穿"
+      "note": "RE9 原生形态键：眯眼03 (Sqnt_03_L/R，闭眼眨眼时自动避让)"
     },
     {
-      "name": "下瞼上げ",
+      "name": "眼睑上",
       "group": "eye",
       "mul": [
         {
           "sum": [
             {
-              "s": "cheekSquint.L",
+              "s": "LdTight_05_L",
               "k": 0.5
             },
             {
-              "s": "cheekSquint.R",
+              "s": "LdTight_05_R",
               "k": 0.5
             }
           ]
@@ -443,11 +666,11 @@
             {
               "sum": [
                 {
-                  "s": "blink.L",
+                  "s": "UprLdDn_05_L",
                   "k": 0.5
                 },
                 {
-                  "s": "blink.R",
+                  "s": "UprLdDn_05_R",
                   "k": 0.5
                 }
               ]
@@ -462,147 +685,27 @@
         "下まぶた上げ",
         "下眼上"
       ],
-      "note": "下眼皮上抬（附加，多数模型没有）"
+      "note": "RE9 原生形态键：下眼睑绷紧05 (LdTight_05_L/R)"
     },
     {
-      "name": "ワ",
-      "group": "mouth",
-      "any": [
-        "ワ",
-        "ワ1",
-        "ワ2",
-        "大口"
-      ],
-      "note": "极限大张嘴/吼叫口型（死区门限0.60彻底隔绝日常说话，仅在极限张口/呐喊时触发）",
-      "s": "jawOpen",
-      "curve": {
-        "deadzone": 0.6,
-        "gain": 2.5
-      }
-    },
-    {
-      "name": "口角上げ",
-      "group": "mouth",
-      "max": [
+      "name": "瞳小",
+      "group": "eye",
+      "sum": [
         {
-          "s": "smile.L"
+          "s": "BrOutRs_00_L",
+          "k": 0.5
         },
         {
-          "s": "smile.R"
+          "s": "BrOutRs_00_R",
+          "k": 0.5
         }
       ],
       "any": [
-        "口角上",
-        "にこり口",
-        "微笑",
-        "にやり",
-        "にこり"
+        "瞳小",
+        "瞳小1",
+        "瞳小2"
       ],
-      "unless": [
-        "口角上げ左",
-        "口角上げ右"
-      ],
-      "note": "嘴角上扬（对称键，没有左右版时使用）"
-    },
-    {
-      "name": "口角上げ左",
-      "group": "mouth",
-      "s": "smile.L",
-      "any": [
-        "にこり左",
-        "にこり1左",
-        "にこり2左",
-        "口角上左",
-        "左口角上げ"
-      ]
-    },
-    {
-      "name": "口角上げ右",
-      "group": "mouth",
-      "s": "smile.R",
-      "any": [
-        "にこり右",
-        "にこり1右",
-        "にこり2右",
-        "口角上右",
-        "右口角上げ"
-      ]
-    },
-    {
-      "name": "口角下げ",
-      "group": "mouth",
-      "max": [
-        {
-          "s": "frown.L"
-        },
-        {
-          "s": "frown.R"
-        }
-      ],
-      "any": [
-        "口角下げ",
-        "口角下げ1",
-        "口角下げ2"
-      ],
-      "unless": [
-        "口角下げ左",
-        "口角下げ右"
-      ],
-      "note": "嘴角下撇（对称键，没有左右版时使用）"
-    },
-    {
-      "name": "口上",
-      "group": "mouth",
-      "any": [
-        "口上",
-        "上唇上げ"
-      ],
-      "note": "上唇抬起（微露上齿）",
-      "max": [
-        {
-          "sum": [
-            {
-              "s": "upperLipUp.L",
-              "k": 0.5
-            },
-            {
-              "s": "upperLipUp.R",
-              "k": 0.5
-            }
-          ]
-        },
-        {
-          "s": "upperLipRoll",
-          "k": 0.4
-        }
-      ]
-    },
-    {
-      "name": "口下",
-      "group": "mouth",
-      "any": [
-        "口下",
-        "下唇下げ"
-      ],
-      "note": "下唇下压",
-      "sub": [
-        {
-          "s": "jawOpen",
-          "k": 0.45
-        },
-        {
-          "sum": [
-            {
-              "s": "stretch.L",
-              "k": 0.25
-            },
-            {
-              "s": "stretch.R",
-              "k": 0.25
-            }
-          ]
-        }
-      ]
+      "note": "RE9 原生形态键：双侧眉梢高挑导致瞳孔收缩 (BrOutRs_00_L*0.5 + BrOutRs_00_R*0.5)"
     }
   ]
 }
