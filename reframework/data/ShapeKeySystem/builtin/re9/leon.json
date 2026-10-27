@@ -1108,11 +1108,7 @@
       "HeadSkinned_blendShape.Pkr_02_L",
       "HeadSkinned_blendShape.Pkr_02_R",
       "HeadSkinned_blendShape.Pkr_03_L",
-      "HeadSkinned_blendShape.Pkr_03_R",
-      "HeadSkinned_blendShape.LpPush_00_L",
-      "HeadSkinned_blendShape.LpPush_00_R",
-      "HeadSkinned_blendShape.LpPush_01_L",
-      "HeadSkinned_blendShape.LpPush_01_R"
+      "HeadSkinned_blendShape.Pkr_03_R"
     ],
     "mouthFunnel": [
       "HeadSkinned_blendShape.Fnl_04_L",
@@ -1146,8 +1142,6 @@
       "HeadSkinned_blendShape.Strtch_CrnPl_L",
       "HeadSkinned_blendShape.CrnPl_09_L",
       "HeadSkinned_blendShape.CrnPl_01_L",
-      "HeadSkinned_blendShape.MouthW_00_L",
-      "HeadSkinned_blendShape.MouthW_01_L",
       "HeadSkinned_blendShape.Strtch_08_L"
     ],
     "mouthStretchRight": [
@@ -1156,8 +1150,6 @@
       "HeadSkinned_blendShape.Strtch_CrnPl_R",
       "HeadSkinned_blendShape.CrnPl_09_R",
       "HeadSkinned_blendShape.CrnPl_01_R",
-      "HeadSkinned_blendShape.MouthW_00_R",
-      "HeadSkinned_blendShape.MouthW_01_R",
       "HeadSkinned_blendShape.Strtch_08_R"
     ],
     "mouthUpperUpLeft": [
@@ -1171,14 +1163,10 @@
       "HeadSkinned_blendShape.UprLpRs_05_R"
     ],
     "mouthLowerDownLeft": [
-      "HeadSkinned_blendShape.CrnPl_LwrLpDprs_L",
-      "HeadSkinned_blendShape.LwrLpDprs_00_L",
-      "HeadSkinned_blendShape.LwrLpDprs_03_L"
+      "HeadSkinned_blendShape.CrnPl_LwrLpDprs_L"
     ],
     "mouthLowerDownRight": [
-      "HeadSkinned_blendShape.CrnPl_LwrLpDprs_R",
-      "HeadSkinned_blendShape.LwrLpDprs_00_R",
-      "HeadSkinned_blendShape.LwrLpDprs_03_R"
+      "HeadSkinned_blendShape.CrnPl_LwrLpDprs_R"
     ],
     "cheekSquintLeft": [
       "HeadSkinned_blendShape.LdTight_05_L"
