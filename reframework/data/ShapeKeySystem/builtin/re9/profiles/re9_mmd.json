@@ -142,13 +142,21 @@
         "口横狭め"
       ],
       "note": "嘴唇纯横向收窄",
-      "sum": [
+      "max": [
         {
-          "s": "funnelTogether.L",
-          "k": 0.5
+          "sum": [
+            {
+              "s": "funnelTogether.L",
+              "k": 0.5
+            },
+            {
+              "s": "funnelTogether.R",
+              "k": 0.5
+            }
+          ]
         },
         {
-          "s": "funnelTogether.R",
+          "s": "upperLipRoll",
           "k": 0.5
         }
       ],
@@ -166,7 +174,7 @@
         "い2",
         "イ"
       ],
-      "note": "I元音：纯嘴角向两侧横向平拉露齿（由Strtch与CrnPl_09平提驱动，与张嘴完全解耦）",
+      "note": "I元音：嘴角纯横向平拉露齿（由CrnPl_09与Strtch_04横拉驱动，与张嘴完全解耦，不产生下巴污染）",
       "sum": [
         {
           "s": "stretch.L",
@@ -187,15 +195,23 @@
         "う2",
         "ウ"
       ],
-      "note": "U元音：纯嘴唇向前圆拢收聚（由原生的嘟嘴Pkr_01~03与前突LpPush驱动，呈小圆嘟嘴）",
-      "sum": [
+      "note": "U元音：纯嘴唇向前圆拢收聚（由收嘴与卷唇内聚驱动，呈小圆嘟嘴）",
+      "max": [
         {
-          "s": "funnelTogether.L",
-          "k": 0.5
+          "sum": [
+            {
+              "s": "funnelTogether.L",
+              "k": 0.5
+            },
+            {
+              "s": "funnelTogether.R",
+              "k": 0.5
+            }
+          ]
         },
         {
-          "s": "funnelTogether.R",
-          "k": 0.5
+          "s": "upperLipRoll",
+          "k": 0.6
         }
       ]
     },
@@ -209,23 +225,23 @@
         "エ",
         "え"
       ],
-      "note": "E元音：半开微露齿横展（横拉结合上唇微抬，绝无下巴下坠污染，清晰独立）",
-      "sum": [
+      "note": "E元音：半开露齿横展（同时存在张嘴与横拉时精准触发，纯张嘴或纯闭嘴横拉均不触发）",
+      "min": [
         {
-          "s": "stretch.L",
-          "k": 0.35
+          "s": "jawOpen",
+          "k": 0.8
         },
         {
-          "s": "stretch.R",
-          "k": 0.35
-        },
-        {
-          "s": "upperLipUp.L",
-          "k": 0.25
-        },
-        {
-          "s": "upperLipUp.R",
-          "k": 0.25
+          "sum": [
+            {
+              "s": "stretch.L",
+              "k": 0.6
+            },
+            {
+              "s": "stretch.R",
+              "k": 0.6
+            }
+          ]
         }
       ]
     },
@@ -239,23 +255,31 @@
         "オ",
         "お"
       ],
-      "note": "O元音：圆管漏斗状前突（由Fnl漏斗张嘴与前突Pkr驱动，形成纯正圆形O，绝无下巴污染）",
-      "sum": [
+      "note": "O元音：圆管漏斗开度（张嘴并伴随嘴唇收拢时触发，平拉张嘴时不误触）",
+      "min": [
         {
-          "s": "funnel.L",
-          "k": 0.4
+          "s": "jawOpen",
+          "k": 0.7
         },
         {
-          "s": "funnel.R",
-          "k": 0.4
-        },
-        {
-          "s": "funnelTogether.L",
-          "k": 0.2
-        },
-        {
-          "s": "funnelTogether.R",
-          "k": 0.2
+          "max": [
+            {
+              "s": "upperLipRoll",
+              "k": 0.7
+            },
+            {
+              "sum": [
+                {
+                  "s": "funnelTogether.L",
+                  "k": 0.5
+                },
+                {
+                  "s": "funnelTogether.R",
+                  "k": 0.5
+                }
+              ]
+            }
+          ]
         }
       ]
     },
@@ -271,23 +295,27 @@
         "あ1",
         "ア"
       ],
-      "note": "A元音：纯嘴唇自然垂直张开（下唇下拉为主、上唇微抬为辅，彻底剔除下颌骨JwOpn污染）",
-      "sum": [
+      "note": "A元音：垂直自然张嘴（以下颌张开为主，减去横向拉伸与嘴唇收拢，避免微笑/圆唇发音时误触）",
+      "sub": [
         {
-          "s": "lowerLipDown.L",
-          "k": 0.6
+          "s": "jawOpen",
+          "k": 0.85
         },
         {
-          "s": "lowerLipDown.R",
-          "k": 0.6
-        },
-        {
-          "s": "upperLipUp.L",
-          "k": 0.4
-        },
-        {
-          "s": "upperLipUp.R",
-          "k": 0.4
+          "sum": [
+            {
+              "s": "stretch.L",
+              "k": 0.35
+            },
+            {
+              "s": "stretch.R",
+              "k": 0.35
+            },
+            {
+              "s": "upperLipRoll",
+              "k": 0.5
+            }
+          ]
         }
       ]
     },
@@ -445,25 +473,12 @@
         "ワ2",
         "大口"
       ],
-      "note": "极限大张嘴/吼叫口型（下唇深度下压结合漏斗开度，不污染日常发音）",
-      "sum": [
-        {
-          "s": "lowerLipDown.L",
-          "k": 0.6
-        },
-        {
-          "s": "lowerLipDown.R",
-          "k": 0.6
-        },
-        {
-          "s": "funnel.L",
-          "k": 0.3
-        },
-        {
-          "s": "funnel.R",
-          "k": 0.3
-        }
-      ]
+      "note": "极限大张嘴/吼叫口型（死区门限0.60彻底隔绝日常说话，仅在极限张口/呐喊时触发）",
+      "s": "jawOpen",
+      "curve": {
+        "deadzone": 0.6,
+        "gain": 2.5
+      }
     },
     {
       "name": "口角上げ",
@@ -538,40 +553,56 @@
     {
       "name": "口上",
       "group": "mouth",
-      "sum": [
-        {
-          "s": "upperLipUp.L",
-          "k": 0.5
-        },
-        {
-          "s": "upperLipUp.R",
-          "k": 0.5
-        }
-      ],
       "any": [
         "口上",
         "上唇上げ"
       ],
-      "note": "上唇上提（附加）"
+      "note": "上唇抬起（微露上齿）",
+      "max": [
+        {
+          "sum": [
+            {
+              "s": "upperLipUp.L",
+              "k": 0.5
+            },
+            {
+              "s": "upperLipUp.R",
+              "k": 0.5
+            }
+          ]
+        },
+        {
+          "s": "upperLipRoll",
+          "k": 0.4
+        }
+      ]
     },
     {
       "name": "口下",
       "group": "mouth",
-      "sum": [
-        {
-          "s": "lowerLipDown.L",
-          "k": 0.5
-        },
-        {
-          "s": "lowerLipDown.R",
-          "k": 0.5
-        }
-      ],
       "any": [
         "口下",
         "下唇下げ"
       ],
-      "note": "下唇下拉（附加）"
+      "note": "下唇下压",
+      "sub": [
+        {
+          "s": "jawOpen",
+          "k": 0.45
+        },
+        {
+          "sum": [
+            {
+              "s": "stretch.L",
+              "k": 0.25
+            },
+            {
+              "s": "stretch.R",
+              "k": 0.25
+            }
+          ]
+        }
+      ]
     }
   ]
 }
