@@ -189,7 +189,10 @@ function S.read(h, P, inv_full, diagnostic)
                 end
                 -- 2. If mesh didn't have it (mod mesh!), read from Virtual 96 FACS bus!
                 if not finite(v) then
-                    v = VirtualFACS.get(tap.name)
+                    local vf_val = VirtualFACS.get(tap.name)
+                    if vf_val and vf_val > 0.001 then
+                        v = vf_val
+                    end
                 end
                 state = finite(v) and "ok" or "read_failed"
             end
