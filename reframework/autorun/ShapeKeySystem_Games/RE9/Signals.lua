@@ -9,6 +9,7 @@ local Motion = require("ShapeKeySystem_Games.RE9.Motion")
 local Names = require("ShapeKeySystem_Core.Names")
 local Vowels = require('ShapeKeySystem_Games.RE9.Vowels')
 local Eyes = require('ShapeKeySystem_Games.RE9.Eyes')
+local VirtualFACS = require("ShapeKeySystem_Games.RE9.VirtualFACS")
 local S = {}
 local labels = {"eyeBlinkLeft", "eyeBlinkRight", "jawOpen"}
 local keys = {eyeBlinkLeft = 1, eyeBlinkRight = 2, jawOpen = 3}
@@ -148,6 +149,9 @@ function S.bind(face, requested, mode)
 end
 
 function S.read(h, P, inv_full, diagnostic)
+    if not h or type(h) ~= "table" or not h.keys then return {}, {} end
+    P = P or {}
+    inv_full = inv_full or 1
     local head = R.find()
     local valid = head and h.identity ~= nil and head.identity == h.identity
     local hashes = valid and R.call(head.mesh, "get_ChannelNameHash")
@@ -169,6 +173,10 @@ function S.read(h, P, inv_full, diagnostic)
         return Motion.read(motion_context,term.bone,term.motion_neutral,detail,
             term.kind=='pos'and term.motion_neutral_position or nil)
     end
+    -- Evaluate the 96 Native FACS table using open_motion
+    if valid then
+        pcall(VirtualFACS.evaluate, head, open_motion())
+    end
     h.sources, h.measurements, h.bone_status, h.bone_joints = {}, {}, {}, {}
     for _, key in ipairs(h.keys) do
         local label, value, available = labels[key], 0, false
@@ -180,9 +188,12 @@ function S.read(h, P, inv_full, diagnostic)
                 if type(index) == "number" and index < head.count and Hash.hash_at(hashes, index, true) == tap.hash then
                     v = R.call(head.mesh, "getBlendShapeChannelWeightParam(System.UInt64)", index)
                 end
-                -- 2. If mesh didn't have it (mod mesh!), read directly from Motion FACS deforms!
-                if not finite(v) and open_motion() then
-                    v = Motion.deform_value(motion_context, tap.hash)
+                -- 2. If mesh didn't have it (mod mesh!), read from Virtual 96 FACS bus!
+                if not finite(v) then
+                    local vf_val = VirtualFACS.get(tap.name)
+                    if vf_val and vf_val > 0.001 then
+                        v = vf_val
+                    end
                 end
                 state = finite(v) and "ok" or "read_failed"
             end

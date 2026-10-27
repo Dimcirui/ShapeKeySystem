@@ -94,13 +94,13 @@
     },
     {
       "name": "smileMinor.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthSmileLeft",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "smileMinor.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthSmileRight",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "smile.L",
@@ -114,13 +114,13 @@
     },
     {
       "name": "dimple.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthDimpleLeft",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "dimple.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthDimpleRight",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "stretch.L",
@@ -164,13 +164,13 @@
     },
     {
       "name": "press.L",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthPressLeft",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "press.R",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthPressRight",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "mouthMove.left",
@@ -209,13 +209,13 @@
     },
     {
       "name": "upperLipRoll",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthRollUpper",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "lowerLipRoll",
-      "raw": null,
-      "note": "本游戏尚未接入该信号"
+      "raw": "mouthRollLower",
+      "note": "RE9 原生 FACS 直接通道映射"
     },
     {
       "name": "puff.L",
@@ -821,6 +821,486 @@
       "name": "re9.native.UprLpRs_05_R",
       "raw": "re9.native.UprLpRs_05_R",
       "note": "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD"
+    },
+    {
+      "name": "Strtch_04_L",
+      "raw": "re9.native.Strtch_04_L",
+      "note": "RE9 原生形态键：嘴唇拉伸04左"
+    },
+    {
+      "name": "Strtch_04_R",
+      "raw": "re9.native.Strtch_04_R",
+      "note": "RE9 原生形态键：嘴唇拉伸04右"
+    },
+    {
+      "name": "Pkr_03_L",
+      "raw": "re9.native.Pkr_03_L",
+      "note": "RE9 原生形态键：嘟嘴03左(发音U)"
+    },
+    {
+      "name": "Pkr_03_R",
+      "raw": "re9.native.Pkr_03_R",
+      "note": "RE9 原生形态键：嘟嘴03右(发音U)"
+    },
+    {
+      "name": "JwOpn_00_L",
+      "raw": "re9.native.JwOpn_00_L",
+      "note": "RE9 原生形态键：下颚张开左(张嘴/发音A)"
+    },
+    {
+      "name": "JwOpn_00_R",
+      "raw": "re9.native.JwOpn_00_R",
+      "note": "RE9 原生形态键：下颚张开右(张嘴/发音A)"
+    },
+    {
+      "name": "LpRolIn_04_L",
+      "raw": "re9.native.LpRolIn_04_L",
+      "note": "RE9 原生形态键：上唇内卷04左"
+    },
+    {
+      "name": "LpRolIn_04_R",
+      "raw": "re9.native.LpRolIn_04_R",
+      "note": "RE9 原生形态键：上唇内卷04右"
+    },
+    {
+      "name": "CrnPl_04_L",
+      "raw": "re9.native.CrnPl_04_L",
+      "note": "RE9 原生形态键：微笑嘴角上提04左"
+    },
+    {
+      "name": "CrnPl_04_R",
+      "raw": "re9.native.CrnPl_04_R",
+      "note": "RE9 原生形态键：微笑嘴角上提04右"
+    },
+    {
+      "name": "CrnPl_09_L",
+      "raw": "re9.native.CrnPl_09_L",
+      "note": "RE9 原生形态键：嘴角平提09左"
+    },
+    {
+      "name": "CrnPl_09_R",
+      "raw": "re9.native.CrnPl_09_R",
+      "note": "RE9 原生形态键：嘴角平提09右"
+    },
+    {
+      "name": "Sqnt_06_L",
+      "raw": "re9.native.Sqnt_06_L",
+      "note": "RE9 原生形态键：闭眼06左(眨眼/闭眼)"
+    },
+    {
+      "name": "Sqnt_06_R",
+      "raw": "re9.native.Sqnt_06_R",
+      "note": "RE9 原生形态键：闭眼06右(眨眼/闭眼)"
+    },
+    {
+      "name": "UprLdDn_05_L",
+      "raw": "re9.native.UprLdDn_05_L",
+      "note": "RE9 原生形态键：上眼睑闭合05左"
+    },
+    {
+      "name": "UprLdDn_05_R",
+      "raw": "re9.native.UprLdDn_05_R",
+      "note": "RE9 原生形态键：上眼睑闭合05右"
+    },
+    {
+      "name": "CrnPl_01_L",
+      "raw": "re9.native.CrnPl_01_L",
+      "note": "RE9 原生形态键：嘴角平拉01左"
+    },
+    {
+      "name": "CrnPl_01_R",
+      "raw": "re9.native.CrnPl_01_R",
+      "note": "RE9 原生形态键：嘴角平拉01右"
+    },
+    {
+      "name": "CrnPl_05_L",
+      "raw": "re9.native.CrnPl_05_L",
+      "note": "RE9 原生形态键：嘴角上提05左(酒窝)"
+    },
+    {
+      "name": "CrnPl_05_R",
+      "raw": "re9.native.CrnPl_05_R",
+      "note": "RE9 原生形态键：嘴角上提05右(酒窝)"
+    },
+    {
+      "name": "NekTns_L",
+      "raw": "re9.native.NekTns_L",
+      "note": "RE9 原生形态键：颈部紧绷左"
+    },
+    {
+      "name": "NekTns_R",
+      "raw": "re9.native.NekTns_R",
+      "note": "RE9 原生形态键：颈部紧绷右"
+    },
+    {
+      "name": "ChnRs_04_L",
+      "raw": "re9.native.ChnRs_04_L",
+      "note": "RE9 原生形态键：下巴抬起左"
+    },
+    {
+      "name": "ChnRs_04_R",
+      "raw": "re9.native.ChnRs_04_R",
+      "note": "RE9 原生形态键：下巴抬起右"
+    },
+    {
+      "name": "Strtch_03_L",
+      "raw": "re9.native.Strtch_03_L",
+      "note": "RE9 原生形态键：嘴唇拉伸03左"
+    },
+    {
+      "name": "Strtch_03_R",
+      "raw": "re9.native.Strtch_03_R",
+      "note": "RE9 原生形态键：嘴唇拉伸03右"
+    },
+    {
+      "name": "Strtch_08_L",
+      "raw": "re9.native.Strtch_08_L",
+      "note": "RE9 原生形态键：嘴唇拉伸08左"
+    },
+    {
+      "name": "Strtch_08_R",
+      "raw": "re9.native.Strtch_08_R",
+      "note": "RE9 原生形态键：嘴唇拉伸08右"
+    },
+    {
+      "name": "Pkr_01_L",
+      "raw": "re9.native.Pkr_01_L",
+      "note": "RE9 原生形态键：嘟嘴01左"
+    },
+    {
+      "name": "Pkr_01_R",
+      "raw": "re9.native.Pkr_01_R",
+      "note": "RE9 原生形态键：嘟嘴01右"
+    },
+    {
+      "name": "Pkr_02_L",
+      "raw": "re9.native.Pkr_02_L",
+      "note": "RE9 原生形态键：嘟嘴02左"
+    },
+    {
+      "name": "Pkr_02_R",
+      "raw": "re9.native.Pkr_02_R",
+      "note": "RE9 原生形态键：嘟嘴02右"
+    },
+    {
+      "name": "NosWrnkl_03_L",
+      "raw": "re9.native.NosWrnkl_03_L",
+      "note": "RE9 原生形态键：皱鼻03左"
+    },
+    {
+      "name": "NosWrnkl_03_R",
+      "raw": "re9.native.NosWrnkl_03_R",
+      "note": "RE9 原生形态键：皱鼻03右"
+    },
+    {
+      "name": "NosWrnkl_04_L",
+      "raw": "re9.native.NosWrnkl_04_L",
+      "note": "RE9 原生形态键：皱鼻04左"
+    },
+    {
+      "name": "NosWrnkl_04_R",
+      "raw": "re9.native.NosWrnkl_04_R",
+      "note": "RE9 原生形态键：皱鼻04右"
+    },
+    {
+      "name": "NosWrnkl_05_L",
+      "raw": "re9.native.NosWrnkl_05_L",
+      "note": "RE9 原生形态键：皱鼻05左"
+    },
+    {
+      "name": "NosWrnkl_05_R",
+      "raw": "re9.native.NosWrnkl_05_R",
+      "note": "RE9 原生形态键：皱鼻05右"
+    },
+    {
+      "name": "BrInDn_00_L",
+      "raw": "re9.native.BrInDn_00_L",
+      "note": "RE9 原生形态键：眉头下压/皱眉左"
+    },
+    {
+      "name": "BrInDn_00_R",
+      "raw": "re9.native.BrInDn_00_R",
+      "note": "RE9 原生形态键：眉头下压/皱眉右"
+    },
+    {
+      "name": "BrInRs_00_L",
+      "raw": "re9.native.BrInRs_00_L",
+      "note": "RE9 原生形态键：眉头挑起左(困惑)"
+    },
+    {
+      "name": "BrInRs_00_R",
+      "raw": "re9.native.BrInRs_00_R",
+      "note": "RE9 原生形态键：眉头挑起右(困惑)"
+    },
+    {
+      "name": "BrOutRs_00_L",
+      "raw": "re9.native.BrOutRs_00_L",
+      "note": "RE9 原生形态键：眉梢上提左(惊讶)"
+    },
+    {
+      "name": "BrOutRs_00_R",
+      "raw": "re9.native.BrOutRs_00_R",
+      "note": "RE9 原生形态键：眉梢上提右(惊讶)"
+    },
+    {
+      "name": "BrLr_00_L",
+      "raw": "re9.native.BrLr_00_L",
+      "note": "RE9 原生形态键：整眉压低左"
+    },
+    {
+      "name": "BrLr_00_R",
+      "raw": "re9.native.BrLr_00_R",
+      "note": "RE9 原生形态键：整眉压低右"
+    },
+    {
+      "name": "LdTight_05_L",
+      "raw": "re9.native.LdTight_05_L",
+      "note": "RE9 原生形态键：下眼睑绷紧05左"
+    },
+    {
+      "name": "LdTight_05_R",
+      "raw": "re9.native.LdTight_05_R",
+      "note": "RE9 原生形态键：下眼睑绷紧05右"
+    },
+    {
+      "name": "Sqnt_03_L",
+      "raw": "re9.native.Sqnt_03_L",
+      "note": "RE9 原生形态键：眯眼03左"
+    },
+    {
+      "name": "Sqnt_03_R",
+      "raw": "re9.native.Sqnt_03_R",
+      "note": "RE9 原生形态键：眯眼03右"
+    },
+    {
+      "name": "LpRolIn_05_L",
+      "raw": "re9.native.LpRolIn_05_L",
+      "note": "RE9 原生形态键：下唇内卷05左"
+    },
+    {
+      "name": "LpRolIn_05_R",
+      "raw": "re9.native.LpRolIn_05_R",
+      "note": "RE9 原生形态键：下唇内卷05右"
+    },
+    {
+      "name": "UprLdDn_00_L",
+      "raw": "re9.native.UprLdDn_00_L",
+      "note": "RE9 原生形态键：上眼睑下垂00左"
+    },
+    {
+      "name": "UprLdDn_00_R",
+      "raw": "re9.native.UprLdDn_00_R",
+      "note": "RE9 原生形态键：上眼睑下垂00右"
+    },
+    {
+      "name": "UprLdDn_01_L",
+      "raw": "re9.native.UprLdDn_01_L",
+      "note": "RE9 原生形态键：上眼睑下垂01左"
+    },
+    {
+      "name": "UprLdDn_01_R",
+      "raw": "re9.native.UprLdDn_01_R",
+      "note": "RE9 原生形态键：上眼睑下垂01右"
+    },
+    {
+      "name": "UprLdDn_03_L",
+      "raw": "re9.native.UprLdDn_03_L",
+      "note": "RE9 原生形态键：上眼睑下垂03左"
+    },
+    {
+      "name": "UprLdDn_03_R",
+      "raw": "re9.native.UprLdDn_03_R",
+      "note": "RE9 原生形态键：上眼睑下垂03右"
+    },
+    {
+      "name": "MouthR_05_L",
+      "raw": "re9.native.MouthR_05_L",
+      "note": "RE9 原生形态键：嘴角右偏05左侧"
+    },
+    {
+      "name": "MouthR_05_R",
+      "raw": "re9.native.MouthR_05_R",
+      "note": "RE9 原生形态键：嘴角右偏05右侧"
+    },
+    {
+      "name": "MouthL_05_L",
+      "raw": "re9.native.MouthL_05_L",
+      "note": "RE9 原生形态键：嘴角左偏05左侧"
+    },
+    {
+      "name": "MouthL_05_R",
+      "raw": "re9.native.MouthL_05_R",
+      "note": "RE9 原生形态键：嘴角左偏05右侧"
+    },
+    {
+      "name": "UprLpRs_01_L",
+      "raw": "re9.native.UprLpRs_01_L",
+      "note": "RE9 原生形态键：上唇抬起01左"
+    },
+    {
+      "name": "UprLpRs_01_R",
+      "raw": "re9.native.UprLpRs_01_R",
+      "note": "RE9 原生形态键：上唇抬起01右"
+    },
+    {
+      "name": "UprLpRs_04_L",
+      "raw": "re9.native.UprLpRs_04_L",
+      "note": "RE9 原生形态键：上唇抬起04左"
+    },
+    {
+      "name": "UprLpRs_04_R",
+      "raw": "re9.native.UprLpRs_04_R",
+      "note": "RE9 原生形态键：上唇抬起04右"
+    },
+    {
+      "name": "UprLpRs_05_L",
+      "raw": "re9.native.UprLpRs_05_L",
+      "note": "RE9 原生形态键：上唇鼻侧抬高05左"
+    },
+    {
+      "name": "UprLpRs_05_R",
+      "raw": "re9.native.UprLpRs_05_R",
+      "note": "RE9 原生形态键：上唇鼻侧抬高05右"
+    },
+    {
+      "name": "Fnl_04_L",
+      "raw": "re9.native.Fnl_04_L",
+      "note": "RE9 原生形态键：漏斗状张嘴04左"
+    },
+    {
+      "name": "Fnl_04_R",
+      "raw": "re9.native.Fnl_04_R",
+      "note": "RE9 原生形态键：漏斗状张嘴04右"
+    },
+    {
+      "name": "CrnDprs_00_L",
+      "raw": "re9.native.CrnDprs_00_L",
+      "note": "RE9 原生形态键：嘴角下压00左(悲伤)"
+    },
+    {
+      "name": "CrnDprs_00_R",
+      "raw": "re9.native.CrnDprs_00_R",
+      "note": "RE9 原生形态键：嘴角下压00右(悲伤)"
+    },
+    {
+      "name": "CrnDprs_01_L",
+      "raw": "re9.native.CrnDprs_01_L",
+      "note": "RE9 原生形态键：嘴角下压01左"
+    },
+    {
+      "name": "CrnDprs_01_R",
+      "raw": "re9.native.CrnDprs_01_R",
+      "note": "RE9 原生形态键：嘴角下压01右"
+    },
+    {
+      "name": "CrnDprs_02_L",
+      "raw": "re9.native.CrnDprs_02_L",
+      "note": "RE9 原生形态键：嘴角下压02左"
+    },
+    {
+      "name": "CrnDprs_02_R",
+      "raw": "re9.native.CrnDprs_02_R",
+      "note": "RE9 原生形态键：嘴角下压02右"
+    },
+    {
+      "name": "LwrLpDprs_00_L",
+      "raw": "mouthLowerDownLeft",
+      "note": "RE9 原生形态键：下唇下拉00左"
+    },
+    {
+      "name": "LwrLpDprs_00_R",
+      "raw": "mouthLowerDownRight",
+      "note": "RE9 原生形态键：下唇下拉00右"
+    },
+    {
+      "name": "LwrLpDprs_03_L",
+      "raw": "mouthLowerDownLeft",
+      "note": "RE9 原生形态键：下唇下拉03左"
+    },
+    {
+      "name": "LwrLpDprs_03_R",
+      "raw": "mouthLowerDownRight",
+      "note": "RE9 原生形态键：下唇下拉03右"
+    },
+    {
+      "name": "LpPush_00_L",
+      "raw": "mouthPucker",
+      "note": "RE9 原生形态键：嘴唇前突00左"
+    },
+    {
+      "name": "LpPush_00_R",
+      "raw": "mouthPucker",
+      "note": "RE9 原生形态键：嘴唇前突00右"
+    },
+    {
+      "name": "LpPush_01_L",
+      "raw": "mouthPucker",
+      "note": "RE9 原生形态键：嘴唇前突01左"
+    },
+    {
+      "name": "LpPush_01_R",
+      "raw": "mouthPucker",
+      "note": "RE9 原生形态键：嘴唇前突01右"
+    },
+    {
+      "name": "MouthW_00_L",
+      "raw": "mouthStretchLeft",
+      "note": "RE9 原生形态键：嘴角向外展宽00左"
+    },
+    {
+      "name": "MouthW_00_R",
+      "raw": "mouthStretchRight",
+      "note": "RE9 原生形态键：嘴角向外展宽00右"
+    },
+    {
+      "name": "MouthW_01_L",
+      "raw": "mouthStretchLeft",
+      "note": "RE9 原生形态键：嘴角向外展宽01左"
+    },
+    {
+      "name": "MouthW_01_R",
+      "raw": "mouthStretchRight",
+      "note": "RE9 原生形态键：嘴角向外展宽01右"
+    },
+    {
+      "name": "LpBit_TL",
+      "raw": "re9.native.LpBit_TL",
+      "note": "RE9 原生形态键：咬左上唇"
+    },
+    {
+      "name": "LpBit_TR",
+      "raw": "re9.native.LpBit_TR",
+      "note": "RE9 原生形态键：咬右上唇"
+    },
+    {
+      "name": "LpBit_BL",
+      "raw": "re9.native.LpBit_BL",
+      "note": "RE9 原生形态键：咬左下唇"
+    },
+    {
+      "name": "LpBit_BR",
+      "raw": "re9.native.LpBit_BR",
+      "note": "RE9 原生形态键：咬右下唇"
+    },
+    {
+      "name": "Pkr_Fnl_TL",
+      "raw": "re9.native.Pkr_Fnl_TL",
+      "note": "RE9 原生形态键：嘟嘴漏斗左上"
+    },
+    {
+      "name": "Pkr_Fnl_TR",
+      "raw": "re9.native.Pkr_Fnl_TR",
+      "note": "RE9 原生形态键：嘟嘴漏斗右上"
+    },
+    {
+      "name": "Pkr_Fnl_BL",
+      "raw": "re9.native.Pkr_Fnl_BL",
+      "note": "RE9 原生形态键：嘟嘴漏斗左下"
+    },
+    {
+      "name": "Pkr_Fnl_BR",
+      "raw": "re9.native.Pkr_Fnl_BR",
+      "note": "RE9 原生形态键：嘟嘴漏斗右下"
     }
   ]
 }

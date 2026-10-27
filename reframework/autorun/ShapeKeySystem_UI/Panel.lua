@@ -20,6 +20,7 @@ local SKS
 local PAGES = {
     { key = "basic",   name = "表情",     mod = "ShapeKeySystem_UI.PageBasic" },
     { key = "sculpt",  name = "捏脸",     mod = "ShapeKeySystem_UI.PageSculpt" },
+    { key = "native96", name = "96条原生Deform", mod = "ShapeKeySystem_UI.PageNative96", adv = false },
     { key = "expr",    name = "表情详情", mod = "ShapeKeySystem_UI.PageExpression", adv = true },
     { key = "cond",    name = "条件规则", mod = "ShapeKeySystem_UI.PageConditions", adv = true },
     { key = "mocap",   name = "面捕",     mod = "ShapeKeySystem_UI.PageMocap",      adv = true },

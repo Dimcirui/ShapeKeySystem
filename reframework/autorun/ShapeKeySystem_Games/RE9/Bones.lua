@@ -70,6 +70,45 @@ local function position(value)
     local ok,p=pcall(function()return {value.x,value.y,value.z}end)
     if ok and #p==3 and finite(p[1])and finite(p[2])and finite(p[3])then return p end
 end
+
+-- Joint handle and static base pose cache keyed by head face identity
+local joint_cache = {}
+local cached_face_identity = nil
+
+local function get_bone_info(head, bone_name, omitted)
+    if omitted and omitted[bone_name] then return nil, 'omitted' end
+    local face = head and head.face
+    local face_id = face and R.address(face) or "nil"
+    if face_id ~= cached_face_identity then
+        joint_cache = {}
+        cached_face_identity = face_id
+    end
+    local cached = joint_cache[bone_name]
+    if cached == nil then
+        local joint = face and R.call(face, 'getJointByName(System.String)', bone_name)
+        if not joint and head and head.root then
+            joint = R.call(head.root, 'getJointByName(System.String)', bone_name)
+        end
+        if joint and R.call(joint, 'get_Name') == bone_name then
+            local base_rot = quaternion(R.call(joint, 'get_BaseLocalRotation'))
+            local base_pos = position(R.call(joint, 'get_BaseLocalPosition'))
+            cached = {
+                joint = joint,
+                base_rotation = base_rot,
+                base_position = base_pos,
+                neutral_rotation = base_rot and {0, 0, 0, base_rot[1], base_rot[2], base_rot[3], base_rot[4]} or nil
+            }
+        else
+            cached = false
+        end
+        joint_cache[bone_name] = cached
+    end
+    if not cached then
+        return nil, 'joint_unavailable:' .. bone_name
+    end
+    return cached
+end
+
 function M.evaluate(head, rule, diagnostic, fallback, omitted, frame)
     local value, joints, used_motion = 0, {}, false
     frame=frame or {}
@@ -80,18 +119,21 @@ function M.evaluate(head, rule, diagnostic, fallback, omitted, frame)
         local pose=entry and entry.pose
         if entry and not pose then return nil,nil,entry.state end
         if not pose then
-            local joint = not(omitted and omitted[term.bone])and R.call(head.face,'getJointByName(System.String)',term.bone)or nil
+            local binfo, err = get_bone_info(head, term.bone, omitted)
             local state
-            if not joint or R.call(joint,'get_Name()')~=term.bone then state='joint_unavailable:'..term.bone
+            if not binfo then
+                state = err or ('joint_unavailable:' .. term.bone)
             else
                 pose = {source='bones'}
+                local joint = binfo.joint
+                pose.base_rotation = binfo.base_rotation
+                pose.base_position = binfo.base_position
+                pose.neutral_rotation = binfo.neutral_rotation
                 if kind=='rot'or diagnostic then
-                    pose.base_rotation=quaternion(R.call(joint,'get_BaseLocalRotation()'))
-                    pose.rotation=quaternion(R.call(joint,'get_LocalRotation()'))
+                    pose.rotation=quaternion(R.call(joint,'get_LocalRotation'))
                 end
                 if kind=='pos'or diagnostic then
-                    pose.position=position(R.call(joint,'get_LocalPosition()'))
-                    pose.base_position=position(R.call(joint,'get_BaseLocalPosition()'))
+                    pose.position=position(R.call(joint,'get_LocalPosition'))
                 end
                 if kind=='rot'and not(pose.base_rotation and pose.rotation)
                     or kind=='pos'and not(pose.base_position and pose.position)then
@@ -100,7 +142,7 @@ function M.evaluate(head, rule, diagnostic, fallback, omitted, frame)
             end
             if not pose and fallback then pose,state=fallback(term,diagnostic)end
             frame[cache_key]={pose=pose,state=state}
-            if not pose then return nil,nil,state or'pose_unavailable:'..term.bone end
+            if not pose then return nil,nil,state or('pose_unavailable:'..term.bone) end
         end
         used_motion=used_motion or pose.source=='motion'
         joints[term.bone] = pose
@@ -110,7 +152,8 @@ function M.evaluate(head, rule, diagnostic, fallback, omitted, frame)
             v=B.measure({kind='pos',axis=term.axis,neutral=pose.base_position},
                 p and {x=p[1],y=p[2],z=p[3]})
         else
-            v=B.measure({kind='rot',axis=term.axis,neutral={0,0,0,table.unpack(pose.base_rotation)}},
+            local neutral = pose.neutral_rotation or (pose.base_rotation and {0,0,0,table.unpack(pose.base_rotation)})
+            v=B.measure({kind='rot',axis=term.axis,neutral=neutral},
                 nil,q and {x=q[1],y=q[2],z=q[3],w=q[4]})
         end
         if not finite(v) then return nil, nil, 'measurement_failed:'..term.bone end

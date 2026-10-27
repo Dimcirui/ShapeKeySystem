@@ -8,6 +8,7 @@ local Input = require("ShapeKeySystem_Games.RE9.Input")
 local Eyes = require('ShapeKeySystem_Games.RE9.Eyes')
 local A = {id = "re9", name = "Resident Evil Requiem", strict_bounds = true, hash_names = true,
     hash_item_only = true, rewrite_active_weights = true, scene_search = false, scoped_bindings = true,
+    stable_frames = 2,
     terms = {primary = "里昂", part = "部位"}, raw = Signals.raw, read = Signals.read,
     channel_writable = Signals.writable, native_snapshot = Signals.snapshot, input = Input}
 function A.primary_root() return R.root() end
@@ -30,36 +31,45 @@ end
 function A.representative_of(part) return A.model_of(part) end
 A.model_names = "character_names.json"
 A.slot_names = {["10"] = "头部"}
-function A.eye_joints(face)return Eyes.bind(face)end
+function A.eye_joints(face) return Eyes.bind(face) end
 function A.eye_angles(handle)
-    local yaw,pitch=Eyes.angles(handle)
-    if yaw~=nil then return yaw,pitch end
-    local api=package.loaded['ShapeKeySystem_Core.API']
-    local state=api and api.state
-    local side=type(handle)=='table'and handle.side
-    local neutral=state and state.eyes and state.eyes.neutral and state.eyes.neutral[side]
-    return neutral and neutral.yaw or 0,neutral and neutral.pitch or 0
+    local yaw, pitch = Eyes.angles(handle)
+    if yaw ~= nil then return yaw, pitch end
+    local api = package.loaded['ShapeKeySystem_Core.API']
+    local state = api and api.state
+    local side = type(handle) == 'table' and handle.side
+    local neutral = state and state.eyes and state.eyes.neutral and state.eyes.neutral[side]
+    return neutral and neutral.yaw or 0, neutral and neutral.pitch or 0
 end
 function A.bind(face, keys) return Signals.bind(face, keys) end
 function A.signature(root)
     local h = R.find(root)
     return h and h.identity or "RE9 head unavailable"
 end
-function A.gate()
+function A.gate(_, cutscene_drive)
     if R.find() then return true end
-    return false, "里昂主头部权重缓存未就绪", "setup"
+    if R.root() then return true end
+    if R.is_in_cg_debounced() then
+        return true -- In CG cutscenes, keep game stable, never drop into [menu]!
+    end
+    return false, "里昂主角色未就绪", "setup"
 end
 function A.init()
     local ok, why = R.init()
     if not ok then return false, why end
+    local ok_g, Guard = pcall(require, "ShapeKeySystem_Core.Guard")
+    if ok_g and Guard then
+        Guard.STABLE_FRAMES = 2
+        Guard.SETTLE_FRAMES = 2
+    end
     local loaded, data = pcall(json.load_file, "ShapeKeySystem/builtin/re9/leon.json")
     if not loaded then return false, "RE9 原生通道表无法读取" end
-    local read,setting=pcall(json.load_file,'ShapeKeySystem/user/re9_input.json')
-    if not read or setting~=nil and(type(setting)~='table'or setting.schema~='sks.re9-input/1'
-        or setting.mode~='legacy'and setting.mode~='bones_first'and setting.mode~='native_first'
-        or setting.extended~=nil and type(setting.extended)~='boolean')then return false,'RE9 输入模式无效'end
-    local mode=setting and setting.mode or'legacy'
-    local extended=setting==nil or setting.extended==true
-    return Signals.configure(data,mode,extended)
+    local read, setting = pcall(json.load_file, 'ShapeKeySystem/user/re9_input.json')
+    if not read or setting ~= nil and (type(setting) ~= 'table' or setting.schema ~= 'sks.re9-input/1'
+        or setting.mode ~= 'legacy' and setting.mode ~= 'bones_first' and setting.mode ~= 'native_first'
+        or setting.extended ~= nil and type(setting.extended) ~= 'boolean') then return false, 'RE9 输入模式无效' end
+    local mode = setting and setting.mode or 'legacy'
+    local extended = setting == nil or setting.extended == true
+    return Signals.configure(data, mode, extended)
 end
 return A

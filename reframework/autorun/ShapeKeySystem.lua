@@ -69,12 +69,14 @@ end
 
 re.on_draw_ui(DebugUI.draw)
 re.on_frame(function()
-    D.set_backend(D.pick(SKS.state.settings.ui_backend))
-    local ok, err = pcall(Panel.frame)
-    if not ok then SKS.log("panel frame error: %s", tostring(err)) end
-    draw_panel("imgui")
-    Panel.draw_inputs()
-    DebugUI.end_frame(Panel.ui_open())
+    pcall(function()
+        D.set_backend(D.pick(SKS.state.settings.ui_backend))
+        local ok, err = pcall(Panel.frame)
+        if not ok then SKS.log("panel frame error: %s", tostring(err)) end
+        pcall(draw_panel, "imgui")
+        pcall(Panel.draw_inputs)
+        pcall(DebugUI.end_frame, Panel.ui_open())
+    end)
 end)
 re.on_script_reset(function()
     pcall(Panel.set_open, false)

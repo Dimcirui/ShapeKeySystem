@@ -40,8 +40,18 @@ local function resolve(head)
         return len > 0
     end
 
+    -- Resolve official PlayerFacialAnimationDriver._FacialMotion
+    local facial_driver = nil
+    if root_go then
+        facial_driver = R.component(root_go, sdk.typeof('app.PlayerFacialAnimationDriver'))
+            or R.component(root_go, sdk.typeof('app.CharacterFacialAnimationDriver'))
+    end
+    local facial_motion = facial_driver and facial_driver:get_field('_FacialMotion')
+
     local deform_motion = motion
-    if has_deforms(face_motion) then
+    if has_deforms(facial_motion) then
+        deform_motion = facial_motion
+    elseif has_deforms(face_motion) then
         deform_motion = face_motion
     elseif has_deforms(root_motion) then
         deform_motion = root_motion
@@ -83,6 +93,22 @@ local function index_of(c,name)
         cache.indices[name]=R.integer(index,c.count-1)and index or false
     end
     if R.integer(index,c.count-1)then return index end
+end
+
+-- Read native RE9 FACS Deform track directly by 0-based channel index
+function M.deform_by_index(c, index)
+    if not c or type(index) ~= "number" then return nil end
+    local dm = c.deform_motion or c.motion
+    if not dm then return nil end
+    if not c.deform_values then
+        c.deform_values = R.call(dm, "get_DeformValues")
+    end
+    if not c.deform_values then return nil end
+    local val = R.call(c.deform_values, "get_Item", index)
+    if type(val) == "number" and val == val and math.abs(val) < math.huge then
+        return val
+    end
+    return nil
 end
 
 -- Read native RE9 FACS Deform track evaluated on via.motion.Motion

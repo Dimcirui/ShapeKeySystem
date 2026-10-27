@@ -5,61 +5,755 @@
   "description": "PMX 模型的通用表情（保下限）：上眼皮、嘴角、张嘴、横拉、收窄、眉。每个通道按 any 列表找 mesh 上第一个存在的名字；全角/半角、大小写、空格不区分。选错的键可以另存一份 extends mmd 的配置，改 any 顺序后绑定到这个部件。",
   "aliases": [],
   "channels": [
-    { "name": "ウィンク２", "group": "eye", "s": "blink.L",
-      "any": ["ウインク２", "ウィンク２左", "ウィンク左２", "ウィンク", "ウインク", "ウィンク左", "wink2", "wink"],
-      "note": "左眼闭眼（模型自己的左侧）。没有 ウィンク２ 时用 ウィンク（部分模型是笑眼形状，仍然会闭眼）" },
-    { "name": "ｳｨﾝｸ２右", "group": "eye", "s": "blink.R",
-      "any": ["ウインク２右", "ウィンク右２", "ウインク右２", "ウィンク２R", "ウィンク右", "ウインク右", "wink2_r", "wink_r"],
-      "note": "右眼闭眼" },
-    { "name": "まばたき", "group": "eye", "sum": [ { "s": "blink.L", "k": 0.5 }, { "s": "blink.R", "k": 0.5 } ],
-      "any": ["瞬き", "blink", "眨眼", "闭眼", "目閉じ"],
-      "unless": ["ウィンク２", "ｳｨﾝｸ２右"],
-      "note": "双眼闭眼，只在没有左右 wink 键时使用" },
-    { "name": "びっくり", "group": "eye", "sum": [ { "s": "eyeWide.L", "k": 0.5 }, { "s": "eyeWide.R", "k": 0.5 } ],
-      "any": ["見開き", "驚き", "surprised"],
-      "note": "睁大眼" },
-    { "name": "じと目", "group": "eye",
-      "mul": [ { "sum": [ { "s": "eyeSquint.L", "k": 0.5 }, { "s": "eyeSquint.R", "k": 0.5 } ] },
-               { "sub": [ { "const": 1 }, { "sum": [ { "s": "blink.L", "k": 0.5 }, { "s": "blink.R", "k": 0.5 } ] } ] } ],
-      "any": ["ジト目", "半目"],
-      "note": "上眼皮半闭；闭眼时自动减弱，避免和闭眼叠加压穿" },
-    { "name": "下瞼上げ", "group": "eye",
-      "mul": [ { "sum": [ { "s": "cheekSquint.L", "k": 0.5 }, { "s": "cheekSquint.R", "k": 0.5 } ] },
-               { "sub": [ { "const": 1 }, { "sum": [ { "s": "blink.L", "k": 0.5 }, { "s": "blink.R", "k": 0.5 } ] } ] } ],
-      "any": ["下眼上", "下まつ毛上げ", "下まぶた上げ", "下眼睑上"],
-      "note": "下眼皮上抬（附加，多数模型没有）" },
-
-    { "name": "あ", "group": "mouth", "s": "jawOpen", "any": ["ア"], "note": "张嘴" },
-    { "name": "う", "group": "mouth", "sum": [ { "s": "funnel.L", "k": 0.5 }, { "s": "funnel.R", "k": 0.5 } ],
-      "any": ["ウ"], "note": "嘟嘴" },
-    { "name": "口角上げ", "group": "mouth", "max": [ { "s": "smile.L" }, { "s": "smile.R" } ],
-      "any": ["口角上", "にこり口", "微笑", "にやり"],
-      "unless": ["口角上げ左", "口角上げ右"],
-      "note": "嘴角上扬（对称键，没有左右版时使用）" },
-    { "name": "口角上げ左", "group": "mouth", "s": "smile.L", "any": ["口角上左", "左口角上げ"] },
-    { "name": "口角上げ右", "group": "mouth", "s": "smile.R", "any": ["口角上右", "右口角上げ"] },
-    { "name": "口角下げ", "group": "mouth", "max": [ { "s": "frown.L" }, { "s": "frown.R" } ],
-      "any": ["口角下", "への字", "∧"],
-      "unless": ["口角下げ左", "口角下げ右"],
-      "note": "嘴角下撇（对称键，没有左右版时使用）" },
-    { "name": "口角下げ左", "group": "mouth", "s": "frown.L", "any": ["口角下左", "左口角下げ"] },
-    { "name": "口角下げ右", "group": "mouth", "s": "frown.R", "any": ["口角下右", "右口角下げ"] },
-    { "name": "口横広げ", "group": "mouth", "sum": [ { "s": "stretch.L", "k": 0.5 }, { "s": "stretch.R", "k": 0.5 } ],
-      "any": ["口横広げる", "口横伸ばし", "口横広"], "note": "嘴横拉" },
-    { "name": "口横狭く", "group": "mouth", "sum": [ { "s": "funnelTogether.L", "k": 0.5 }, { "s": "funnelTogether.R", "k": 0.5 } ],
-      "any": ["口横狭め", "口横缩げ", "口横縮め", "口すぼめ", "口横狭"], "note": "嘴收窄" },
-    { "name": "口上", "group": "mouth", "sum": [ { "s": "upperLipUp.L", "k": 0.5 }, { "s": "upperLipUp.R", "k": 0.5 } ],
-      "any": ["上唇上げ"], "note": "上唇上提（附加）" },
-    { "name": "口下", "group": "mouth", "sum": [ { "s": "lowerLipDown.L", "k": 0.5 }, { "s": "lowerLipDown.R", "k": 0.5 } ],
-      "any": ["下唇下げ"], "note": "下唇下拉（附加）" },
-
-    { "name": "上", "group": "brow", "sum": [ { "s": "browOuterUp.L", "k": 0.5 }, { "s": "browOuterUp.R", "k": 0.5 } ],
-      "any": ["眉上", "眉上げ"], "note": "眉上" },
-    { "name": "下", "group": "brow", "sum": [ { "s": "browDown.L", "k": 0.5 }, { "s": "browDown.R", "k": 0.5 } ],
-      "any": ["眉下", "眉下げ", "真面目"], "note": "眉下" },
-    { "name": "困る", "group": "brow", "sum": [ { "s": "browInnerUp.L", "k": 0.5 }, { "s": "browInnerUp.R", "k": 0.5 } ],
-      "any": ["困り", "眉困り"], "note": "眉心上提" },
-    { "name": "怒り", "group": "brow", "sum": [ { "s": "browBring.L", "k": 0.5 }, { "s": "browBring.R", "k": 0.5 } ],
-      "any": ["眉怒り"], "note": "皱眉（部分模型的 怒り 也会动眼睛）" }
+    {
+      "name": "ウィンク２",
+      "group": "eye",
+      "s": "blink.L",
+      "any": [
+        "ウインク２",
+        "ウィンク２左",
+        "ウィンク左２",
+        "ウィンク",
+        "ウインク",
+        "ウィンク左",
+        "wink2",
+        "wink"
+      ],
+      "note": "左眼闭眼（模型自己的左侧）。没有 ウィンク２ 时用 ウィンク（部分模型是笑眼形状，仍然会闭眼）"
+    },
+    {
+      "name": "ｳｨﾝｸ２右",
+      "group": "eye",
+      "s": "blink.R",
+      "any": [
+        "ウインク２右",
+        "ウィンク右２",
+        "ウインク右２",
+        "ウィンク２R",
+        "ウィンク右",
+        "ウインク右",
+        "wink2_r",
+        "wink_r"
+      ],
+      "note": "右眼闭眼"
+    },
+    {
+      "name": "まばたき",
+      "group": "eye",
+      "sum": [
+        {
+          "s": "blink.L",
+          "k": 0.5
+        },
+        {
+          "s": "blink.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "瞬き",
+        "blink",
+        "眨眼",
+        "闭眼",
+        "目閉じ"
+      ],
+      "unless": [
+        "ウィンク２",
+        "ｳｨﾝｸ２右"
+      ],
+      "note": "双眼闭眼，只在没有左右 wink 键时使用"
+    },
+    {
+      "name": "びっくり",
+      "group": "eye",
+      "sum": [
+        {
+          "s": "eyeWide.L",
+          "k": 0.5
+        },
+        {
+          "s": "eyeWide.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "見開き",
+        "驚き",
+        "surprised"
+      ],
+      "note": "睁大眼"
+    },
+    {
+      "name": "じと目",
+      "group": "eye",
+      "mul": [
+        {
+          "sum": [
+            {
+              "s": "eyeSquint.L",
+              "k": 0.5
+            },
+            {
+              "s": "eyeSquint.R",
+              "k": 0.5
+            }
+          ]
+        },
+        {
+          "sub": [
+            {
+              "const": 1
+            },
+            {
+              "sum": [
+                {
+                  "s": "blink.L",
+                  "k": 0.5
+                },
+                {
+                  "s": "blink.R",
+                  "k": 0.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "any": [
+        "ジト目",
+        "半目"
+      ],
+      "note": "上眼皮半闭；闭眼时自动减弱，避免和闭眼叠加压穿"
+    },
+    {
+      "name": "下瞼上げ",
+      "group": "eye",
+      "mul": [
+        {
+          "sum": [
+            {
+              "s": "cheekSquint.L",
+              "k": 0.5
+            },
+            {
+              "s": "cheekSquint.R",
+              "k": 0.5
+            }
+          ]
+        },
+        {
+          "sub": [
+            {
+              "const": 1
+            },
+            {
+              "sum": [
+                {
+                  "s": "blink.L",
+                  "k": 0.5
+                },
+                {
+                  "s": "blink.R",
+                  "k": 0.5
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "any": [
+        "下眼上",
+        "下まつ毛上げ",
+        "下まぶた上げ",
+        "下眼睑上",
+        "眼睑上",
+        "眼睑上1"
+      ],
+      "note": "下眼皮上抬（附加，多数模型没有）"
+    },
+    {
+      "name": "あ",
+      "group": "mouth",
+      "any": [
+        "あ",
+        "あ２",
+        "あ2",
+        "あ3",
+        "あ4",
+        "あ5",
+        "あ6",
+        "あ7",
+        "あ8",
+        "あ9",
+        "あ10",
+        "あ1",
+        "ア"
+      ],
+      "note": "A元音：方案3纯原生形态键（彻底剥离下巴JwOpn，呼吸严格闭合）",
+      "max": [
+        {
+          "s": "LpBit_TL"
+        },
+        {
+          "s": "LpBit_TR"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.01,
+        "gain": 1.5
+      }
+    },
+    {
+      "name": "ワ",
+      "group": "mouth",
+      "any": [
+        "ワ",
+        "ワ1",
+        "ワ2",
+        "大口"
+      ],
+      "note": "极限大张嘴：方案3纯原生形态键（彻底剥离下巴JwOpn）",
+      "max": [
+        {
+          "s": "LpBit_TL"
+        },
+        {
+          "s": "LpBit_TR"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.5,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "い",
+      "group": "mouth",
+      "any": [
+        "い",
+        "い1",
+        "い2",
+        "い3",
+        "イ"
+      ],
+      "note": "I元音：RE9原生嘴角展宽CrnPl_05与上提CrnPl_04驱动",
+      "max": [
+        {
+          "s": "CrnPl_04_L"
+        },
+        {
+          "s": "CrnPl_04_R"
+        },
+        {
+          "s": "CrnPl_05_L"
+        },
+        {
+          "s": "CrnPl_05_R"
+        },
+        {
+          "s": "Strtch_04_L"
+        },
+        {
+          "s": "Strtch_04_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "う",
+      "group": "mouth",
+      "any": [
+        "う",
+        "う1",
+        "う2",
+        "ウ"
+      ],
+      "note": "U元音：RE9原生下唇嘟嘴Pkr_01/02驱动",
+      "max": [
+        {
+          "s": "Pkr_01_L"
+        },
+        {
+          "s": "Pkr_01_R"
+        },
+        {
+          "s": "Pkr_02_L"
+        },
+        {
+          "s": "Pkr_02_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.025,
+        "gain": 2.2
+      }
+    },
+    {
+      "name": "え",
+      "group": "mouth",
+      "any": [
+        "え",
+        "え1",
+        "え2",
+        "え3",
+        "エ"
+      ],
+      "note": "E元音：RE9原生展宽与嘴角上提",
+      "max": [
+        {
+          "s": "CrnPl_04_L"
+        },
+        {
+          "s": "CrnPl_04_R"
+        },
+        {
+          "s": "CrnPl_05_L"
+        },
+        {
+          "s": "CrnPl_05_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "お",
+      "group": "mouth",
+      "any": [
+        "お",
+        "お1",
+        "お2",
+        "お3",
+        "オ"
+      ],
+      "note": "O元音：RE9原生圆唇Pkr与卷唇LpRolIn驱动",
+      "max": [
+        {
+          "s": "Pkr_01_L"
+        },
+        {
+          "s": "Pkr_01_R"
+        },
+        {
+          "s": "LpRolIn_04_L"
+        },
+        {
+          "s": "LpRolIn_04_R"
+        },
+        {
+          "s": "LpRolIn_05_L"
+        },
+        {
+          "s": "LpRolIn_05_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.025,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "口角上げ",
+      "group": "mouth",
+      "any": [
+        "にやり２2",
+        "にやり２3",
+        "口角上げ",
+        "口角上",
+        "にやり"
+      ],
+      "unless": [
+        "にやり２",
+        "にやり２1"
+      ],
+      "note": "RE9原生形态键：双嘴角上提CrnPl_04/05",
+      "max": [
+        {
+          "s": "CrnPl_04_L"
+        },
+        {
+          "s": "CrnPl_04_R"
+        },
+        {
+          "s": "CrnPl_05_L"
+        },
+        {
+          "s": "CrnPl_05_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "口角上げ左",
+      "group": "mouth",
+      "s": "smile.L",
+      "any": [
+        "にこり左",
+        "にこり1左",
+        "にこり2左",
+        "口角上左",
+        "左口角上げ"
+      ]
+    },
+    {
+      "name": "口角上げ右",
+      "group": "mouth",
+      "s": "smile.R",
+      "any": [
+        "にこり右",
+        "にこり1右",
+        "にこり2右",
+        "口角上右",
+        "右口角上げ"
+      ]
+    },
+    {
+      "name": "口角下げ",
+      "group": "mouth",
+      "any": [
+        "口角下げ1",
+        "口角下げ",
+        "口角下げ2"
+      ],
+      "unless": [
+        "口角下げ左",
+        "口角下げ右"
+      ],
+      "note": "RE9原生形态键：嘴角下压CrnDprs_00/01/02驱动",
+      "max": [
+        {
+          "s": "CrnDprs_00_L"
+        },
+        {
+          "s": "CrnDprs_00_R"
+        },
+        {
+          "s": "CrnDprs_01_L"
+        },
+        {
+          "s": "CrnDprs_01_R"
+        },
+        {
+          "s": "CrnDprs_02_L"
+        },
+        {
+          "s": "CrnDprs_02_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.046,
+        "gain": 14.0
+      }
+    },
+    {
+      "name": "口角下げ左",
+      "group": "mouth",
+      "s": "frown.L",
+      "any": [
+        "口角下左",
+        "左口角下げ",
+        "口角下げ1左"
+      ]
+    },
+    {
+      "name": "口角下げ右",
+      "group": "mouth",
+      "s": "frown.R",
+      "any": [
+        "口角下右",
+        "右口角下げ",
+        "口角下げ1右"
+      ]
+    },
+    {
+      "name": "口横広げ",
+      "group": "mouth",
+      "any": [
+        "口横広げ",
+        "口横広げる",
+        "口横伸ばし"
+      ],
+      "note": "嘴唇纯横向展宽：RE9原生CrnPl_05与Strtch_04驱动",
+      "max": [
+        {
+          "s": "CrnPl_05_L"
+        },
+        {
+          "s": "CrnPl_05_R"
+        },
+        {
+          "s": "Strtch_04_L"
+        },
+        {
+          "s": "Strtch_04_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      },
+      "unless": [
+        "口横広げ左",
+        "口横広げ右"
+      ]
+    },
+    {
+      "name": "口横狭く",
+      "group": "mouth",
+      "any": [
+        "口横缩げ",
+        "口横狭く",
+        "口横狭め"
+      ],
+      "note": "嘴唇横向收窄：RE9原生嘴角收窄Pkr_03驱动",
+      "max": [
+        {
+          "s": "Pkr_03_L"
+        },
+        {
+          "s": "Pkr_03_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.025,
+        "gain": 2.2
+      }
+    },
+    {
+      "name": "口上",
+      "group": "mouth",
+      "any": [
+        "口上",
+        "上唇上げ"
+      ],
+      "note": "RE9原生形态键：上唇上提（排除鼻翼键UprLpRs_05，采用真实动上唇的LpBit_T与UprLpRs_01）",
+      "max": [
+        {
+          "s": "LpBit_TL"
+        },
+        {
+          "s": "LpBit_TR"
+        },
+        {
+          "s": "UprLpRs_01_L"
+        },
+        {
+          "s": "UprLpRs_01_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.005,
+        "gain": 2.0
+      }
+    },
+    {
+      "name": "口下",
+      "group": "mouth",
+      "any": [
+        "口下",
+        "下唇下げ"
+      ],
+      "note": "RE9原生形态键：下唇下拉（LpBit_B与CrnDprs_00）",
+      "max": [
+        {
+          "s": "LpBit_BL"
+        },
+        {
+          "s": "LpBit_BR"
+        },
+        {
+          "s": "CrnDprs_00_L"
+        },
+        {
+          "s": "CrnDprs_00_R"
+        }
+      ],
+      "curve": {
+        "deadzone": 0.046,
+        "gain": 14.0
+      }
+    },
+    {
+      "name": "上",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browOuterUp.L",
+          "k": 0.5
+        },
+        {
+          "s": "browOuterUp.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "眉上",
+        "眉上げ"
+      ],
+      "unless": [
+        "上左",
+        "上右"
+      ],
+      "note": "眉上（对称键）"
+    },
+    {
+      "name": "上左",
+      "group": "brow",
+      "s": "browOuterUp.L",
+      "any": [
+        "眉上左",
+        "眉左上",
+        "上左"
+      ]
+    },
+    {
+      "name": "上右",
+      "group": "brow",
+      "s": "browOuterUp.R",
+      "any": [
+        "眉上右",
+        "眉右上",
+        "上右"
+      ]
+    },
+    {
+      "name": "下",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browDown.L",
+          "k": 0.5
+        },
+        {
+          "s": "browDown.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "眉下",
+        "眉下げ",
+        "真面目"
+      ],
+      "unless": [
+        "下左",
+        "下右"
+      ],
+      "note": "眉下（对称键）"
+    },
+    {
+      "name": "下左",
+      "group": "brow",
+      "s": "browDown.L",
+      "any": [
+        "眉下左",
+        "眉左下",
+        "下左"
+      ]
+    },
+    {
+      "name": "下右",
+      "group": "brow",
+      "s": "browDown.R",
+      "any": [
+        "眉下右",
+        "眉右下",
+        "下右"
+      ]
+    },
+    {
+      "name": "困る",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browInnerUp.L",
+          "k": 0.5
+        },
+        {
+          "s": "browInnerUp.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "困り",
+        "眉困り"
+      ],
+      "unless": [
+        "困る左",
+        "困る右"
+      ],
+      "note": "眉心上提（对称键）"
+    },
+    {
+      "name": "困る左",
+      "group": "brow",
+      "s": "browInnerUp.L",
+      "any": [
+        "困る1左",
+        "困る2左",
+        "困る左",
+        "眉困り左"
+      ]
+    },
+    {
+      "name": "困る右",
+      "group": "brow",
+      "s": "browInnerUp.R",
+      "any": [
+        "困る1右",
+        "困る2右",
+        "困る右",
+        "眉困り右"
+      ]
+    },
+    {
+      "name": "怒り",
+      "group": "brow",
+      "sum": [
+        {
+          "s": "browBring.L",
+          "k": 0.5
+        },
+        {
+          "s": "browBring.R",
+          "k": 0.5
+        }
+      ],
+      "any": [
+        "眉怒り"
+      ],
+      "unless": [
+        "怒り左",
+        "怒り右"
+      ],
+      "note": "皱眉（对称键）"
+    },
+    {
+      "name": "怒り左",
+      "group": "brow",
+      "s": "browBring.L",
+      "any": [
+        "怒り1左",
+        "怒り左",
+        "眉怒り左"
+      ]
+    },
+    {
+      "name": "怒り右",
+      "group": "brow",
+      "s": "browBring.R",
+      "any": [
+        "怒り1右",
+        "怒り右",
+        "眉怒り右"
+      ]
+    }
   ]
 }
