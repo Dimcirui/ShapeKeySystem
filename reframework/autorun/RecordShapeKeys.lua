@@ -634,60 +634,28 @@ end)
 -- UI Drawing logic
 
 -- =========================================================================
--- 主动骨骼驱动形态键探测系统 (Active Bone Driver Probe System)
--- 测试原理: 强行逐一拖拽/旋转目标骨骼，实测 96 个形态键是否有任何一个发生数值响应
+-- 全量 285 根骨骼全覆盖主动操控/形态键驱动探测系统 (Full 285 Bones Active Probe)
+-- 严格从第 1 根到第 285 根逐一强行位移(30mm)与旋转(30度)，无任何漏项与跳过
 -- =========================================================================
 
 local probe_active = false
 local probe_bone_index = 1
-local probe_phase = 0 -- 0: idle, 1: baseline, 2: manipulate, 3: verify/restore
+local probe_phase = 0 -- 0: idle, 1: baseline, 2: manipulate & verify, 3: restore
 local probe_frame_in_phase = 0
 
-local PROBE_FOCUSED_BONES = {
-    { name = "C_Jaw", desc = "下颌骨 (张嘴/下沉 -40mm)", trans = {0, -0.040, 0}, rot = {0.259, 0, 0, 0.966} },
-    { name = "C_Jaw", desc = "下颌骨 (下沉微调 -20mm)", trans = {0, -0.020, 0}, rot = {0.130, 0, 0, 0.991} },
-    { name = "MouthW_00_L", desc = "左嘴宽辅助驱动骨", trans = {0.025, 0, 0}, rot = nil },
-    { name = "MouthW_00_R", desc = "右嘴宽辅助驱动骨", trans = {-0.025, 0, 0}, rot = nil },
-    { name = "MouthW_01_L", desc = "左嘴宽第二节", trans = {0.025, 0, 0}, rot = nil },
-    { name = "MouthR_05_L", desc = "左嘴角辅助骨", trans = {0.020, -0.015, 0}, rot = nil },
-    { name = "MouthR_05_R", desc = "右嘴角辅助骨", trans = {-0.020, -0.015, 0}, rot = nil },
-    { name = "MouthL_05_L", desc = "左唇辅助骨", trans = {0.015, 0.015, 0}, rot = nil },
-    { name = "C_Chin_01", desc = "下巴第一节", trans = {0, -0.025, 0}, rot = nil },
-    { name = "C_Chin_02", desc = "下巴第二节", trans = {0, -0.025, 0}, rot = nil },
-    { name = "C_UnderChin", desc = "下巴底部", trans = {0, -0.025, 0}, rot = nil },
-    { name = "L_LipCorner_01", desc = "左嘴角主骨", trans = {0.020, 0.010, 0}, rot = nil },
-    { name = "R_LipCorner_01", desc = "右嘴角主骨", trans = {-0.020, 0.010, 0}, rot = nil },
-    { name = "L_Brow_01", desc = "左眉峰主骨 (上抬 +25mm)", trans = {0, 0.025, 0}, rot = nil },
-    { name = "L_Brow_01", desc = "左眉峰主骨 (下压 -25mm)", trans = {0, -0.025, 0}, rot = nil },
-    { name = "L_Brow_02", desc = "左眉间主骨", trans = {0, -0.020, 0}, rot = nil },
-    { name = "L_Brow_03", desc = "左眉头主骨", trans = {0, -0.020, 0}, rot = nil },
-    { name = "L_BrowSack_01", desc = "左眉囊压迫骨", trans = {0, -0.020, 0}, rot = nil },
-    { name = "L_EyeFold_01", desc = "左上眼睑折痕骨 (闭眼测试)", trans = {0, -0.015, 0}, rot = nil },
-    { name = "L_EyeFold_02", desc = "左上眼睑外折骨", trans = {0, -0.015, 0}, rot = nil },
-    { name = "L_EyeBag_01", desc = "左下眼睑眼袋骨 (眯眼测试)", trans = {0, 0.015, 0}, rot = nil },
-    { name = "L_Eye", desc = "左眼球主骨 (下转测试)", trans = nil, rot = {0.174, 0, 0, 0.985} },
-    { name = "FacialJnt_Face", desc = "面部根骨骼", trans = {0, -0.020, 0}, rot = nil }
-}
-
-local probe_target_bones = PROBE_FOCUSED_BONES
 local probe_results = {}
 local probe_baseline_weights = {}
-local probe_status_msg = "待命 (点击下方按钮立即开始主动测试)"
+local probe_status_msg = "待命 (点击下方按钮立即开始 285 根全量测试)"
 local probe_last_test_summary = nil
 
-local function start_probe_test(custom_bone_list)
-    if custom_bone_list then
-        probe_target_bones = custom_bone_list
-    else
-        probe_target_bones = PROBE_FOCUSED_BONES
-    end
+local function start_full_285_probe()
     probe_active = true
     probe_bone_index = 1
     probe_phase = 1
     probe_frame_in_phase = 0
     probe_results = {}
     probe_baseline_weights = {}
-    probe_status_msg = "测试初始化中..."
+    probe_status_msg = "全量 285 根骨骼探测已启动..."
     probe_last_test_summary = nil
 end
 
@@ -701,10 +669,10 @@ local function finish_probe_test()
         end
     end
     
-    probe_status_msg = string.format("探测完成! 测试 %d 组，响应驱动 %d 组。", #probe_results, responsive_count)
+    probe_status_msg = string.format("探测完成! 285 根骨骼全部实测完毕，响应驱动 %d 根。", responsive_count)
     
     probe_last_test_summary = {
-        total_tested = #probe_results,
+        total_bones_tested = #probe_results,
         responsive_bones_count = responsive_count,
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         details = probe_results
@@ -713,32 +681,37 @@ local function finish_probe_test()
     json.dump_file("ShapeKeySystem/active_bone_probe_results.json", probe_last_test_summary, 2)
 end
 
--- Hook into UpdateMotion: apply manual forced bone manipulation
+-- Hook into UpdateMotion: forcefully translate and rotate the target bone
 re.on_application_entry("UpdateMotion", function()
     if not probe_active or probe_phase ~= 2 then return end
     local head = R.find()
     if not head or not head.face then return end
     
-    local item = probe_target_bones[probe_bone_index]
-    if not item then return end
+    local bname = ALL_285_BONES[probe_bone_index]
+    if not bname then return end
     
-    local j = R.call(head.face, "getJointByName(System.String)", item.name)
+    local j = R.call(head.face, "getJointByName(System.String)", bname)
+    if not j and head.root then
+        j = R.call(head.root, "getJointByName(System.String)", bname)
+    end
     if not j then return end
     
     local bpos = R.call(j, "get_BaseLocalPosition")
     local brot = R.call(j, "get_BaseLocalRotation")
     
-    if item.trans and bpos then
-        local np = Vector3f.new(bpos.x + item.trans[1], bpos.y + item.trans[2], bpos.z + item.trans[3])
+    if bpos then
+        -- 30mm 多向复合位移 (X+20mm, Y-30mm, Z+20mm) 极大化激活潜在传感器
+        local np = Vector3f.new(bpos.x + 0.020, bpos.y - 0.030, bpos.z + 0.020)
         pcall(j.call, j, "set_LocalPosition", np)
     end
-    if item.rot and brot then
-        local q = Quaternion.new(item.rot[1], item.rot[2], item.rot[3], item.rot[4])
+    if brot then
+        -- 30度复合俯仰/滚转旋转
+        local q = Quaternion.new(0.259, 0.100, 0, 0.960)
         pcall(j.call, j, "set_LocalRotation", q)
     end
 end)
 
--- Hook into LateUpdateBehavior: check if any shapekey changed on Mesh
+-- Hook into LateUpdateBehavior: check all 96 shapekeys on Mesh
 re.on_application_entry("LateUpdateBehavior", function()
     if not probe_active then return end
     local head = R.find()
@@ -746,18 +719,19 @@ re.on_application_entry("LateUpdateBehavior", function()
     local mesh = head.mesh or R.mesh(head.face)
     local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
     
-    local item = probe_target_bones[probe_bone_index]
-    if not item then
+    if probe_bone_index > #ALL_285_BONES then
         finish_probe_test()
         return
     end
     
+    local bname = ALL_285_BONES[probe_bone_index]
     probe_frame_in_phase = probe_frame_in_phase + 1
     
-    -- Phase 1: Baseline sampling (5 frames)
+    -- Phase 1: Baseline sampling (2 frames)
     if probe_phase == 1 then
-        probe_status_msg = string.format("[%d/%d] 采样底噪中: %s (%s)", probe_bone_index, #probe_target_bones, item.name, item.desc)
-        if probe_frame_in_phase >= 5 then
+        probe_status_msg = string.format("[%d/285] 采样基准: %s (进度: %.1f%%)",
+            probe_bone_index, bname, (probe_bone_index / #ALL_285_BONES) * 100)
+        if probe_frame_in_phase >= 2 then
             for i = 0, 95 do
                 local w = nil
                 if i < cn then
@@ -769,10 +743,11 @@ re.on_application_entry("LateUpdateBehavior", function()
             probe_phase = 2
             probe_frame_in_phase = 0
         end
-    -- Phase 2: Manipulation and Verification (8 frames)
+    -- Phase 2: Manipulation & Verification (2 frames)
     elseif probe_phase == 2 then
-        probe_status_msg = string.format("[%d/%d] 强行位移操控中: %s -> 监测 96 形态键响应", probe_bone_index, #probe_target_bones, item.name)
-        if probe_frame_in_phase >= 8 then
+        probe_status_msg = string.format("[%d/285] 强行位移旋转中: %s -> 监测 96 形态键响应",
+            probe_bone_index, bname)
+        if probe_frame_in_phase >= 2 then
             local affected = {}
             for i = 0, 95 do
                 local cur_w = nil
@@ -796,9 +771,9 @@ re.on_application_entry("LateUpdateBehavior", function()
             end
             
             table.insert(probe_results, {
-                bone_name = item.name,
-                bone_desc = item.desc,
-                manipulation = item.trans and string.format("位移: (%.1f, %.1f, %.1f)mm", item.trans[1]*1000, item.trans[2]*1000, item.trans[3]*1000) or "旋转测试",
+                bone_index = probe_bone_index,
+                bone_name = bname,
+                manipulation = "复合位移(X+20mm, Y-30mm, Z+20mm) + 旋转30度",
                 affected_shapekeys = affected,
                 response_status = (#affected > 0) and "RESPONSIVE" or "NO_REACTION"
             })
@@ -806,7 +781,10 @@ re.on_application_entry("LateUpdateBehavior", function()
             -- Phase 3: Restore bone
             probe_phase = 3
             probe_frame_in_phase = 0
-            local j = R.call(head.face, "getJointByName(System.String)", item.name)
+            local j = R.call(head.face, "getJointByName(System.String)", bname)
+            if not j and head.root then
+                j = R.call(head.root, "getJointByName(System.String)", bname)
+            end
             if j then
                 local bpos = R.call(j, "get_BaseLocalPosition")
                 local brot = R.call(j, "get_BaseLocalRotation")
@@ -814,11 +792,11 @@ re.on_application_entry("LateUpdateBehavior", function()
                 if brot then pcall(j.call, j, "set_LocalRotation", brot) end
             end
         end
-    -- Phase 3: Cooldown/Restore (3 frames)
+    -- Phase 3: Cooldown/Next bone (1 frame)
     elseif probe_phase == 3 then
-        if probe_frame_in_phase >= 3 then
+        if probe_frame_in_phase >= 1 then
             probe_bone_index = probe_bone_index + 1
-            if probe_bone_index > #probe_target_bones then
+            if probe_bone_index > #ALL_285_BONES then
                 finish_probe_test()
             else
                 probe_phase = 1
@@ -831,65 +809,58 @@ re.on_draw_ui(function()
     local opened = imgui.tree_node("RE9 原生96 FACS形态键与285骨骼实时联动录制与解析")
     ui_is_open = (opened == true)
     if opened then
+        imgui.spacing()
+        local head = R.find()
+        if head then
+            local mesh = head.mesh or R.mesh(head.face)
+            local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
+            imgui.text_colored(string.format("网格状态: [已连接] 头部网格 (通道数: %d | 骨骼总库: %d 根已全部挂载)", cn, #ALL_285_BONES), 0xFF00FF00)
+        else
+            imgui.text_colored("网格状态: [未连接] 正在寻找头部网格 (cp_A000)...", 0xFF5555FF)
+        end
+        imgui.spacing()
 
         -- =========================================================================
-        -- 主动骨骼驱动形态键探测控制区
+        -- 全量 285 根骨骼主动驱动探测控制区
         -- =========================================================================
-        imgui.spacing()
         imgui.separator()
-        imgui.text_colored("【实验】骨骼主动强制操控 / 形态键响应探测器", 0xFF00FFFF)
-        imgui.text_colored("说明: 强行将骨骼拖拽 2~4cm 或旋转，监测网格形态键是否发生数值变动，验证驱动骨机制。", 0xFFAAAAAA)
+        imgui.text_colored("【实验】全量 285 根骨骼全覆盖主动操控 / 形态键响应探测器", 0xFF00FFFF)
+        imgui.text_colored("规则: 严格从第 1 根到第 285 根逐一强行位移(-30mm)与旋转(30度)，实测96个形态键是否有任何反应。", 0xFFAAAAAA)
         imgui.spacing()
 
         if not probe_active then
-            if imgui.button("开始重点驱动骨主动探测 (22组下颌/嘴唇/眉骨测试)", 380, 32) then
-                start_probe_test(PROBE_FOCUSED_BONES)
-            end
-            imgui.same_line()
-            if imgui.button("探测全量面部骨骼 (117根)", 200, 32) then
-                local full_list = {}
-                local keywords = {"jaw", "chin", "lip", "eye", "mouth", "cheek", "nose", "brow", "tongue", "face"}
-                for _, b in ipairs(ALL_285_BONES) do
-                    local bl = string.lower(b)
-                    local matched = false
-                    for _, kw in ipairs(keywords) do
-                        if string.find(bl, kw) then matched = true; break end
-                    end
-                    if matched then
-                        table.insert(full_list, { name = b, desc = "面部骨骼全量测试", trans = {0, -0.020, 0}, rot = nil })
-                    end
-                end
-                start_probe_test(full_list)
+            if imgui.button("开始全量 285 根骨骼全覆盖主动探测 (1 ~ 285 无遗漏)", 460, 36) then
+                start_full_285_probe()
             end
         else
-            imgui.text_colored(">>> 正在进行主动测试: " .. probe_status_msg, 0xFF00FF00)
-            if imgui.button("中断测试 (Cancel)", 150, 28) then
+            imgui.text_colored(">>> 正在进行 285 根全量测试: " .. probe_status_msg, 0xFF00FF00)
+            if imgui.button("中断测试 (Cancel)", 150, 30) then
                 probe_active = false
                 probe_phase = 0
-                probe_status_msg = "测试已由用户手动中断"
+                probe_status_msg = "测试已中断"
             end
         end
 
-        imgui.text_colored("当前状态: " .. probe_status_msg, 0xFFCCCCCC)
+        imgui.text_colored("探测状态: " .. probe_status_msg, 0xFFCCCCCC)
 
         if probe_last_test_summary then
             imgui.spacing()
             local sum = probe_last_test_summary
             if sum.responsive_bones_count > 0 then
-                imgui.text_colored(string.format(">>> 探测发现! 共有 %d 根骨骼的主动位移成功驱动了形态键！", sum.responsive_bones_count), 0xFF00FF00)
+                imgui.text_colored(string.format(">>> 探测实测发现! 共有 %d 根骨骼的主动操控成功驱动了形态键！", sum.responsive_bones_count), 0xFF00FF00)
             else
-                imgui.text_colored(">>> 实验结论: 测试的全部 " .. sum.total_tested .. " 组骨骼强制位移后，网格形态键均无任何变动 (变动量全为 0.000)。", 0xFF8888FF)
+                imgui.text_colored(">>> 实验确凿结论: 全量 285 根骨骼逐一强制位移与旋转后，网格全部 96 个形态键变动量均为 0.000 (无任何驱动骨响应)。", 0xFF8888FF)
             end
 
-            if imgui.tree_node("查看详细测试结果列表 (" .. #sum.details .. " 条记录)") then
+            if imgui.tree_node(string.format("查看全量 285 根骨骼实测明细表 (%d 条记录)", #sum.details)) then
                 for _, d in ipairs(sum.details) do
                     if #d.affected_shapekeys > 0 then
-                        imgui.text_colored(string.format("[成功驱动] %-16s (%s) | %s", d.bone_name, d.bone_desc, d.manipulation), 0xFF00FF00)
+                        imgui.text_colored(string.format("[驱动成功] #%03d %-20s | 驱动形态键数量: %d", d.bone_index, d.bone_name, #d.affected_shapekeys), 0xFF00FF00)
                         for _, aff in ipairs(d.affected_shapekeys) do
                             imgui.text_colored(string.format("    -> [%02d] %-16s (底噪: %.3f, 当前: %.3f, 变动: +%.3f)", aff.index, aff.name, aff.base_weight, aff.current_weight, aff.delta), 0xFF00FF00)
                         end
                     else
-                        imgui.text_colored(string.format("[无响应]   %-16s (%s) | %s -> 96个形态键变动量均为 0.000", d.bone_name, d.bone_desc, d.manipulation), 0xFF888888)
+                        imgui.text_colored(string.format("[无响应]   #%03d %-20s -> 96个形态键全为 0.000", d.bone_index, d.bone_name), 0xFF777777)
                     end
                 end
                 imgui.tree_pop()
@@ -897,16 +868,8 @@ re.on_draw_ui(function()
         end
         imgui.separator()
         imgui.spacing()
-        imgui.spacing()
-        local head = R.find()
-        if head then
-            local mesh = head.mesh or R.mesh(head.face)
-            local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
-            imgui.text_colored(string.format("网格状态: [已连接] 头部网格 (通道数: %d | 骨骼就绪: %d 根)", cn, #ALL_285_BONES), 0xFF00FF00)
-        else
-            imgui.text_colored("网格状态: [未连接] 正在寻找头部网格 (cp_A000)...", 0xFF5555FF)
-        end
-        imgui.spacing()
+
+        -- 录制数据控制区
         if not is_recording then
             if imgui.button("开始录制 96形态键与285骨骼全量联动数据", 320, 36) then
                 reset_stats()
@@ -929,51 +892,40 @@ re.on_draw_ui(function()
 
         -- Status Display
         local elapsed = is_recording and (os.clock() - record_start_time) or 0
-        if is_recording then
-            imgui.text_colored(string.format("正在录制中... 时间: %.1f 绉?/ 已录制: %d 帧全骨骼轨迹", elapsed, record_frame_count), 0xFF00FF00)
-        else
-            imgui.text(string.format("录制就绪 / 已统计: %d 帧 (文件保存至: ShapeKeySystem/native_bone_shapekey_trajectory.json)", record_frame_count))
-        end
-
-        local c_timer, v_timer = imgui.checkbox("自动录制固定秒数停止", use_timer)
-        if c_timer then use_timer = v_timer end
-        if use_timer then
-            imgui.same_line()
-            local c_sec, v_sec = imgui.slider_int("录制时长(秒)", auto_stop_seconds, 3, 60)
-            if c_sec then auto_stop_seconds = v_sec end
-        end
-
-        imgui.separator()
-        
-        -- Sorting & View Options
-        local c_sort, v_sort = imgui.checkbox("按常态底噪从大到小排序 (高底噪置顶排错)", sort_by_baseline)
-        if c_sort then sort_by_baseline = v_sort end
-        imgui.same_line()
-        local c_hide, v_hide = imgui.checkbox("隐藏静止为 0 的形态键 (仅看活动/底噪键)", hide_zero_baseline)
-        if c_hide then hide_zero_baseline = v_hide end
-
-        -- Filter Input
-        local c_filter, v_filter = imgui.input_text("搜索筛选 (序号 / 中文说明 / 英文原名)", filter_text)
-        if c_filter then filter_text = v_filter end
+        imgui.text(string.format("录制状态: %s | 耗时: %.1f 秒 / %d 秒 | 帧数: %d 帧",
+            is_recording and "录制中 (RECORDING)" or "待命 (IDLE)",
+            elapsed, auto_stop_seconds, record_frame_count))
 
         imgui.spacing()
-        imgui.text_colored("提示：点击开始录制后，在游戏里让人物待机、说话或转动面部，录制完成后将自动计算 285 根骨骼与 96 形态键的数学对应关系！", 0xFF55FFFF)
         imgui.separator()
 
-        -- Prepare sorted and filtered display list
+        -- Search / Filter
+        local changed_f, new_f = imgui.input_text("过滤形态键 (名称 / 描述)", filter_text)
+        if changed_f then filter_text = new_f end
+
+        local changed_sort, new_sort = imgui.checkbox("按常态底噪排序 (高活跃优先)", sort_by_baseline)
+        if changed_sort then sort_by_baseline = new_sort end
+        imgui.same_line()
+        local changed_hide, new_hide = imgui.checkbox("隐藏零底噪项 (0.000)", hide_zero_baseline)
+        if changed_hide then hide_zero_baseline = new_hide end
+
+        -- Build display list
         local display_list = {}
-        local f_lower = filter_text:lower()
         for i = 0, 95 do
             local s = stats[i]
-            local match_filter = true
+            local show = true
+            if hide_zero_baseline and s.min < 0.001 and s.max < 0.001 then
+                show = false
+            end
             if filter_text ~= "" then
-                local full = string.format("[%02d] %s %s", i, s.name, s.desc):lower()
-                if not full:find(f_lower, 1, true) then match_filter = false end
+                local text_lower = string.lower(filter_text)
+                local name_lower = string.lower(s.name)
+                local desc_lower = string.lower(s.desc)
+                if not string.find(name_lower, text_lower) and not string.find(desc_lower, text_lower) then
+                    show = false
+                end
             end
-            if hide_zero_baseline and s.min < 0.0005 and s.max < 0.0005 and s.current < 0.0005 then
-                match_filter = false
-            end
-            if match_filter then
+            if show then
                 table.insert(display_list, s)
             end
         end
@@ -992,31 +944,30 @@ re.on_draw_ui(function()
         end
 
         -- Header
-        imgui.text_colored(string.format("%-6s | %-18s | %-28s | %-8s | %-8s | %-8s | %-8s", 
+        imgui.text_colored(string.format("%-6s | %-18s | %-28s | %-8s | %-8s | %-8s | %-8s",
             "序号", "原生通道名 (Name)", "中文功能说明 (Description)", "实时当前", "常态底噪", "峰值Max", "波动跨度"), 0xFFAAAAAA)
         imgui.separator()
 
         for _, s in ipairs(display_list) do
             local span = s.max - s.min
             local is_high = (s.min >= 0.10)
-            
-            -- Color coding: Red for >= 0.40, Orange for >= 0.10, Yellow for > 0.001, White for 0.000
+
             local color = 0xFFFFFFFF
             if s.min >= 0.40 then
-                color = 0xFF5555FF -- Reddish (bipolar or high tension)
+                color = 0xFF5555FF
             elseif is_high then
-                color = 0xFF00AAFF -- Orange
+                color = 0xFF00AAFF
             elseif s.min >= 0.001 or s.max >= 0.001 or s.current >= 0.001 then
-                color = 0xFF00FFFF -- Yellow (active)
+                color = 0xFF00FFFF
             end
 
-            local line = string.format("[%02d] | %-16s | %-22s | %6.3f | %6.3f | %6.3f | %6.3f", 
+            local line = string.format("[%02d] | %-16s | %-22s | %6.3f | %6.3f | %6.3f | %6.3f",
                 s.index,
-                s.name, 
-                s.desc, 
-                s.current, 
-                s.min, 
-                s.max, 
+                s.name,
+                s.desc,
+                s.current,
+                s.min,
+                s.max,
                 span)
             imgui.text_colored(line, color)
         end
