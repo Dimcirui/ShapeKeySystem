@@ -1,6 +1,6 @@
 -- RecordShapeKeys.lua
--- RE9 Native 96 FACS ShapeKey Baseline Monitor & Recorder
--- Exclusively monitors the game's native facial blendshapes (00 ~ 95)
+-- RE9 全量形态键实时监测与底噪录制工具 (Full ShapeKey Monitor & Baseline Recorder)
+-- 完整采样当前网格的全部形态键（包含所有 0.000 静止键与活跃键，不做任何隐式过滤与篡改覆盖）
 
 local R = require('ShapeKeySystem_Games.RE9.Runtime')
 local Hash = require('ShapeKeySystem_Core.NameHash')
@@ -14,7 +14,7 @@ local auto_stop_seconds = 15
 local use_timer = true
 local ui_is_open = false
 
-local sort_by_baseline = true
+local sort_by_baseline = false   -- 默认按序号 0 ~ N 自然顺序排列，绝不打乱或把 0.000 挤到底部
 local hide_zero_baseline = false
 
 -- 96 Native FACS blendshapes definitions on Leon's head mesh (Index 00 ~ 95)
@@ -59,87 +59,136 @@ local FACS_CHANNEL_INFO = {
     [37] = { name = "BrOutRs_00_R",      desc = "眉梢上提右(惊讶)" },
     [38] = { name = "BrLr_00_L",         desc = "整眉压低左" },
     [39] = { name = "BrLr_00_R",         desc = "整眉压低右" },
-    [40] = { name = "LdTight_05_L",      desc = "眼睑收紧左(卧蚕)" },
-    [41] = { name = "LdTight_05_R",      desc = "眼睑收紧右(卧蚕)" },
+    [40] = { name = "LdTight_05_L",      desc = "下眼睑绷紧05左" },
+    [41] = { name = "LdTight_05_R",      desc = "下眼睑绷紧05右" },
     [42] = { name = "Sqnt_03_L",         desc = "眯眼03左" },
     [43] = { name = "Sqnt_03_R",         desc = "眯眼03右" },
-    [44] = { name = "Sqnt_06_L",         desc = "眯眼06左" },
-    [45] = { name = "Sqnt_06_R",         desc = "眯眼06右" },
-    [46] = { name = "LpRolIn_04_L",      desc = "抿唇卷唇04左" },
-    [47] = { name = "LpRolIn_04_R",      desc = "抿唇卷唇04右" },
-    [48] = { name = "LpRolIn_05_L",      desc = "抿唇卷唇05左" },
-    [49] = { name = "LpRolIn_05_R",      desc = "抿唇卷唇05右" },
-    [50] = { name = "UprLdDn_00_L",      desc = "眨眼闭眼00左" },
-    [51] = { name = "UprLdDn_00_R",      desc = "眨眼闭眼00右" },
-    [52] = { name = "UprLdDn_01_L",      desc = "眼睑下落01左" },
-    [53] = { name = "UprLdDn_01_R",      desc = "眼睑下落01右" },
-    [54] = { name = "UprLdDn_03_L",      desc = "眼睑下落03左" },
-    [55] = { name = "UprLdDn_03_R",      desc = "眼睑下落03右" },
-    [56] = { name = "UprLdDn_05_L",      desc = "眼睑下落05左" },
-    [57] = { name = "UprLdDn_05_R",      desc = "眼睑下落05右" },
-    [58] = { name = "MouthR_05_L",       desc = "嘴偏向右05左" },
-    [59] = { name = "MouthR_05_R",       desc = "嘴偏向右05右" },
-    [60] = { name = "MouthL_05_L",       desc = "嘴偏向左05左" },
-    [61] = { name = "MouthL_05_R",       desc = "嘴偏向左05右" },
+    [44] = { name = "Sqnt_06_L",         desc = "闭眼06左(眨眼/闭眼)" },
+    [45] = { name = "Sqnt_06_R",         desc = "闭眼06右(眨眼/闭眼)" },
+    [46] = { name = "LpRolIn_04_L",      desc = "上唇内卷04左" },
+    [47] = { name = "LpRolIn_04_R",      desc = "上唇内卷04右" },
+    [48] = { name = "LpRolIn_05_L",      desc = "下唇内卷05左" },
+    [49] = { name = "LpRolIn_05_R",      desc = "下唇内卷05右" },
+    [50] = { name = "UprLdDn_00_L",      desc = "上眼睑下垂00左" },
+    [51] = { name = "UprLdDn_00_R",      desc = "上眼睑下垂00右" },
+    [52] = { name = "UprLdDn_01_L",      desc = "上眼睑下垂01左" },
+    [53] = { name = "UprLdDn_01_R",      desc = "上眼睑下垂01右" },
+    [54] = { name = "UprLdDn_03_L",      desc = "上眼睑下垂03左" },
+    [55] = { name = "UprLdDn_03_R",      desc = "上眼睑下垂03右" },
+    [56] = { name = "UprLdDn_05_L",      desc = "上眼睑闭合05左" },
+    [57] = { name = "UprLdDn_05_R",      desc = "上眼睑闭合05右" },
+    [58] = { name = "MouthR_05_L",       desc = "嘴角右偏05左侧" },
+    [59] = { name = "MouthR_05_R",       desc = "嘴角右偏05右侧" },
+    [60] = { name = "MouthL_05_L",       desc = "嘴角左偏05左侧" },
+    [61] = { name = "MouthL_05_R",       desc = "嘴角左偏05右侧" },
     [62] = { name = "UprLpRs_01_L",      desc = "上唇抬起01左" },
     [63] = { name = "UprLpRs_01_R",      desc = "上唇抬起01右" },
     [64] = { name = "UprLpRs_04_L",      desc = "上唇抬起04左" },
     [65] = { name = "UprLpRs_04_R",      desc = "上唇抬起04右" },
-    [66] = { name = "UprLpRs_05_L",      desc = "上唇抬起05左(发音E)" },
-    [67] = { name = "UprLpRs_05_R",      desc = "上唇抬起05右(发音E)" },
-    [68] = { name = "Fnl_04_L",          desc = "漏斗口型04左(发音O)" },
-    [69] = { name = "Fnl_04_R",          desc = "漏斗口型04右(发音O)" },
-    [70] = { name = "CrnDprs_00_L",      desc = "嘴角下压00左(不爽)" },
-    [71] = { name = "CrnDprs_00_R",      desc = "嘴角下压00右(不爽)" },
+    [66] = { name = "UprLpRs_05_L",      desc = "上唇鼻侧抬高05左" },
+    [67] = { name = "UprLpRs_05_R",      desc = "上唇鼻侧抬高05右" },
+    [68] = { name = "Fnl_04_L",          desc = "漏斗状张嘴04左" },
+    [69] = { name = "Fnl_04_R",          desc = "漏斗状张嘴04右" },
+    [70] = { name = "CrnDprs_00_L",      desc = "嘴角下压00左(悲伤)" },
+    [71] = { name = "CrnDprs_00_R",      desc = "嘴角下压00右(悲伤)" },
     [72] = { name = "CrnDprs_01_L",      desc = "嘴角下压01左" },
     [73] = { name = "CrnDprs_01_R",      desc = "嘴角下压01右" },
     [74] = { name = "CrnDprs_02_L",      desc = "嘴角下压02左" },
     [75] = { name = "CrnDprs_02_R",      desc = "嘴角下压02右" },
-    [76] = { name = "LwrLpDprs_00_L",    desc = "下唇下压00左(发音I)" },
-    [77] = { name = "LwrLpDprs_00_R",    desc = "下唇下压00右(发音I)" },
-    [78] = { name = "LwrLpDprs_03_L",    desc = "下唇下压03左" },
-    [79] = { name = "LwrLpDprs_03_R",    desc = "下唇下压03右" },
-    [80] = { name = "LpPush_00_L",       desc = "嘴唇外推00左" },
-    [81] = { name = "LpPush_00_R",       desc = "嘴唇外推00右" },
-    [82] = { name = "LpPush_01_L",       desc = "嘴唇外推01左" },
-    [83] = { name = "LpPush_01_R",       desc = "嘴唇外推01右" },
-    [84] = { name = "MouthW_00_L",       desc = "咧嘴张宽00左(发音I)" },
-    [85] = { name = "MouthW_00_R",       desc = "咧嘴张宽00右(发音I)" },
-    [86] = { name = "MouthW_01_L",       desc = "咧嘴张宽01左" },
-    [87] = { name = "MouthW_01_R",       desc = "咧嘴张宽01右" },
-    [88] = { name = "LpBit_TL",          desc = "咬唇上左" },
-    [89] = { name = "LpBit_TR",          desc = "咬唇上右" },
-    [90] = { name = "LpBit_BL",          desc = "咬唇下左" },
-    [91] = { name = "LpBit_BR",          desc = "咬唇下右" },
-    [92] = { name = "Pkr_Fnl_TL",        desc = "嘟嘴漏斗(发音U)上左" },
-    [93] = { name = "Pkr_Fnl_TR",        desc = "嘟嘴漏斗(发音U)上右" },
-    [94] = { name = "Pkr_Fnl_BL",        desc = "嘟嘴漏斗(发音U)下左" },
-    [95] = { name = "Pkr_Fnl_BR",        desc = "嘟嘴漏斗(发音U)下右" }
+    [76] = { name = "LwrLpDprs_00_L",    desc = "下唇下拉00左" },
+    [77] = { name = "LwrLpDprs_00_R",    desc = "下唇下拉00右" },
+    [78] = { name = "LwrLpDprs_03_L",    desc = "下唇下拉03左" },
+    [79] = { name = "LwrLpDprs_03_R",    desc = "下唇下拉03右" },
+    [80] = { name = "LpPush_00_L",       desc = "嘴唇前突00左" },
+    [81] = { name = "LpPush_00_R",       desc = "嘴唇前突00右" },
+    [82] = { name = "LpPush_01_L",       desc = "嘴唇前突01左" },
+    [83] = { name = "LpPush_01_R",       desc = "嘴唇前突01右" },
+    [84] = { name = "MouthW_00_L",       desc = "嘴角向外展宽00左" },
+    [85] = { name = "MouthW_00_R",       desc = "嘴角向外展宽00右" },
+    [86] = { name = "MouthW_01_L",       desc = "嘴角向外展宽01左" },
+    [87] = { name = "MouthW_01_R",       desc = "嘴角向外展宽01右" },
+    [88] = { name = "LpBit_TL",          desc = "咬左上唇" },
+    [89] = { name = "LpBit_TR",          desc = "咬右上唇" },
+    [90] = { name = "LpBit_BL",          desc = "咬左下唇" },
+    [91] = { name = "LpBit_BR",          desc = "咬右下唇" },
+    [92] = { name = "Pkr_Fnl_TL",        desc = "嘟嘴漏斗左上" },
+    [93] = { name = "Pkr_Fnl_TR",        desc = "嘟嘴漏斗右上" },
+    [94] = { name = "Pkr_Fnl_BL",        desc = "嘟嘴漏斗左下" },
+    [95] = { name = "Pkr_Fnl_BR",        desc = "嘟嘴漏斗右下" },
 }
 
--- stats[0..95] = { min = x, max = x, sum = x, count = n, current = x, name = str, desc = str }
 local stats = {}
-for i = 0, 95 do
-    local info = FACS_CHANNEL_INFO[i] or { name = string.format("Channel_%d", i), desc = "原生通道" }
-    stats[i] = {
-        index = i,
-        name = info.name,
-        desc = info.desc,
-        min = 0.0,
-        max = 0.0,
-        sum = 0.0,
-        count = 0,
-        current = 0.0
-    }
+local total_channels = 0
+local current_mesh_path = ""
+local name_dict = nil
+
+local function get_name_dict()
+    if not name_dict then
+        pcall(function()
+            local names = Hash.table_names()
+            name_dict = Hash.table(names)
+        end)
+        name_dict = name_dict or {}
+    end
+    return name_dict
+end
+
+local function ensure_channels(mesh)
+    local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
+    if cn == total_channels and total_channels > 0 then return end
+
+    total_channels = cn
+    current_mesh_path = mesh and R.path(mesh) or ""
+    local dhashes = mesh and R.call(mesh, "get_ChannelNameHash")
+    local dict = get_name_dict()
+
+    stats = {}
+    for i = 0, cn - 1 do
+        local h = dhashes and Hash.hash_at(dhashes, i, true)
+        local h_hex = h and string.format("0x%08X", h) or nil
+        local name, desc
+
+        -- 1. Check if dictionary resolves hash
+        if h and dict[h] then
+            name = dict[h]
+            desc = "自定义/MMD形态键 (" .. name .. ")"
+        end
+        -- 2. If index in 0 ~ 95 and no custom name
+        if not name and i < 96 and FACS_CHANNEL_INFO[i] then
+            name = FACS_CHANNEL_INFO[i].name
+            desc = FACS_CHANNEL_INFO[i].desc
+        end
+        -- 3. Fallback to generic channel
+        if not name then
+            name = string.format("Channel_%02d", i)
+            desc = h_hex and ("通道哈希 " .. h_hex) or "原生通道"
+        end
+
+        stats[i] = {
+            index = i,
+            name = name,
+            desc = desc,
+            hash = h,
+            hash_hex = h_hex,
+            min = 0.0,
+            max = 0.0,
+            sum = 0.0,
+            count = 0,
+            current = 0.0
+        }
+    end
 end
 
 local function reset_stats()
-    for i = 0, 95 do
-        local cur = stats[i].current
-        stats[i].min = cur
-        stats[i].max = cur
-        stats[i].sum = cur
-        stats[i].count = 1
+    for i = 0, total_channels - 1 do
+        local s = stats[i]
+        if s then
+            local cur = s.current or 0.0
+            s.min = cur
+            s.max = cur
+            s.sum = cur
+            s.count = 1
+        end
     end
     record_frame_count = 0
     record_start_time = os.clock()
@@ -150,35 +199,36 @@ local function save_stats_to_file()
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         duration_sec = record_frame_count > 0 and (os.clock() - record_start_time) or 0,
         frame_count = record_frame_count,
-        facs_channels = {}
+        mesh_path = current_mesh_path,
+        total_channels = total_channels,
+        channels = {}
     }
-    for i = 0, 95 do
+    -- 严格按序号 0, 1, 2, ... N-1 自然顺序输出，保留所有 0.000 通道与其实际位置
+    for i = 0, total_channels - 1 do
         local s = stats[i]
-        local avg = s.count > 0 and (s.sum / s.count) or 0
-        local span = s.max - s.min
-        table.insert(export.facs_channels, {
-            index = s.index,
-            name = s.name,
-            description = s.desc,
-            baseline_min = math.floor(s.min * 1000 + 0.5) / 1000,
-            peak_max = math.floor(s.max * 1000 + 0.5) / 1000,
-            span = math.floor(span * 1000 + 0.5) / 1000,
-            average = math.floor(avg * 1000 + 0.5) / 1000,
-            has_high_baseline = (s.min >= 0.10)
-        })
-    end
-    table.sort(export.facs_channels, function(a, b)
-        if a.has_high_baseline ~= b.has_high_baseline then
-            return a.has_high_baseline
+        if s then
+            local avg = s.count > 0 and (s.sum / s.count) or 0
+            local span = s.max - s.min
+            table.insert(export.channels, {
+                index = s.index,
+                name = s.name,
+                description = s.desc,
+                hash = s.hash_hex,
+                baseline_min = math.floor(s.min * 1000 + 0.5) / 1000,
+                peak_max = math.floor(s.max * 1000 + 0.5) / 1000,
+                span = math.floor(span * 1000 + 0.5) / 1000,
+                average = math.floor(avg * 1000 + 0.5) / 1000,
+                is_active = (s.max > 0.0001 or s.min > 0.0001)
+            })
         end
-        return a.baseline_min > b.baseline_min
-    end)
+    end
+    export.facs_channels = export.channels
     
     local ok = json.dump_file("ShapeKeySystem/native_facs_baselines.json", export, 2)
     return ok
 end
 
--- Sampling logic every frame (Exclusively for 96 Native FACS Channels)
+-- Sampling logic every frame: 全通道真实采样，未开启UI且未录制时 0 开销休眠
 re.on_frame(function()
     if not is_recording and not ui_is_open then
         return
@@ -189,13 +239,8 @@ re.on_frame(function()
         local mesh = head.mesh or R.mesh(head.face)
         if not mesh then return end
 
-        local face_go = R.call(head.face, 'get_GameObject')
-        local root_go = head.root and R.call(head.root, 'get_GameObject')
-        local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
-        local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
-        local dm = fm or rm
-        local dvals = dm and R.call(dm, "get_DeformValues")
-        local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
+        ensure_channels(mesh)
+        if total_channels <= 0 then return end
 
         if is_recording then
             record_frame_count = record_frame_count + 1
@@ -207,22 +252,16 @@ re.on_frame(function()
             end
         end
 
-        local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
-        for i = 0, 95 do
-            local val = nil
-            if i < cn then
-                val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
-                if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
-                if val == nil then val = R.call(mesh, "getBlendShapeChannelWeight", i) end
-            end
-            -- Fallback to motion deform value if mesh returned nil or zero but motion has deform
-            if (val == nil or val ~= val or val <= 0.0001) and dvals and i < dlen then
-                local mv = R.call(dvals, "get_Item", i)
-                if mv and mv == mv and mv > (val or 0) then val = mv end
+        for i = 0, total_channels - 1 do
+            local val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
+            if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
+            if val == nil then val = R.call(mesh, "getBlendShapeChannelWeight", i) end
+            if type(val) ~= "number" or val ~= val then
+                val = 0.0
             end
 
-            if type(val) == "number" and val == val then
-                local s = stats[i]
+            local s = stats[i]
+            if s then
                 s.current = val
                 if s.count == 0 then
                     s.min = val
@@ -230,7 +269,7 @@ re.on_frame(function()
                     s.sum = val
                     s.count = 1
                 elseif not is_recording then
-                    -- 实时预览模式：即使未按录制，也动态更新最小/最大值以展现动态波形
+                    -- 实时预览模式：动态更新最小/最大值
                     if val < s.min then s.min = val end
                     if val > s.max then s.max = val end
                 else
@@ -247,15 +286,20 @@ end)
 
 -- UI Drawing logic
 re.on_draw_ui(function()
-    local opened = imgui.tree_node("RE9 原生96 FACS形态键监测与底噪录制")
+    local opened = imgui.tree_node("RE9 原生/Mod形态键全量监测与底噪录制")
     ui_is_open = (opened == true)
     if opened then
         imgui.spacing()
         local head = R.find()
         if head then
-            imgui.text_colored(string.format("网格状态: [已连接] 找到头部网格 (通道数: %d)", head.count or 0), 0xFF00FF00)
+            local mesh = head.mesh or R.mesh(head.face)
+            local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
+            imgui.text_colored(string.format("网格状态: [已连接] 头部网格通道数: %d (当前已记录: %d 通道)", cn, total_channels), 0xFF00FF00)
+            if current_mesh_path ~= "" then
+                imgui.text_colored(string.format("网格路径: %s", current_mesh_path), 0xFFAAAAAA)
+            end
         else
-            imgui.text_colored("网格状态: [未连接] 正在寻找里昂头部网格 (cp_A000)...", 0xFF5555FF)
+            imgui.text_colored("网格状态: [未连接] 正在寻找头部网格...", 0xFF5555FF)
         end
         imgui.spacing()
         if not is_recording then
@@ -283,7 +327,7 @@ re.on_draw_ui(function()
         if is_recording then
             imgui.text_colored(string.format("正在录制中... 时间: %.1f 秒 / 已统计: %d 帧", elapsed, record_frame_count), 0xFF00FF00)
         else
-            imgui.text(string.format("录制就绪 / 已统计: %d 帧 (文件将保存到 ShapeKeySystem/native_facs_baselines.json)", record_frame_count))
+            imgui.text(string.format("录制就绪 / 已统计: %d 帧 (文件保存至: ShapeKeySystem/native_facs_baselines.json)", record_frame_count))
         end
 
         local c_timer, v_timer = imgui.checkbox("自动录制固定秒数停止", use_timer)
@@ -297,35 +341,37 @@ re.on_draw_ui(function()
         imgui.separator()
         
         -- Sorting & View Options
-        local c_sort, v_sort = imgui.checkbox("按常态底噪从大到小排序 (高底噪置顶)", sort_by_baseline)
+        local c_sort, v_sort = imgui.checkbox("按常态底噪从大到小排序 (高底噪置顶排错)", sort_by_baseline)
         if c_sort then sort_by_baseline = v_sort end
         imgui.same_line()
         local c_hide, v_hide = imgui.checkbox("隐藏静止为 0 的形态键 (仅看活动/底噪键)", hide_zero_baseline)
         if c_hide then hide_zero_baseline = v_hide end
 
         -- Filter Input
-        local c_filter, v_filter = imgui.input_text("搜索 (Filter: 中文说明 / 英文原名)", filter_text)
+        local c_filter, v_filter = imgui.input_text("搜索筛选 (序号 / 中文说明 / 英文名)", filter_text)
         if c_filter then filter_text = v_filter end
 
         imgui.spacing()
-        imgui.text_colored("提示：红色/橙色 =【常态底噪 >= 0.10】的形态键，这些键静止时未归零，需要在映射中切除底噪死区。", 0xFF55FFFF)
+        imgui.text_colored("提示：默认按【0 ~ N 通道自然序号】完整展示全量形态键，包含所有 0.000 静止键；白字=完全静止 0.000。", 0xFF55FFFF)
         imgui.separator()
 
         -- Prepare sorted and filtered display list
         local display_list = {}
         local f_lower = filter_text:lower()
-        for i = 0, 95 do
+        for i = 0, total_channels - 1 do
             local s = stats[i]
-            local match_filter = true
-            if filter_text ~= "" then
-                local full = string.format("[%02d] %s %s", i, s.name, s.desc):lower()
-                if not full:find(f_lower, 1, true) then match_filter = false end
-            end
-            if hide_zero_baseline and s.min < 0.005 and s.max < 0.005 and s.current < 0.005 then
-                match_filter = false
-            end
-            if match_filter then
-                table.insert(display_list, s)
+            if s then
+                local match_filter = true
+                if filter_text ~= "" then
+                    local full = string.format("[%02d] %s %s", i, s.name, s.desc):lower()
+                    if not full:find(f_lower, 1, true) then match_filter = false end
+                end
+                if hide_zero_baseline and s.min < 0.0005 and s.max < 0.0005 and s.current < 0.0005 then
+                    match_filter = false
+                end
+                if match_filter then
+                    table.insert(display_list, s)
+                end
             end
         end
 
@@ -343,28 +389,28 @@ re.on_draw_ui(function()
         end
 
         -- Header
-        imgui.text_colored(string.format("%-6s | %-22s | %-26s | %-8s | %-8s | %-8s | %-8s", 
-            "序号", "原生通道名 (Name)", "中文功能说明 (Description)", "实时当前", "常态底噪", "峰值Max", "波动跨度"), 0xFFAAAAAA)
+        imgui.text_colored(string.format("%-6s | %-22s | %-28s | %-8s | %-8s | %-8s | %-8s", 
+            "序号", "通道标识 (Name)", "中文/说明 (Description)", "实时当前", "常态底噪", "峰值Max", "波动跨度"), 0xFFAAAAAA)
         imgui.separator()
 
         for _, s in ipairs(display_list) do
             local span = s.max - s.min
             local is_high = (s.min >= 0.10)
             
-            -- Color coding: Red for >= 0.40, Orange for >= 0.10, Yellow for > 0.03, White otherwise
+            -- Color coding: Red for >= 0.40, Orange for >= 0.10, Yellow for > 0.001, White for 0.000
             local color = 0xFFFFFFFF
             if s.min >= 0.40 then
                 color = 0xFF5555FF -- Reddish (bipolar or high tension)
             elseif is_high then
                 color = 0xFF00AAFF -- Orange
-            elseif s.min >= 0.03 then
-                color = 0xFF00FFFF -- Yellow
+            elseif s.min >= 0.001 or s.max >= 0.001 or s.current >= 0.001 then
+                color = 0xFF00FFFF -- Yellow (active)
             end
 
-            local line = string.format("[%02d] | %-16s | %-20s | %6.3f | %6.3f | %6.3f | %6.3f", 
+            local line = string.format("[%02d] | %-20s | %-22s | %6.3f | %6.3f | %6.3f | %6.3f", 
                 s.index,
-                s.name, 
-                s.desc, 
+                s.name:sub(1, 20), 
+                s.desc:sub(1, 22), 
                 s.current, 
                 s.min, 
                 s.max, 
