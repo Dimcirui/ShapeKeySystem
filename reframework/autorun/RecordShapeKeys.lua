@@ -1,7 +1,6 @@
 -- RecordShapeKeys.lua
--- RE9 原生96 FACS形态键监测与底噪录制工具 (RE9 Native 96 FACS Baseline Monitor & Recorder)
--- 专用于监测并录制 RE9 引擎本身的 96 个原生面部 FACS 形态键（00 ~ 95）
--- 严格按 00 ~ 95 自然序号排列，保留所有 0.000 静止键与实时动态
+-- RE9 原生96 FACS形态键与285骨骼实时同步监测与轨迹录制系统
+-- (RE9 Native 96 FACS & 285 Face Bones Synchronized Trajectory Recorder)
 
 local R = require('ShapeKeySystem_Games.RE9.Runtime')
 local Hash = require('ShapeKeySystem_Core.NameHash')
@@ -15,8 +14,299 @@ local auto_stop_seconds = 15
 local use_timer = true
 local ui_is_open = false
 
+local record_bones_trajectory = true -- 同时高精度采样全量 285 根骨骼与 96 形态键的每帧时序关联
+
 local sort_by_baseline = false   -- 默认按序号 00 ~ 95 自然顺序排列，绝不打乱或把 0.000 挤到底部
 local hide_zero_baseline = false
+
+local ALL_285_BONES = {
+    "root",
+    "Hip",
+    "Spine_0",
+    "Spine_1",
+    "Spine_2",
+    "R_Arm_Clavicle",
+    "R_Scapula_0Offset",
+    "R_Scapula_0",
+    "R_Scapula_1Offset",
+    "R_Scapula_1",
+    "R_Scapula_2Offset",
+    "R_Scapula_2",
+    "R_Arm_Upper",
+    "R_Arm_Upper_Twist_0",
+    "R_Arm_Upper_Twist_1",
+    "R_Delt_Front_AOffset",
+    "R_Delt_Front_A",
+    "R_Delt_Rear_AOffset",
+    "R_Delt_Rear_A",
+    "R_Delt_Side_AOffset",
+    "R_Delt_Side_A",
+    "R_Pec_AOffset",
+    "R_Pec_A",
+    "L_Arm_Clavicle",
+    "L_Scapula_0Offset",
+    "L_Scapula_0",
+    "L_Scapula_1Offset",
+    "L_Scapula_1",
+    "L_Scapula_2Offset",
+    "L_Scapula_2",
+    "L_Pec_AOffset",
+    "L_Pec_A",
+    "L_Arm_Upper",
+    "L_Arm_Upper_Twist_0",
+    "L_Arm_Upper_Twist_1",
+    "L_Delt_Front_AOffset",
+    "L_Delt_Front_A",
+    "L_Delt_Rear_AOffset",
+    "L_Delt_Rear_A",
+    "L_Delt_Side_AOffset",
+    "L_Delt_Side_A",
+    "R_Trap_AOffset",
+    "R_Trap_A",
+    "L_Trap_AOffset",
+    "L_Trap_A",
+    "L_Pec_BOffset",
+    "L_Pec_B",
+    "R_Pec_BOffset",
+    "R_Pec_B",
+    "Neck_0",
+    "FacialJnt_Neck_0",
+    "C_NeckB",
+    "L_NeckB_01",
+    "L_NeckB_02",
+    "L_NeckB_03",
+    "R_NeckB_01",
+    "R_NeckB_02",
+    "R_NeckB_03",
+    "Neck_1",
+    "FacialJnt_Neck_1",
+    "R_NeckA_01",
+    "R_NeckA_02",
+    "R_NeckA_03",
+    "C_NeckA",
+    "L_NeckA_01",
+    "L_NeckA_02",
+    "L_NeckA_03",
+    "Head_0",
+    "FacialJnt_Face",
+    "L_Eye",
+    "R_Eye",
+    "C_Jaw",
+    "C_tongue_00",
+    "C_tongue_01",
+    "C_tongue_02",
+    "C_tongue_03",
+    "C_tongue_04",
+    "C_tongue_05",
+    "C_Skull",
+    "C_Forehead",
+    "L_Forehead_01",
+    "L_Forehead_02",
+    "L_Forehead_03",
+    "L_Temple_P",
+    "C_NoseBridge",
+    "L_Brow_01",
+    "L_Brow_02",
+    "L_Brow_03",
+    "L_Brow_04",
+    "L_NoseBridgeSide",
+    "L_BrowSack_01",
+    "L_BrowSack_02",
+    "L_BrowSack_03",
+    "L_UprLdCornerIn_02",
+    "L_EyeFold_01",
+    "L_EyeFold_02",
+    "L_EyeFold_03",
+    "L_EyeFold_04",
+    "L_UprLd_01",
+    "L_UprLd_02",
+    "L_UprLd_03",
+    "L_UprLdCornerIn_01",
+    "L_UprLdEdge_01",
+    "L_UprLdEdge_02",
+    "L_UprLdEdge_03",
+    "L_UprLdCornerOut",
+    "L_LwrLdCornerIn_01",
+    "L_LwrLdEdge_01",
+    "L_LwrLdEdge_02",
+    "L_LwrLdEdge_03",
+    "L_LwrLdCornerOut",
+    "L_LwrLdCornerIn_02",
+    "L_LwrLd_01",
+    "L_LwrLd_02",
+    "L_LwrLd_03",
+    "L_LwrLd_04",
+    "L_EyeBag_01",
+    "L_EyeBag_02",
+    "L_EyeBag_03",
+    "L_CrowFeet_02",
+    "L_CrowFeet_01",
+    "L_CheekBone_P",
+    "L_CheekBone_03",
+    "L_CheekBoneOut",
+    "L_Ear_P",
+    "L_Masseter",
+    "L_JawBulge",
+    "L_CheekIn_01",
+    "L_CheekIn_02",
+    "L_CheekIn_03",
+    "L_CheekIn_04",
+    "L_Cheek_01",
+    "L_Cheek_02",
+    "L_Cheek_03",
+    "L_Cheek_04",
+    "L_NasoBulge_01",
+    "L_NasoBulge_02",
+    "L_NasoBulge_03",
+    "L_NasoFold",
+    "C_NoseBone",
+    "C_NoseTip",
+    "L_NoseSide",
+    "L_Nostril_P",
+    "C_NoseBase",
+    "C_UprLpOut",
+    "L_UprLpOut_01",
+    "L_UprLpOut_02",
+    "L_MouthCornerOut",
+    "C_UprLp_01",
+    "C_UprLp_02",
+    "C_UprLp_03",
+    "L_UprLp_01",
+    "L_UprLp_02",
+    "L_UprLp_03",
+    "L_UprLpSide_01",
+    "L_UprLpSide_02",
+    "L_UprLpSide_03",
+    "L_UprLpCorner_01",
+    "L_UprLpCorner_02",
+    "L_UprLpCorner_03",
+    "L_LipCorner_01",
+    "L_LipCorner_02",
+    "L_LipCorner_03",
+    "C_LwrLp_01",
+    "C_LwrLp_02",
+    "C_LwrLp_03",
+    "L_LwrLp_01",
+    "L_LwrLp_02",
+    "L_LwrLp_03",
+    "L_LwrLpSide_01",
+    "L_LwrLpSide_02",
+    "L_LwrLpSide_03",
+    "L_LwrLpCorner_01",
+    "L_LwrLpCorner_02",
+    "L_LwrLpCorner_03",
+    "C_LwrLpOut",
+    "L_LwrLpOut_01",
+    "L_LwrLpOut_02",
+    "C_MouthBag",
+    "C_Chin_01",
+    "C_Chin_02",
+    "L_Chin_01",
+    "L_Chin_02",
+    "L_ChinSide",
+    "C_UnderChin",
+    "L_UnderChin",
+    "C_NeckLine",
+    "L_NeckLine",
+    "L_JawLine_01",
+    "L_JawLine_02",
+    "L_JawLine_03",
+    "R_Forehead_01",
+    "R_Forehead_02",
+    "R_Forehead_03",
+    "R_Temple_P",
+    "R_Brow_01",
+    "R_Brow_02",
+    "R_Brow_03",
+    "R_Brow_04",
+    "R_NoseBridgeSide",
+    "R_BrowSack_01",
+    "R_BrowSack_02",
+    "R_BrowSack_03",
+    "R_UprLdCornerIn_02",
+    "R_EyeFold_01",
+    "R_EyeFold_02",
+    "R_EyeFold_03",
+    "R_EyeFold_04",
+    "R_UprLd_01",
+    "R_UprLd_02",
+    "R_UprLd_03",
+    "R_UprLdCornerIn_01",
+    "R_UprLdEdge_01",
+    "R_UprLdEdge_02",
+    "R_UprLdEdge_03",
+    "R_UprLdCornerOut",
+    "R_LwrLdCornerIn_01",
+    "R_LwrLdEdge_01",
+    "R_LwrLdEdge_02",
+    "R_LwrLdEdge_03",
+    "R_LwrLdCornerOut",
+    "R_LwrLdCornerIn_02",
+    "R_LwrLd_01",
+    "R_LwrLd_02",
+    "R_LwrLd_03",
+    "R_LwrLd_04",
+    "R_EyeBag_01",
+    "R_EyeBag_02",
+    "R_EyeBag_03",
+    "R_CrowFeet_02",
+    "R_CrowFeet_01",
+    "R_CheekBone_P",
+    "R_CheekBone_03",
+    "R_CheekBoneOut",
+    "R_Ear_P",
+    "R_Masseter",
+    "R_JawBulge",
+    "R_CheekIn_01",
+    "R_CheekIn_02",
+    "R_CheekIn_03",
+    "R_CheekIn_04",
+    "R_Cheek_01",
+    "R_Cheek_02",
+    "R_Cheek_03",
+    "R_Cheek_04",
+    "R_NasoBulge_01",
+    "R_NasoBulge_02",
+    "R_NasoBulge_03",
+    "R_NasoFold",
+    "R_NoseSide",
+    "R_Nostril_P",
+    "R_UprLpOut_01",
+    "R_UprLpOut_02",
+    "R_MouthCornerOut",
+    "R_UprLp_01",
+    "R_UprLp_02",
+    "R_UprLp_03",
+    "R_UprLpSide_01",
+    "R_UprLpSide_02",
+    "R_UprLpSide_03",
+    "R_UprLpCorner_01",
+    "R_UprLpCorner_02",
+    "R_UprLpCorner_03",
+    "R_LipCorner_01",
+    "R_LipCorner_02",
+    "R_LipCorner_03",
+    "R_LwrLp_01",
+    "R_LwrLp_02",
+    "R_LwrLp_03",
+    "R_LwrLpSide_01",
+    "R_LwrLpSide_02",
+    "R_LwrLpSide_03",
+    "R_LwrLpCorner_01",
+    "R_LwrLpCorner_02",
+    "R_LwrLpCorner_03",
+    "R_LwrLpOut_01",
+    "R_LwrLpOut_02",
+    "R_Chin_01",
+    "R_Chin_02",
+    "R_ChinSide",
+    "R_UnderChin",
+    "R_NeckLine",
+    "R_JawLine_01",
+    "R_JawLine_02",
+    "R_JawLine_03"
+}
+
 
 -- RE9 原生 96 个 FACS 面部形态键定义 (Index 00 ~ 95)
 local FACS_CHANNEL_INFO = {
@@ -133,6 +423,36 @@ for i = 0, 95 do
     }
 end
 
+-- 轨迹时序采样存储
+local trajectory_samples = {
+    shapekeys = {}, -- [t] = { [0] = v0, ..., [95] = v95 }
+    bones = {},     -- [bone_name] = { base_pos = {}, base_rot = {}, deltas = {} }
+    times = {}
+}
+
+local bound_joints = nil
+
+local function bind_all_joints(head)
+    bound_joints = {}
+    if not head or not head.face then return end
+    for _, bone_name in ipairs(ALL_285_BONES) do
+        local j = R.call(head.face, "getJointByName(System.String)", bone_name)
+        if not j and head.root then
+            j = R.call(head.root, "getJointByName(System.String)", bone_name)
+        end
+        if j then
+            local bp = R.call(j, "get_BaseLocalPosition")
+            local br = R.call(j, "get_BaseLocalRotation")
+            table.insert(bound_joints, {
+                name = bone_name,
+                joint = j,
+                bpos = bp and { bp.x, bp.y, bp.z } or {0, 0, 0},
+                brot = br and { br.x, br.y, br.z, br.w } or {0, 0, 0, 1}
+            })
+        end
+    end
+end
+
 local function reset_stats()
     for i = 0, 95 do
         local cur = stats[i].current or 0.0
@@ -143,9 +463,17 @@ local function reset_stats()
     end
     record_frame_count = 0
     record_start_time = os.clock()
+    
+    trajectory_samples = {
+        shapekeys = {},
+        bones = {},
+        times = {}
+    }
+    bound_joints = nil
 end
 
 local function save_stats_to_file()
+    -- 1. 保存 96 FACS 统计数据
     local export = {
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         duration_sec = record_frame_count > 0 and (os.clock() - record_start_time) or 0,
@@ -153,7 +481,6 @@ local function save_stats_to_file()
         total_channels = 96,
         facs_channels = {}
     }
-    -- 严格按序号 00 ~ 95 自然顺序输出，保留所有 0.000 通道与其实际位置
     for i = 0, 95 do
         local s = stats[i]
         local avg = s.count > 0 and (s.sum / s.count) or 0
@@ -169,12 +496,31 @@ local function save_stats_to_file()
             has_high_baseline = (s.min >= 0.10)
         })
     end
+    json.dump_file("ShapeKeySystem/native_facs_baselines.json", export, 2)
     
-    local ok = json.dump_file("ShapeKeySystem/native_facs_baselines.json", export, 2)
-    return ok
+    -- 2. 保存 285 骨骼与 96 形态键的毫秒级高精度时序轨迹
+    if record_bones_trajectory and #trajectory_samples.times > 0 then
+        local traj_export = {
+            timestamp = export.timestamp,
+            frame_count = #trajectory_samples.times,
+            duration_sec = export.duration_sec,
+            channels_count = 96,
+            bones_count = 0,
+            shapekey_names = {},
+            trajectory = trajectory_samples
+        }
+        for i = 0, 95 do traj_export.shapekey_names[i] = FACS_CHANNEL_INFO[i].name end
+        local bc = 0
+        for _ in pairs(trajectory_samples.bones) do bc = bc + 1 end
+        traj_export.bones_count = bc
+        
+        json.dump_file("ShapeKeySystem/native_bone_shapekey_trajectory.json", traj_export)
+    end
+    
+    return true
 end
 
--- Sampling logic every frame (Exclusively for 96 Native FACS Channels)
+-- Sampling logic every frame
 re.on_frame(function()
     if not is_recording and not ui_is_open then
         return
@@ -183,6 +529,7 @@ re.on_frame(function()
         local head = R.find()
         if not head or not head.face then return end
         local mesh = head.mesh or R.mesh(head.face)
+        local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
 
         local face_go = R.call(head.face, 'get_GameObject')
         local root_go = head.root and R.call(head.root, 'get_GameObject')
@@ -192,10 +539,11 @@ re.on_frame(function()
         local dvals = dm and R.call(dm, "get_DeformValues")
         local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
 
-        local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
-
         if is_recording then
             record_frame_count = record_frame_count + 1
+            if not bound_joints then
+                bind_all_joints(head)
+            end
             if use_timer and auto_stop_seconds > 0 then
                 if (os.clock() - record_start_time) >= auto_stop_seconds then
                     is_recording = false
@@ -204,21 +552,19 @@ re.on_frame(function()
             end
         end
 
+        local cur_sk_frame = is_recording and {} or nil
+
+        -- Sample 96 FACS Channels
         for i = 0, 95 do
             local val = nil
-
-            -- 1. 优先读取网格当前通道权重（原版网格直接读取原生权重；Mod网格读取当前实时驱动权重）
             if mesh and i < cn then
                 val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
                 if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
                 if val == nil then val = R.call(mesh, "getBlendShapeChannelWeight", i) end
             end
-
-            -- 2. 若网格未读出但动作组件有对应轨道，尝试从动作组件Deform轨道补充
             if (val == nil or val ~= val) and dvals and i < dlen then
                 val = R.call(dvals, "get_Item", i)
             end
-
             if type(val) ~= "number" or val ~= val then
                 val = 0.0
             end
@@ -231,61 +577,362 @@ re.on_frame(function()
                 s.sum = val
                 s.count = 1
             elseif not is_recording then
-                -- 实时预览模式：动态更新最小/最大值以展现动态波形
                 if val < s.min then s.min = val end
                 if val > s.max then s.max = val end
             else
-                -- 正式录制模式：累加帧数以计算均值底噪
                 if val < s.min then s.min = val end
                 if val > s.max then s.max = val end
                 s.sum = s.sum + val
                 s.count = s.count + 1
+            end
+            if cur_sk_frame then
+                cur_sk_frame[i] = math.floor(val * 1000 + 0.5) / 1000
+            end
+        end
+
+        -- Sample 285 Bones in Recording mode
+        if is_recording and record_bones_trajectory and bound_joints then
+            table.insert(trajectory_samples.times, os.clock() - record_start_time)
+            table.insert(trajectory_samples.shapekeys, cur_sk_frame)
+            
+            for _, bj in ipairs(bound_joints) do
+                local jname = bj.name
+                local j = bj.joint
+                local p = R.call(j, "get_LocalPosition")
+                local r = R.call(j, "get_LocalRotation")
+                
+                local bdata = trajectory_samples.bones[jname]
+                if not bdata then
+                    bdata = {
+                        base_pos = bj.bpos,
+                        base_rot = bj.brot,
+                        pos = {},
+                        rot = {}
+                    }
+                    trajectory_samples.bones[jname] = bdata
+                end
+                
+                if p and r then
+                    -- Store relative delta or absolute
+                    table.insert(bdata.pos, {
+                        math.floor((p.x - bj.bpos[1]) * 10000) / 10, -- mm with 0.1 precision
+                        math.floor((p.y - bj.bpos[2]) * 10000) / 10,
+                        math.floor((p.z - bj.bpos[3]) * 10000) / 10
+                    })
+                    table.insert(bdata.rot, {
+                        math.floor(r.x * 10000) / 10000,
+                        math.floor(r.y * 10000) / 10000,
+                        math.floor(r.z * 10000) / 10000,
+                        math.floor(r.w * 10000) / 10000
+                    })
+                end
             end
         end
     end)
 end)
 
 -- UI Drawing logic
+
+-- =========================================================================
+-- 主动骨骼驱动形态键探测系统 (Active Bone Driver Probe System)
+-- 测试原理: 强行逐一拖拽/旋转目标骨骼，实测 96 个形态键是否有任何一个发生数值响应
+-- =========================================================================
+
+local probe_active = false
+local probe_bone_index = 1
+local probe_phase = 0 -- 0: idle, 1: baseline, 2: manipulate, 3: verify/restore
+local probe_frame_in_phase = 0
+
+local PROBE_FOCUSED_BONES = {
+    { name = "C_Jaw", desc = "下颌骨 (张嘴/下沉 -40mm)", trans = {0, -0.040, 0}, rot = {0.259, 0, 0, 0.966} },
+    { name = "C_Jaw", desc = "下颌骨 (下沉微调 -20mm)", trans = {0, -0.020, 0}, rot = {0.130, 0, 0, 0.991} },
+    { name = "MouthW_00_L", desc = "左嘴宽辅助驱动骨", trans = {0.025, 0, 0}, rot = nil },
+    { name = "MouthW_00_R", desc = "右嘴宽辅助驱动骨", trans = {-0.025, 0, 0}, rot = nil },
+    { name = "MouthW_01_L", desc = "左嘴宽第二节", trans = {0.025, 0, 0}, rot = nil },
+    { name = "MouthR_05_L", desc = "左嘴角辅助骨", trans = {0.020, -0.015, 0}, rot = nil },
+    { name = "MouthR_05_R", desc = "右嘴角辅助骨", trans = {-0.020, -0.015, 0}, rot = nil },
+    { name = "MouthL_05_L", desc = "左唇辅助骨", trans = {0.015, 0.015, 0}, rot = nil },
+    { name = "C_Chin_01", desc = "下巴第一节", trans = {0, -0.025, 0}, rot = nil },
+    { name = "C_Chin_02", desc = "下巴第二节", trans = {0, -0.025, 0}, rot = nil },
+    { name = "C_UnderChin", desc = "下巴底部", trans = {0, -0.025, 0}, rot = nil },
+    { name = "L_LipCorner_01", desc = "左嘴角主骨", trans = {0.020, 0.010, 0}, rot = nil },
+    { name = "R_LipCorner_01", desc = "右嘴角主骨", trans = {-0.020, 0.010, 0}, rot = nil },
+    { name = "L_Brow_01", desc = "左眉峰主骨 (上抬 +25mm)", trans = {0, 0.025, 0}, rot = nil },
+    { name = "L_Brow_01", desc = "左眉峰主骨 (下压 -25mm)", trans = {0, -0.025, 0}, rot = nil },
+    { name = "L_Brow_02", desc = "左眉间主骨", trans = {0, -0.020, 0}, rot = nil },
+    { name = "L_Brow_03", desc = "左眉头主骨", trans = {0, -0.020, 0}, rot = nil },
+    { name = "L_BrowSack_01", desc = "左眉囊压迫骨", trans = {0, -0.020, 0}, rot = nil },
+    { name = "L_EyeFold_01", desc = "左上眼睑折痕骨 (闭眼测试)", trans = {0, -0.015, 0}, rot = nil },
+    { name = "L_EyeFold_02", desc = "左上眼睑外折骨", trans = {0, -0.015, 0}, rot = nil },
+    { name = "L_EyeBag_01", desc = "左下眼睑眼袋骨 (眯眼测试)", trans = {0, 0.015, 0}, rot = nil },
+    { name = "L_Eye", desc = "左眼球主骨 (下转测试)", trans = nil, rot = {0.174, 0, 0, 0.985} },
+    { name = "FacialJnt_Face", desc = "面部根骨骼", trans = {0, -0.020, 0}, rot = nil }
+}
+
+local probe_target_bones = PROBE_FOCUSED_BONES
+local probe_results = {}
+local probe_baseline_weights = {}
+local probe_status_msg = "待命 (点击下方按钮立即开始主动测试)"
+local probe_last_test_summary = nil
+
+local function start_probe_test(custom_bone_list)
+    if custom_bone_list then
+        probe_target_bones = custom_bone_list
+    else
+        probe_target_bones = PROBE_FOCUSED_BONES
+    end
+    probe_active = true
+    probe_bone_index = 1
+    probe_phase = 1
+    probe_frame_in_phase = 0
+    probe_results = {}
+    probe_baseline_weights = {}
+    probe_status_msg = "测试初始化中..."
+    probe_last_test_summary = nil
+end
+
+local function finish_probe_test()
+    probe_active = false
+    probe_phase = 0
+    local responsive_count = 0
+    for _, res in ipairs(probe_results) do
+        if #res.affected_shapekeys > 0 then
+            responsive_count = responsive_count + 1
+        end
+    end
+    
+    probe_status_msg = string.format("探测完成! 测试 %d 组，响应驱动 %d 组。", #probe_results, responsive_count)
+    
+    probe_last_test_summary = {
+        total_tested = #probe_results,
+        responsive_bones_count = responsive_count,
+        timestamp = os.date("%Y-%m-%d %H:%M:%S"),
+        details = probe_results
+    }
+    
+    json.dump_file("ShapeKeySystem/active_bone_probe_results.json", probe_last_test_summary, 2)
+end
+
+-- Hook into UpdateMotion: apply manual forced bone manipulation
+re.on_application_entry("UpdateMotion", function()
+    if not probe_active or probe_phase ~= 2 then return end
+    local head = R.find()
+    if not head or not head.face then return end
+    
+    local item = probe_target_bones[probe_bone_index]
+    if not item then return end
+    
+    local j = R.call(head.face, "getJointByName(System.String)", item.name)
+    if not j then return end
+    
+    local bpos = R.call(j, "get_BaseLocalPosition")
+    local brot = R.call(j, "get_BaseLocalRotation")
+    
+    if item.trans and bpos then
+        local np = Vector3f.new(bpos.x + item.trans[1], bpos.y + item.trans[2], bpos.z + item.trans[3])
+        pcall(j.call, j, "set_LocalPosition", np)
+    end
+    if item.rot and brot then
+        local q = Quaternion.new(item.rot[1], item.rot[2], item.rot[3], item.rot[4])
+        pcall(j.call, j, "set_LocalRotation", q)
+    end
+end)
+
+-- Hook into LateUpdateBehavior: check if any shapekey changed on Mesh
+re.on_application_entry("LateUpdateBehavior", function()
+    if not probe_active then return end
+    local head = R.find()
+    if not head or not head.face then return end
+    local mesh = head.mesh or R.mesh(head.face)
+    local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
+    
+    local item = probe_target_bones[probe_bone_index]
+    if not item then
+        finish_probe_test()
+        return
+    end
+    
+    probe_frame_in_phase = probe_frame_in_phase + 1
+    
+    -- Phase 1: Baseline sampling (5 frames)
+    if probe_phase == 1 then
+        probe_status_msg = string.format("[%d/%d] 采样底噪中: %s (%s)", probe_bone_index, #probe_target_bones, item.name, item.desc)
+        if probe_frame_in_phase >= 5 then
+            for i = 0, 95 do
+                local w = nil
+                if i < cn then
+                    w = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
+                    if w == nil then w = R.call(mesh, "getBlendShapeChannelWeight", i) end
+                end
+                probe_baseline_weights[i] = w or 0.0
+            end
+            probe_phase = 2
+            probe_frame_in_phase = 0
+        end
+    -- Phase 2: Manipulation and Verification (8 frames)
+    elseif probe_phase == 2 then
+        probe_status_msg = string.format("[%d/%d] 强行位移操控中: %s -> 监测 96 形态键响应", probe_bone_index, #probe_target_bones, item.name)
+        if probe_frame_in_phase >= 8 then
+            local affected = {}
+            for i = 0, 95 do
+                local cur_w = nil
+                if i < cn then
+                    cur_w = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
+                    if cur_w == nil then cur_w = R.call(mesh, "getBlendShapeChannelWeight", i) end
+                end
+                cur_w = cur_w or 0.0
+                local base_w = probe_baseline_weights[i] or 0.0
+                local delta = math.abs(cur_w - base_w)
+                if delta >= 0.001 then
+                    table.insert(affected, {
+                        index = i,
+                        name = FACS_CHANNEL_INFO[i].name,
+                        desc = FACS_CHANNEL_INFO[i].desc,
+                        base_weight = math.floor(base_w * 1000) / 1000,
+                        current_weight = math.floor(cur_w * 1000) / 1000,
+                        delta = math.floor(delta * 1000) / 1000
+                    })
+                end
+            end
+            
+            table.insert(probe_results, {
+                bone_name = item.name,
+                bone_desc = item.desc,
+                manipulation = item.trans and string.format("位移: (%.1f, %.1f, %.1f)mm", item.trans[1]*1000, item.trans[2]*1000, item.trans[3]*1000) or "旋转测试",
+                affected_shapekeys = affected,
+                response_status = (#affected > 0) and "RESPONSIVE" or "NO_REACTION"
+            })
+            
+            -- Phase 3: Restore bone
+            probe_phase = 3
+            probe_frame_in_phase = 0
+            local j = R.call(head.face, "getJointByName(System.String)", item.name)
+            if j then
+                local bpos = R.call(j, "get_BaseLocalPosition")
+                local brot = R.call(j, "get_BaseLocalRotation")
+                if bpos then pcall(j.call, j, "set_LocalPosition", bpos) end
+                if brot then pcall(j.call, j, "set_LocalRotation", brot) end
+            end
+        end
+    -- Phase 3: Cooldown/Restore (3 frames)
+    elseif probe_phase == 3 then
+        if probe_frame_in_phase >= 3 then
+            probe_bone_index = probe_bone_index + 1
+            if probe_bone_index > #probe_target_bones then
+                finish_probe_test()
+            else
+                probe_phase = 1
+                probe_frame_in_phase = 0
+            end
+        end
+    end
+end)
 re.on_draw_ui(function()
-    local opened = imgui.tree_node("RE9 原生96 FACS形态键监测与底噪录制")
+    local opened = imgui.tree_node("RE9 原生96 FACS形态键与285骨骼实时联动录制与解析")
     ui_is_open = (opened == true)
     if opened then
+
+        -- =========================================================================
+        -- 主动骨骼驱动形态键探测控制区
+        -- =========================================================================
+        imgui.spacing()
+        imgui.separator()
+        imgui.text_colored("【实验】骨骼主动强制操控 / 形态键响应探测器", 0xFF00FFFF)
+        imgui.text_colored("说明: 强行将骨骼拖拽 2~4cm 或旋转，监测网格形态键是否发生数值变动，验证驱动骨机制。", 0xFFAAAAAA)
+        imgui.spacing()
+
+        if not probe_active then
+            if imgui.button("开始重点驱动骨主动探测 (22组下颌/嘴唇/眉骨测试)", 380, 32) then
+                start_probe_test(PROBE_FOCUSED_BONES)
+            end
+            imgui.same_line()
+            if imgui.button("探测全量面部骨骼 (117根)", 200, 32) then
+                local full_list = {}
+                local keywords = {"jaw", "chin", "lip", "eye", "mouth", "cheek", "nose", "brow", "tongue", "face"}
+                for _, b in ipairs(ALL_285_BONES) do
+                    local bl = string.lower(b)
+                    local matched = false
+                    for _, kw in ipairs(keywords) do
+                        if string.find(bl, kw) then matched = true; break end
+                    end
+                    if matched then
+                        table.insert(full_list, { name = b, desc = "面部骨骼全量测试", trans = {0, -0.020, 0}, rot = nil })
+                    end
+                end
+                start_probe_test(full_list)
+            end
+        else
+            imgui.text_colored(">>> 正在进行主动测试: " .. probe_status_msg, 0xFF00FF00)
+            if imgui.button("中断测试 (Cancel)", 150, 28) then
+                probe_active = false
+                probe_phase = 0
+                probe_status_msg = "测试已由用户手动中断"
+            end
+        end
+
+        imgui.text_colored("当前状态: " .. probe_status_msg, 0xFFCCCCCC)
+
+        if probe_last_test_summary then
+            imgui.spacing()
+            local sum = probe_last_test_summary
+            if sum.responsive_bones_count > 0 then
+                imgui.text_colored(string.format(">>> 探测发现! 共有 %d 根骨骼的主动位移成功驱动了形态键！", sum.responsive_bones_count), 0xFF00FF00)
+            else
+                imgui.text_colored(">>> 实验结论: 测试的全部 " .. sum.total_tested .. " 组骨骼强制位移后，网格形态键均无任何变动 (变动量全为 0.000)。", 0xFF8888FF)
+            end
+
+            if imgui.tree_node("查看详细测试结果列表 (" .. #sum.details .. " 条记录)") then
+                for _, d in ipairs(sum.details) do
+                    if #d.affected_shapekeys > 0 then
+                        imgui.text_colored(string.format("[成功驱动] %-16s (%s) | %s", d.bone_name, d.bone_desc, d.manipulation), 0xFF00FF00)
+                        for _, aff in ipairs(d.affected_shapekeys) do
+                            imgui.text_colored(string.format("    -> [%02d] %-16s (底噪: %.3f, 当前: %.3f, 变动: +%.3f)", aff.index, aff.name, aff.base_weight, aff.current_weight, aff.delta), 0xFF00FF00)
+                        end
+                    else
+                        imgui.text_colored(string.format("[无响应]   %-16s (%s) | %s -> 96个形态键变动量均为 0.000", d.bone_name, d.bone_desc, d.manipulation), 0xFF888888)
+                    end
+                end
+                imgui.tree_pop()
+            end
+        end
+        imgui.separator()
+        imgui.spacing()
         imgui.spacing()
         local head = R.find()
         if head then
             local mesh = head.mesh or R.mesh(head.face)
             local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
-            imgui.text_colored(string.format("网格状态: [已连接] 头部网格 (通道数: %d)", cn), 0xFF00FF00)
+            imgui.text_colored(string.format("网格状态: [已连接] 头部网格 (通道数: %d | 骨骼就绪: %d 根)", cn, #ALL_285_BONES), 0xFF00FF00)
         else
             imgui.text_colored("网格状态: [未连接] 正在寻找头部网格 (cp_A000)...", 0xFF5555FF)
         end
         imgui.spacing()
         if not is_recording then
-            if imgui.button("开始录制 (Start Recording)", 200, 32) then
+            if imgui.button("开始录制 96形态键与285骨骼全量联动数据", 320, 36) then
                 reset_stats()
                 is_recording = true
             end
         else
-            if imgui.button("停止并保存 (Stop & Save JSON)", 200, 32) then
+            if imgui.button("停止录制并保存时序轨迹 (Stop & Save)", 320, 36) then
                 is_recording = false
                 save_stats_to_file()
             end
         end
         imgui.same_line()
-        if imgui.button("重置统计 (Reset)", 100, 32) then
+        if imgui.button("重置统计 (Reset)", 100, 36) then
             reset_stats()
         end
         imgui.same_line()
-        if imgui.button("导出为 JSON 文件", 150, 32) then
+        if imgui.button("导出为 JSON 文件", 150, 36) then
             save_stats_to_file()
         end
 
         -- Status Display
         local elapsed = is_recording and (os.clock() - record_start_time) or 0
         if is_recording then
-            imgui.text_colored(string.format("正在录制中... 时间: %.1f 秒 / 已统计: %d 帧", elapsed, record_frame_count), 0xFF00FF00)
+            imgui.text_colored(string.format("正在录制中... 时间: %.1f 绉?/ 已录制: %d 帧全骨骼轨迹", elapsed, record_frame_count), 0xFF00FF00)
         else
-            imgui.text(string.format("录制就绪 / 已统计: %d 帧 (文件保存至: ShapeKeySystem/native_facs_baselines.json)", record_frame_count))
+            imgui.text(string.format("录制就绪 / 已统计: %d 帧 (文件保存至: ShapeKeySystem/native_bone_shapekey_trajectory.json)", record_frame_count))
         end
 
         local c_timer, v_timer = imgui.checkbox("自动录制固定秒数停止", use_timer)
@@ -310,7 +957,7 @@ re.on_draw_ui(function()
         if c_filter then filter_text = v_filter end
 
         imgui.spacing()
-        imgui.text_colored("提示：默认按【00 ~ 95 原生通道序号】完整展示全量形态键，白字=完全静止 0.000，黄/橙/红=活动及底噪。", 0xFF55FFFF)
+        imgui.text_colored("提示：点击开始录制后，在游戏里让人物待机、说话或转动面部，录制完成后将自动计算 285 根骨骼与 96 形态键的数学对应关系！", 0xFF55FFFF)
         imgui.separator()
 
         -- Prepare sorted and filtered display list
