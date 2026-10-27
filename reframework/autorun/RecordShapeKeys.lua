@@ -1,6 +1,7 @@
 -- RecordShapeKeys.lua
--- RE9 全量形态键实时监测与底噪录制工具 (Full ShapeKey Monitor & Baseline Recorder)
--- 完整采样当前网格的全部形态键（包含所有 0.000 静止键与活跃键，不做任何隐式过滤与篡改覆盖）
+-- RE9 原生96 FACS形态键监测与底噪录制工具 (RE9 Native 96 FACS Baseline Monitor & Recorder)
+-- 专用于监测并录制 RE9 引擎本身的 96 个原生面部 FACS 形态键（00 ~ 95）
+-- 无论当前角色使用原版网格还是装备了 Mod，均真实提取 RE9 原生面部表情数据，保留所有 0.000 静止键
 
 local R = require('ShapeKeySystem_Games.RE9.Runtime')
 local Hash = require('ShapeKeySystem_Core.NameHash')
@@ -14,10 +15,10 @@ local auto_stop_seconds = 15
 local use_timer = true
 local ui_is_open = false
 
-local sort_by_baseline = false   -- 默认按序号 0 ~ N 自然顺序排列，绝不打乱或把 0.000 挤到底部
+local sort_by_baseline = false   -- 默认按序号 00 ~ 95 自然顺序排列，绝不打乱或把 0.000 挤到底部
 local hide_zero_baseline = false
 
--- 96 Native FACS blendshapes definitions on Leon's head mesh (Index 00 ~ 95)
+-- RE9 原生 96 个 FACS 面部形态键定义 (Index 00 ~ 95)
 local FACS_CHANNEL_INFO = {
     [0]  = { name = "CrnPl_01_L",        desc = "嘴角平拉01左" },
     [1]  = { name = "CrnPl_01_R",        desc = "嘴角平拉01右" },
@@ -117,78 +118,34 @@ local FACS_CHANNEL_INFO = {
     [95] = { name = "Pkr_Fnl_BR",        desc = "嘟嘴漏斗右下" },
 }
 
-local stats = {}
-local total_channels = 0
-local current_mesh_path = ""
-local name_dict = nil
-
-local function get_name_dict()
-    if not name_dict then
-        pcall(function()
-            local names = Hash.table_names()
-            name_dict = Hash.table(names)
-        end)
-        name_dict = name_dict or {}
-    end
-    return name_dict
+-- Pre-calculate hash for every native channel
+for i = 0, 95 do
+    FACS_CHANNEL_INFO[i].hash = Hash.hash(FACS_CHANNEL_INFO[i].name)
 end
 
-local function ensure_channels(mesh)
-    local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
-    if cn == total_channels and total_channels > 0 then return end
-
-    total_channels = cn
-    current_mesh_path = mesh and R.path(mesh) or ""
-    local dhashes = mesh and R.call(mesh, "get_ChannelNameHash")
-    local dict = get_name_dict()
-
-    stats = {}
-    for i = 0, cn - 1 do
-        local h = dhashes and Hash.hash_at(dhashes, i, true)
-        local h_hex = h and string.format("0x%08X", h) or nil
-        local name, desc
-
-        -- 1. Check if dictionary resolves hash
-        if h and dict[h] then
-            name = dict[h]
-            desc = "自定义/MMD形态键 (" .. name .. ")"
-        end
-        -- 2. If index in 0 ~ 95 and no custom name
-        if not name and i < 96 and FACS_CHANNEL_INFO[i] then
-            name = FACS_CHANNEL_INFO[i].name
-            desc = FACS_CHANNEL_INFO[i].desc
-        end
-        -- 3. Fallback to generic channel
-        if not name then
-            name = string.format("Channel_%02d", i)
-            desc = h_hex and ("通道哈希 " .. h_hex) or "原生通道"
-        end
-
-        stats[i] = {
-            index = i,
-            name = name,
-            desc = desc,
-            hash = h,
-            hash_hex = h_hex,
-            min = 0.0,
-            max = 0.0,
-            sum = 0.0,
-            count = 0,
-            current = 0.0
-        }
-    end
+local stats = {}
+for i = 0, 95 do
+    local info = FACS_CHANNEL_INFO[i]
+    stats[i] = {
+        index = i,
+        name = info.name,
+        desc = info.desc,
+        hash = info.hash,
+        min = 0.0,
+        max = 0.0,
+        sum = 0.0,
+        count = 0,
+        current = 0.0
+    }
 end
 
 local function reset_stats()
-    for i = 0, total_channels - 1 do
-        local s = stats[i]
-        if s then
-            local cur = s.current or 0.0
-            s.min = cur
-            s.max = cur
-            s.sum = cur
-            s.count = 1
-        end
+    for i = 0, 95 do
+        local cur = stats[i].current or 0.0
+        stats[i].min = cur
+        stats[i].max = cur
+        stats[i].sum = cur
+        stats[i].count = 1
     end
     record_frame_count = 0
     record_start_time = os.clock()
@@ -199,36 +156,51 @@ local function save_stats_to_file()
         timestamp = os.date("%Y-%m-%d %H:%M:%S"),
         duration_sec = record_frame_count > 0 and (os.clock() - record_start_time) or 0,
         frame_count = record_frame_count,
-        mesh_path = current_mesh_path,
-        total_channels = total_channels,
-        channels = {}
+        total_channels = 96,
+        facs_channels = {}
     }
-    -- 严格按序号 0, 1, 2, ... N-1 自然顺序输出，保留所有 0.000 通道与其实际位置
-    for i = 0, total_channels - 1 do
+    -- 严格按序号 00 ~ 95 自然顺序输出，保留所有 0.000 通道与其实际位置
+    for i = 0, 95 do
         local s = stats[i]
-        if s then
-            local avg = s.count > 0 and (s.sum / s.count) or 0
-            local span = s.max - s.min
-            table.insert(export.channels, {
-                index = s.index,
-                name = s.name,
-                description = s.desc,
-                hash = s.hash_hex,
-                baseline_min = math.floor(s.min * 1000 + 0.5) / 1000,
-                peak_max = math.floor(s.max * 1000 + 0.5) / 1000,
-                span = math.floor(span * 1000 + 0.5) / 1000,
-                average = math.floor(avg * 1000 + 0.5) / 1000,
-                is_active = (s.max > 0.0001 or s.min > 0.0001)
-            })
-        end
+        local avg = s.count > 0 and (s.sum / s.count) or 0
+        local span = s.max - s.min
+        table.insert(export.facs_channels, {
+            index = s.index,
+            name = s.name,
+            description = s.desc,
+            baseline_min = math.floor(s.min * 1000 + 0.5) / 1000,
+            peak_max = math.floor(s.max * 1000 + 0.5) / 1000,
+            span = math.floor(span * 1000 + 0.5) / 1000,
+            average = math.floor(avg * 1000 + 0.5) / 1000,
+            has_high_baseline = (s.min >= 0.10)
+        })
     end
-    export.facs_channels = export.channels
     
     local ok = json.dump_file("ShapeKeySystem/native_facs_baselines.json", export, 2)
     return ok
 end
 
--- Sampling logic every frame: 全通道真实采样，未开启UI且未录制时 0 开销休眠
+-- Deform hash to index cache on Motion
+local cached_motion_id = nil
+local deform_indices = {}
+
+local function get_deform_index(dm, hash)
+    if not dm then return nil end
+    local addr = R.address(dm)
+    if addr ~= cached_motion_id then
+        cached_motion_id = addr
+        deform_indices = {}
+        local dhashes = R.call(dm, "get_DeformNameHashes")
+        local len = dhashes and (R.call(dhashes, "get_Length") or R.call(dhashes, "get_Count")) or 0
+        for i = 0, len - 1 do
+            local h = Hash.hash_at(dhashes, i, true)
+            if h then deform_indices[h] = i end
+        end
+    end
+    return deform_indices[hash]
+end
+
+-- Sampling logic every frame (Exclusively for 96 Native FACS Channels)
 re.on_frame(function()
     if not is_recording and not ui_is_open then
         return
@@ -237,10 +209,27 @@ re.on_frame(function()
         local head = R.find()
         if not head or not head.face then return end
         local mesh = head.mesh or R.mesh(head.face)
-        if not mesh then return end
 
-        ensure_channels(mesh)
-        if total_channels <= 0 then return end
+        local face_go = R.call(head.face, 'get_GameObject')
+        local root_go = head.root and R.call(head.root, 'get_GameObject')
+        local fm = face_go and R.component(face_go, sdk.typeof('via.motion.Motion'))
+        local rm = root_go and R.component(root_go, sdk.typeof('via.motion.Motion'))
+        local dm = fm or rm
+        local dvals = dm and R.call(dm, "get_DeformValues")
+        local dlen = dvals and (R.call(dvals, "get_Length") or R.call(dvals, "get_Count")) or 0
+
+        -- 判断当前网格是否为原版里昂头部（96通道且第0通道为 CrnPl_01_L）
+        local is_native_mesh = false
+        if mesh then
+            local cn = R.call(mesh, "get_BlendShapeChannelNum") or 0
+            if cn == 96 then
+                local dhashes = R.call(mesh, "get_ChannelNameHash")
+                local h0 = dhashes and Hash.hash_at(dhashes, 0, true)
+                if h0 == FACS_CHANNEL_INFO[0].hash then
+                    is_native_mesh = true
+                end
+            end
+        end
 
         if is_recording then
             record_frame_count = record_frame_count + 1
@@ -252,33 +241,48 @@ re.on_frame(function()
             end
         end
 
-        for i = 0, total_channels - 1 do
-            local val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
-            if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
-            if val == nil then val = R.call(mesh, "getBlendShapeChannelWeight", i) end
+        for i = 0, 95 do
+            local val = nil
+            local info = FACS_CHANNEL_INFO[i]
+
+            -- 1. 如果是原版里昂网格，直接读取网格顶点通道权重
+            if is_native_mesh and mesh then
+                val = R.call(mesh, "getBlendShapeChannelWeightParam(System.UInt64)", i)
+                if val == nil then val = R.call(mesh, "getBlendShapeChannelWeightParam", i) end
+                if val == nil then val = R.call(mesh, "getBlendShapeChannelWeight", i) end
+            end
+
+            -- 2. 如果是装备了Mod的网格（或网格通道为空），从引擎底层的 Motion 原生Deform轨道读取真实数据
+            if (val == nil or not is_native_mesh) and dm and dvals then
+                local didx = get_deform_index(dm, info.hash)
+                if didx and didx < dlen then
+                    val = R.call(dvals, "get_Item", didx)
+                elseif i < dlen then
+                    val = R.call(dvals, "get_Item", i)
+                end
+            end
+
             if type(val) ~= "number" or val ~= val then
                 val = 0.0
             end
 
             local s = stats[i]
-            if s then
-                s.current = val
-                if s.count == 0 then
-                    s.min = val
-                    s.max = val
-                    s.sum = val
-                    s.count = 1
-                elseif not is_recording then
-                    -- 实时预览模式：动态更新最小/最大值
-                    if val < s.min then s.min = val end
-                    if val > s.max then s.max = val end
-                else
-                    -- 正式录制模式：累加帧数以计算均值底噪
-                    if val < s.min then s.min = val end
-                    if val > s.max then s.max = val end
-                    s.sum = s.sum + val
-                    s.count = s.count + 1
-                end
+            s.current = val
+            if s.count == 0 then
+                s.min = val
+                s.max = val
+                s.sum = val
+                s.count = 1
+            elseif not is_recording then
+                -- 实时预览模式：动态更新最小/最大值以展现动态波形
+                if val < s.min then s.min = val end
+                if val > s.max then s.max = val end
+            else
+                -- 正式录制模式：累加帧数以计算均值底噪
+                if val < s.min then s.min = val end
+                if val > s.max then s.max = val end
+                s.sum = s.sum + val
+                s.count = s.count + 1
             end
         end
     end)
@@ -286,7 +290,7 @@ end)
 
 -- UI Drawing logic
 re.on_draw_ui(function()
-    local opened = imgui.tree_node("RE9 原生/Mod形态键全量监测与底噪录制")
+    local opened = imgui.tree_node("RE9 原生96 FACS形态键监测与底噪录制")
     ui_is_open = (opened == true)
     if opened then
         imgui.spacing()
@@ -294,12 +298,16 @@ re.on_draw_ui(function()
         if head then
             local mesh = head.mesh or R.mesh(head.face)
             local cn = mesh and R.call(mesh, "get_BlendShapeChannelNum") or 0
-            imgui.text_colored(string.format("网格状态: [已连接] 头部网格通道数: %d (当前已记录: %d 通道)", cn, total_channels), 0xFF00FF00)
-            if current_mesh_path ~= "" then
-                imgui.text_colored(string.format("网格路径: %s", current_mesh_path), 0xFFAAAAAA)
+            local is_mod_mesh = (cn ~= 96)
+            if is_mod_mesh then
+                imgui.text_colored(string.format("网格状态: [已连接] 当前装备Mod模型 (网格通道数: %d)", cn), 0xFF00FFFF)
+                imgui.text_colored("采样来源: [底层动作引擎 via.motion.Motion] 正在实时提取 RE9 原生 96 FACS 真实表情数据", 0xFF00FF00)
+            else
+                imgui.text_colored("网格状态: [已连接] 原版里昂头部网格 (96 原生 FACS 通道)", 0xFF00FF00)
+                imgui.text_colored("采样来源: [原生网格顶点缓存 via.render.Mesh]", 0xFFAAAAAA)
             end
         else
-            imgui.text_colored("网格状态: [未连接] 正在寻找头部网格...", 0xFF5555FF)
+            imgui.text_colored("网格状态: [未连接] 正在寻找头部网格 (cp_A000)...", 0xFF5555FF)
         end
         imgui.spacing()
         if not is_recording then
@@ -348,30 +356,28 @@ re.on_draw_ui(function()
         if c_hide then hide_zero_baseline = v_hide end
 
         -- Filter Input
-        local c_filter, v_filter = imgui.input_text("搜索筛选 (序号 / 中文说明 / 英文名)", filter_text)
+        local c_filter, v_filter = imgui.input_text("搜索筛选 (序号 / 中文说明 / 英文原名)", filter_text)
         if c_filter then filter_text = v_filter end
 
         imgui.spacing()
-        imgui.text_colored("提示：默认按【0 ~ N 通道自然序号】完整展示全量形态键，包含所有 0.000 静止键；白字=完全静止 0.000。", 0xFF55FFFF)
+        imgui.text_colored("提示：默认按【00 ~ 95 原生通道序号】完整展示全量形态键，白字=完全静止 0.000，黄/橙/红=活动及底噪。", 0xFF55FFFF)
         imgui.separator()
 
         -- Prepare sorted and filtered display list
         local display_list = {}
         local f_lower = filter_text:lower()
-        for i = 0, total_channels - 1 do
+        for i = 0, 95 do
             local s = stats[i]
-            if s then
-                local match_filter = true
-                if filter_text ~= "" then
-                    local full = string.format("[%02d] %s %s", i, s.name, s.desc):lower()
-                    if not full:find(f_lower, 1, true) then match_filter = false end
-                end
-                if hide_zero_baseline and s.min < 0.0005 and s.max < 0.0005 and s.current < 0.0005 then
-                    match_filter = false
-                end
-                if match_filter then
-                    table.insert(display_list, s)
-                end
+            local match_filter = true
+            if filter_text ~= "" then
+                local full = string.format("[%02d] %s %s", i, s.name, s.desc):lower()
+                if not full:find(f_lower, 1, true) then match_filter = false end
+            end
+            if hide_zero_baseline and s.min < 0.0005 and s.max < 0.0005 and s.current < 0.0005 then
+                match_filter = false
+            end
+            if match_filter then
+                table.insert(display_list, s)
             end
         end
 
@@ -389,8 +395,8 @@ re.on_draw_ui(function()
         end
 
         -- Header
-        imgui.text_colored(string.format("%-6s | %-22s | %-28s | %-8s | %-8s | %-8s | %-8s", 
-            "序号", "通道标识 (Name)", "中文/说明 (Description)", "实时当前", "常态底噪", "峰值Max", "波动跨度"), 0xFFAAAAAA)
+        imgui.text_colored(string.format("%-6s | %-18s | %-28s | %-8s | %-8s | %-8s | %-8s", 
+            "序号", "原生通道名 (Name)", "中文功能说明 (Description)", "实时当前", "常态底噪", "峰值Max", "波动跨度"), 0xFFAAAAAA)
         imgui.separator()
 
         for _, s in ipairs(display_list) do
@@ -407,10 +413,10 @@ re.on_draw_ui(function()
                 color = 0xFF00FFFF -- Yellow (active)
             end
 
-            local line = string.format("[%02d] | %-20s | %-22s | %6.3f | %6.3f | %6.3f | %6.3f", 
+            local line = string.format("[%02d] | %-16s | %-22s | %6.3f | %6.3f | %6.3f | %6.3f", 
                 s.index,
-                s.name:sub(1, 20), 
-                s.desc:sub(1, 22), 
+                s.name, 
+                s.desc, 
                 s.current, 
                 s.min, 
                 s.max, 
