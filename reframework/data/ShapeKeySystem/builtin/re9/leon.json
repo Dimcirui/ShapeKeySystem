@@ -1053,10 +1053,14 @@
   },
   "taps": {
     "eyeBlinkLeft": [
-      "HeadSkinned_blendShape.UprLdDn_00_L"
+      "HeadSkinned_blendShape.UprLdDn_05_L",
+      "HeadSkinned_blendShape.UprLdDn_00_L",
+      "HeadSkinned_blendShape.UprLdDn_01_L"
     ],
     "eyeBlinkRight": [
-      "HeadSkinned_blendShape.UprLdDn_00_R"
+      "HeadSkinned_blendShape.UprLdDn_05_R",
+      "HeadSkinned_blendShape.UprLdDn_00_R",
+      "HeadSkinned_blendShape.UprLdDn_01_R"
     ],
     "jawOpen": [
       "HeadSkinned_blendShape.JwOpn_00_L",

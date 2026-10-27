@@ -9,6 +9,7 @@ local Motion = require("ShapeKeySystem_Games.RE9.Motion")
 local Names = require("ShapeKeySystem_Core.Names")
 local Vowels = require('ShapeKeySystem_Games.RE9.Vowels')
 local Eyes = require('ShapeKeySystem_Games.RE9.Eyes')
+local VirtualFACS = require("ShapeKeySystem_Games.RE9.VirtualFACS")
 local S = {}
 local labels = {"eyeBlinkLeft", "eyeBlinkRight", "jawOpen"}
 local keys = {eyeBlinkLeft = 1, eyeBlinkRight = 2, jawOpen = 3}
@@ -158,6 +159,9 @@ function S.read(h, P, inv_full, diagnostic)
     local motion_context,motion_error
     local scalars={}
     h.motion_requests=0
+    if valid then
+        VirtualFACS.evaluate(head, open_motion())
+    end
     local function open_motion()
         if motion_context==nil then
             motion_context,motion_error=Motion.open(head,h.motion_cache)
@@ -183,9 +187,9 @@ function S.read(h, P, inv_full, diagnostic)
                 if type(index) == "number" and index < head.count and Hash.hash_at(hashes, index, true) == tap.hash then
                     v = R.call(head.mesh, "getBlendShapeChannelWeightParam(System.UInt64)", index)
                 end
-                -- 2. If mesh didn't have it (mod mesh!), read directly from Motion FACS deforms!
-                if not finite(v) and open_motion() then
-                    v = Motion.deform_value(motion_context, tap.hash)
+                -- 2. If mesh didn't have it (mod mesh!), read from Virtual 96 FACS bus!
+                if not finite(v) then
+                    v = VirtualFACS.get(tap.name)
                 end
                 state = finite(v) and "ok" or "read_failed"
             end

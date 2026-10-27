@@ -40,8 +40,18 @@ local function resolve(head)
         return len > 0
     end
 
+    -- Resolve official PlayerFacialAnimationDriver._FacialMotion
+    local facial_driver = nil
+    if root_go then
+        facial_driver = R.component(root_go, sdk.typeof('app.PlayerFacialAnimationDriver'))
+            or R.component(root_go, sdk.typeof('app.CharacterFacialAnimationDriver'))
+    end
+    local facial_motion = facial_driver and facial_driver:get_field('_FacialMotion')
+
     local deform_motion = motion
-    if has_deforms(face_motion) then
+    if has_deforms(facial_motion) then
+        deform_motion = facial_motion
+    elseif has_deforms(face_motion) then
         deform_motion = face_motion
     elseif has_deforms(root_motion) then
         deform_motion = root_motion
