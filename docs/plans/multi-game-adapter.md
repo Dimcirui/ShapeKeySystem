@@ -420,4 +420,4 @@ RE4R 提供 `additional_faces()` 和 `instances_ready(cutscene_drive)`，由 Cor
 
 `actor_of(face)` 返回头部所属的人（RE4R：`leon`、`ada`），与 `additional_faces` 一起启用多角色编辑（[multi-actor.md](multi-actor.md)）：所选角色的头部经 `Scene.override` 进入主角色扫描，`face_root(face, root)` 的 `root` 此时是所选角色的根，适配器要把玩家自己的头部归到玩家的根上。
 
-`scoped_bindings = true` 启用用户来源优先与模型指纹匹配选择。绑定可设置 `eyes.neutral.L/R.yaw/pitch`，每个实例独立使用。未提供这些能力的适配器沿用原有流程。
+`scoped_bindings = true` 让 `user/` 的各级父预设都先于 `mods/` 查找。绑定可设置 `eyes.neutral.L/R.yaw/pitch`，每个实例独立使用。未提供这些能力的适配器沿用原有流程。
