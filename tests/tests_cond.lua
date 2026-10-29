@@ -225,4 +225,26 @@ do
     SKS.call("cond_preview", {}); ticks(3)
     check(math.abs(WEIGHTS[si] - 0.5) < 1e-6, "remap: preview off -> back to the sculpt value")
 end
+
+-- import a sculpt preset's non-zero values into a clip
+do
+    SKS.call("zero_sculpt_all")
+    SKS.call("set_sculpt_key", { name = self_key, value = 0.6 })
+    SKS.call("set_sculpt_key", { name = expr_key, value = 0.9 })
+    check(SKS.call("save_sculpt", { name = "Cond Import" }), "import: sculpt preset saved")
+    local rd = { auto = false, clips = { imp = { values = { keep_me = 0.3, [self_key] = 0.1 }, fade_in = 0, fade_out = 0 } }, states = {} }
+    SKS.call("cond_edit", { data = rd })
+    local okc, _, _, ri = SKS.call("cond_import_sculpt", { clip = "imp", name = "Cond Import" })
+    local v = st.conditions.current.data.clips.imp.values
+    local zeros = 0
+    for _, x in pairs(v) do if x == 0 then zeros = zeros + 1 end end
+    check(okc and ri.count == 2 and zeros == 0, "import: only the non-zero values are copied (" .. tostring(ri and ri.count) .. ")")
+    check(v[self_key] == 0.6 and v[expr_key] == 0.9 and v.keep_me == 0.3, "import: values as they are, same keys overwritten, others kept")
+    check(st.conditions.current.dirty, "import: the set has unsaved edits")
+    check(not SKS.call("cond_import_sculpt", { clip = "nope", name = "Cond Import" }), "import: unknown clip refused")
+    check(not SKS.call("cond_import_sculpt", { clip = "imp", name = "no such preset" }), "import: unknown preset refused")
+    SKS.call("cond_preview", { clip = "imp" }); ticks(3)
+    check(math.abs(WEIGHTS[si] - (0.6 + 0.4 * 0.6)) < 1e-6, string.format("import: the imported value plays like any clip value (got %.4f)", WEIGHTS[si]))
+    SKS.call("cond_preview", {}); ticks(3)
+end
 print("COND FAILS:", cf)

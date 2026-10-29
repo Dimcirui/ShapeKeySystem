@@ -402,7 +402,8 @@ local function clips_section(ctx, x, y, w)
                 oy = oy + 40
                 for _, k in ipairs(keys) do
                     D.text_mid(k, x + 20, oy, 28, C.text, W.small(), w * 0.3)
-                    local c3, v3 = W.slider("kv_" .. id .. k, x + w * 0.34, oy, w * 0.45, 28, c.values[k], 0, 1, { step = 0.01, fmt = "%.2f" })
+                    -- values imported from a sculpt preset may be above 1 (sculpt_max)
+                    local c3, v3 = W.slider("kv_" .. id .. k, x + w * 0.34, oy, w * 0.45, 28, c.values[k], 0, max(1, c.values[k]), { step = 0.01, fmt = "%.2f" })
                     if c3 then edit(ctx, function(d) d.clips[id].values[k] = v3 end) end
                     if W.tbutton("移除", x + w - tbw("移除") - 10, oy + 3) then edit(ctx, function(d) d.clips[id].values[k] = nil end) end
                     oy = oy + 30
@@ -415,6 +416,19 @@ local function clips_section(ctx, x, y, w)
                     if c4 and name then edit(ctx, function(d) d.clips[id].values[name] = 1.0 end) end
                 else
                     D.text_mid("先在「捏脸」页扫描装备，才能选择形态键", x + 20, oy + 4, 28, C.faint, W.small())
+                end
+                -- copy a sculpt preset's non-zero values into this combination
+                local pr = st.presets.sculpt or {}
+                if #pr > 0 then
+                    local labels = {}
+                    for i, e in ipairs(pr) do labels[i] = e.name .. (e.folder and "" or L.tr("（通用）")) end
+                    local ix = x + 30 + min(320, w * 0.5)
+                    local iw = min(220, x + w - ix - 10)
+                    local c5, i5 = W.select("import_" .. id, ix, oy + 4, iw, 28, labels, nil, { placeholder = "从捏脸配置导入…" })
+                    if c5 and pr[i5] then
+                        ctx.call("cond_import_sculpt", { clip = id, name = pr[i5].name, folder = pr[i5].folder })
+                    end
+                    W.tooltip("把该捏脸配置里所有不为 0 的形态键值原样加入这个组合；组合里已有的同名键会被覆盖", ix, oy + 4, iw, 28)
                 end
             end
         end

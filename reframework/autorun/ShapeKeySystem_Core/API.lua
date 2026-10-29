@@ -2678,6 +2678,22 @@ function cmds.cond_edit(a)
     return true
 end
 
+-- a sculpt preset's non-zero values into one clip of the working copy
+function cmds.cond_import_sculpt(a)
+    if type(a.clip) ~= "string" or type(a.name) ~= "string" then return false, "E_BAD_ARGS", "clip, name" end
+    local e = Presets.find_sculpt(a.name, a.folder or current_folder(), nil, true)
+    if not e then return false, "E_NOT_FOUND", "sculpt preset not found: " .. tostring(a.name) end
+    local ok, code, msg, n = CondExpr.import_values(a.clip, e.values)
+    if not ok then return false, code, msg end
+    if n > 0 then
+        C.update_touch_map()
+        Sculpt.mark_dirty()
+    end
+    C.build_cond_state()
+    notice("info", I18n.f("已从捏脸配置「%s」导入 %d 个形态键", e.name, n))
+    return true, nil, nil, { count = n }
+end
+
 function cmds.cond_save(a)
     local ok, code, msg, res = CondExpr.save(a.as_name)
     if not ok then return false, code, msg end
