@@ -332,13 +332,15 @@ local function about_card(ctx, x, y, w, h)
     for i = 1, min(2, #Version.history) do shown[i] = note_lines(Version.history[i].notes) end
     local lines = 0
     for _, l in ipairs(shown) do lines = lines + max(1, #l) end
-    h = max(h or 0, 10 + 30 + 22 + lines * 22 + 6)
+    h = max(h or 0, 10 + 30 + 44 + lines * 22 + 6)
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
     W.h2("关于", rx, cy)
     cy = cy + 30
-    D.text(L.f("%s v%s · 作者 %s", Version.name, Version.number, Version.author), rx, cy, C.muted, W.small(), rw)
+    D.text(string.format("%s v%s", Version.name, Version.number), rx, cy, C.muted, W.small(), rw)
+    cy = cy + 22
+    D.text(L.f("作者 %s", Version.author), rx, cy, C.muted, W.small(), rw)
     cy = cy + 22
     for i, parts in ipairs(shown) do
         local e = Version.history[i]
