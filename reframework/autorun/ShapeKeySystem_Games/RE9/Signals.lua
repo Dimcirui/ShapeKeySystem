@@ -117,14 +117,25 @@ function S.configure(data,mode,expanded)
     return true
 end
 
-function S.writable(name, mesh, index)
+-- One write batch reads the bounds and the hash array once; it never outlives the callback.
+function S.write_context(mesh)
+    local cn = R.bounds(mesh)
+    return {count = cn or false, hashes = cn and R.call(mesh, "get_ChannelNameHash")}
+end
+
+function S.writable(name, mesh, index, context)
     if type(name) ~= "string" or name == "" or name:sub(1, 1) == "#"
-        or name:find("_blendShape", 1, true) or protected[Hash.hash(name)] then return false end
+        or name:find("_blendShape", 1, true) then return false end
+    local name_hash = Hash.hash(name)
+    if protected[name_hash] then return false end
     if mesh and index ~= nil then
-        local cn = R.bounds(mesh)
+        local cn
+        if context then cn = context.count else cn = R.bounds(mesh) end
         if not cn or not R.integer(index, cn - 1) then return false end
-        local hash = Hash.hash_at(R.call(mesh, "get_ChannelNameHash"), index, true)
-        return hash == Hash.hash(name) and not protected[hash]
+        local hashes
+        if context then hashes = context.hashes else hashes = R.call(mesh, "get_ChannelNameHash") end
+        local hash = Hash.hash_at(hashes, index, true)
+        return hash == name_hash and not protected[hash]
     end
     return true
 end

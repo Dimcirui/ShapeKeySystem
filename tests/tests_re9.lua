@@ -69,6 +69,25 @@ check(not A.channel_writable(left) and not A.channel_writable("#FFFFFFFF"), "nat
 check(not A.channel_writable("renamed native", m, 0), "a renamed native index is protected by its actual hash")
 check(A.channel_writable(CHANNELS[5], m, 4), "matching custom name and index are writable")
 check(not A.channel_writable(CHANNELS[5], m, 5), "custom name cannot authorize a different index")
+check(A.active_sculpt and A.batch_weights and A.write_context, "sculpt visits active keys and writes share one batch")
+do
+    local fetches, plain_fetch = 0, m.get_ChannelNameHash
+    m.get_ChannelNameHash = function(self) fetches = fetches + 1; return plain_fetch(self) end
+    local context = A.write_context(m)
+    local same = true
+    for _, name in ipairs({left, "renamed native", CHANNELS[5], CHANNELS[8], CHANNELS[5]}) do
+        for index = 0, #CHANNELS do
+            if A.channel_writable(name, m, index, context) ~= A.channel_writable(name, m, index) then same = false end
+        end
+    end
+    local before = fetches
+    for index = 0, #CHANNELS do A.channel_writable(CHANNELS[8], m, index, context) end
+    check(same and fetches == before, "a write batch reuses the hash array and decides like the per-write checks")
+    length = #CHANNELS - 1
+    check(not A.channel_writable(CHANNELS[5], m, 4, A.write_context(m)), "a batch over a short weight list writes nothing")
+    length = #CHANNELS
+    m.get_ChannelNameHash = plain_fetch
+end
 check(A.raw.parse("eyeBlinkLeft") == 1 and A.raw.parse("jawOpen") == 3 and not A.raw.parse("typo"), "raw channels are explicit semantic keys")
 local h, count = A.bind(ARMOR, {1, 2, 3})
 check(count == 3 and h.mesh == nil and h.face == nil, "signal handles retain no engine objects")
