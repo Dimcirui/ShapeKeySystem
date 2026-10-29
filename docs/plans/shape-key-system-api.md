@@ -392,7 +392,7 @@ reframework/data/ShapeKeySystem/
     default.json                          全局默认父预设
     profiles/*.json                       表情配置
     sculpt/*.json                         通用捏脸预设
-    <建模>/<部件ID>.json                   各部位的父预设，例如 ch03_012_001/ch03_012_0014.json
+    <建模>/<代表部件ID>.json               这套建模的父预设，例如 ch03_012_001/ch03_012_0012.json
     <建模>/sculpt/*.json                   这个建模的捏脸预设
 ```
 
@@ -400,24 +400,26 @@ reframework/data/ShapeKeySystem/
 
 ### 父预设查找
 
-部件 ID 的结构是 `ch03_012_0014`：`012` 是系列，`001` 是建模，最后一位 `4` 是部位。同一建模的 2 号部位（身体，例如 `ch03_012_0012`）是这套建模的**代表部件 R**。以部件 P 为例，依次：
+部件 ID 的结构是 `ch03_012_0014`：`012` 是系列，`001` 是建模，最后一位 `4` 是部位。同一建模的 2 号部位（身体，例如 `ch03_012_0012`）是这套建模的**代表部件 R**。一个角色同一时刻只用一份父预设（设计见 `character-bindings.md`）：
 
-1. R 的文件写了 `"global": true` → 这套建模的所有部位都只用 R，各部位自己的文件一律忽略；
-2. P 自己的文件（各部位自己的优先级最高）；
-3. R 的文件（同一建模共用）；
-4. `default.json`。
+1. **主模型**：身上穿着代表部件时，取它所属的建模（混搭时以身体为准）；没有代表部件时，取所穿部件通道数之和最多的建模。
+2. 主模型 R 的文件；
+3. `default.json`。
 
-每一级都先 `user/` 后 `mods/`。同系列下不同建模的模型不同，所以不按系列回退。
+每一级都先 `user/` 后 `mods/`（`scoped_bindings` 的适配器先查完 `user/` 的各级，再查 `mods/`）。同系列下不同建模的模型不同，所以不按系列回退。
 
-- **过期预设**：`mods/` 下的父预设可以带 `"fingerprints": {"<部件ID>": "<通道指纹>"}`。指纹和实际穿着的 mesh 不一致时，说明这是被后装 mod 覆盖了 mesh、但没覆盖预设而留下的旧文件，跳过并提示一次。`user/` 下的文件不做这个检查。
-- **生效的父预设**：在身上所有部件命中的父预设里，按 global、部位自己、建模代表、`default.json` 的顺序取最具体的一个；同级时选通道多的部件。它的 `profile` 在部件穿戴期间代替全局配置，部件脱下后恢复全局配置。手动选择的配置优先于父预设，直到出现另一个父预设为止；扫描暂时找不到父预设（加载、菜单、换装途中）不会清除手动选择。
+- **旧的部件文件**：旧版本按部件写的 `<建模>/<非代表部件>.json` 不参与查找。扫描时提示一次，`state.presets.legacy = [{part, source, path}]` 列出所穿部件的这类文件；`adopt_legacy_binding {part, source?}` 把它写成主模型的父预设（`user/` 的旧文件随后写删除标记），删除走 `request_delete {kind = "binding", name = part}`。
+- **`global` 字段**：已无意义，读取时忽略。
+- **过期预设**：`mods/` 下的父预设可以带 `"fingerprints": {"<部件ID>": "<通道指纹>"}`。指纹和这套建模任一实际穿着的 mesh 不一致时，说明这是被后装 mod 覆盖了 mesh、但没覆盖预设而留下的旧文件，跳过并提示一次。`user/` 下的文件不做这个检查。
+- **生效的父预设**：主模型命中的那一份。它的 `profile` 在部件穿戴期间代替全局配置，部件脱下后恢复全局配置。手动选择的配置优先于父预设，直到出现另一个父预设为止；扫描暂时找不到父预设（加载、菜单、换装途中）不会清除手动选择。
+- **写入**：`write_binding {part}`、`bind_config`、`save_tuning`、`restore_mod_binding {part}` 都写 `part` 所属建模的代表部件文件（`save_tuning` 在 `default.json` 生效时写 `default.json`）。
 - **父预设里的捏脸预设名**：先在这个父预设所在的建模文件夹里找，再到通用预设里找。不会跨到别的建模文件夹。
 - **没有形态键的部件**：不需要任何 json。
 - **删除 = 写删除标记**：REFramework 的 Lua 不能可靠地删除文件，所以删除和"恢复 mod 父预设"都是往 `user/` 下写 `{"deleted": true}`，读取时当作不存在。
 
 ### 增益和视线（跟着部件走）
 
-- 父预设生效时，`cfg.expression` 和 `cfg.eyes` 里放的是**这个部件的工作副本**：以 `settings.json` 的兜底值为底，覆盖上父预设里的值。修改只改内存，`state.expression.tuning.dirty = true`；`save_tuning` 把它写进这个父预设对应的 `user/` 文件（层级不变：global、模型代表、`default.json` 都写回原来那一级），并保留 profile、sculpt、global、fingerprints 等其他字段。
+- 父预设生效时，`cfg.expression` 和 `cfg.eyes` 里放的是**这个部件的工作副本**：以 `settings.json` 的兜底值为底，覆盖上父预设里的值。修改只改内存，`state.expression.tuning.dirty = true`；`save_tuning` 把它写进这个父预设对应的 `user/` 文件（主模型文件或 `default.json`，写回原来那一级），并保留 profile、sculpt、global、fingerprints 等其他字段。
 - `settings.json` **只保存兜底值**，不会被父预设里的值污染。没有父预设时，修改照旧直接存进 `settings.json`。
 - 只有父预设里的增益和视线内容、命中的文件或表情配置发生变化时，才会重新加载。定期重扫不会冲掉未保存的修改。
 - `gains.for_profile`：单通道增益是为哪个表情配置调的。当前配置不同时，单通道增益不生效（`tuning.profile_mismatch = true`，并提示一次）；整体、部位、视线这些设置照常生效。`save_tuning` 不会覆盖掉为另一个配置调的单通道增益。
@@ -428,7 +430,7 @@ reframework/data/ShapeKeySystem/
 
 - **键名**：取通道名最后一个 `.` 之后的部分，再去掉 `_LODn`。同名的 LOD 副本和不同部件里的同名形态键合并成一项。
 - **`default` 和 `value`**：
-  - `default`：只看 mod 自带的父预设链（`mods/`）选出的捏脸预设，没有则为 0。"恢复默认"和 A/B 预览都用它。
+  - `default`：只看主模型 mod 自带的父预设链（`mods/`）选出的捏脸预设；混搭时，其他建模的部件对这两份预设都没提到的键取它自己 mod 的捏脸预设；都没有则为 0。"恢复默认"和 A/B 预览都用它。
   - `value`：生效的父预设所选的捏脸预设。用户改过的键（`touched`）在重新扫描、换预设时保留，没改过的跟着预设走。
 - **`load_sculpt {name, folder?}`**：加载一份捏脸预设，不写父预设，算一步撤销。预设里没提到的键回到 mod 默认值。`folder` 省略时，先找当前建模文件夹，再找通用预设。换装后，"当前预设"会自动恢复成父预设里的那份。
 - **`save_sculpt {name, general?}`**：默认存进 `user/<当前建模>/sculpt/`；`general = true` 时存为通用预设 `user/sculpt/`。
@@ -450,7 +452,6 @@ reframework/data/ShapeKeySystem/mods/ch03_012_001/ch03_012_0012.json     # 只�
    "gains": {"for_profile": "shinano", "master_gain": 1.0, "region_gains": {"mouth": 1.0},
              "channel_gains": {"mouthSmileLeft": 1.2}},
    "eyes": {"full_deg": {"yaw": 25, "pitch": 20}, "invert": {"yaw": false}, "sets": {"look": true}},
-   "global": false,                              # 只在 2 号部位的文件里有意义
    "fingerprints": {"ch03_012_0012": "1a2b3c4d"}}
 reframework/data/ShapeKeySystem/mods/ch03_012_001/sculpt/Airi 日常脸.json
   {"schema": "sks.sculpt/1", "name": "Airi 日常脸",

@@ -83,18 +83,17 @@ U.file_exists = function(path)
 end
 loads = {}
 local r = P.resolve_binding("own")
-check(r.base == "own" and r.source == "mods" and r.level == "own" and r.data.profile == "own",
-    "own-part bindings retain precedence over a non-global representative")
-check(loads[user_rep] == 1 and checks[mod_rep] == 1,
-    "global and model steps reuse both loaded and missing representative results")
-checks, loads = {}, {}
-r = P.resolve_binding("representative")
-check(loads[user_rep] == 1 and checks[mod_rep] == 1 and r.level == "own",
-    "representative global and own steps read each path once")
+check(r.base == "representative" and r.source == "user" and r.level == "model" and r.data.profile == "first",
+    "a part file takes no part in the lookup: the representative's binding covers the model")
+check(loads[user_rep] == 1 and not checks[mod_own],
+    "the representative is read once and the part file is not probed")
+local legacy = P.legacy_bindings({ { id = "own" }, { id = "representative" } })
+check(#legacy == 1 and legacy[1].part == "own" and legacy[1].source == "mods",
+    "the part file is listed as a legacy binding")
 U.save_json(user_rep, { global = true, profile = "second" })
 r = P.resolve_binding("own")
-check(r.base == "representative" and r.level == "global" and r.data.profile == "second",
-    "a subsequent resolution sees rewritten configuration and preserves global priority")
+check(r.base == "representative" and r.level == "model" and r.data.profile == "second",
+    "a subsequent resolution sees rewritten configuration; global is ignored")
 U.save_json(user_rep, { deleted = true })
 U.save_json(mod_rep, { profile = "new-mod" })
 r = P.resolve_binding("representative")

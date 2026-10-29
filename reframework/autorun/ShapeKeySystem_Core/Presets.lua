@@ -2,19 +2,16 @@
 -- Layout (reframework/data/ShapeKeySystem), mods/ read-only, user/ the only place we write:
 --   <src>/default.json                     global default binding
 --   <src>/sculpt/*.json                    general sculpt presets (not tied to one model)
---   <src>/<model>/<part>.json              per-part bindings, e.g. mods/ch03_012_001/ch03_012_0014.json
+--   <src>/<model>/<representative>.json    the model's binding, e.g. mods/ch03_012_001/ch03_012_0012.json
 --   <src>/<model>/sculpt/*.json            sculpt presets that belong to that model
 -- Profiles stay global (builtin/, mods/profiles, user/profiles; see Profile.lua).
 --
--- Binding lookup for part P = ch03_012_0014 (series 012, model 001, slot 4). The model's
--- representative R is its slot-2 (body) part, ch03_012_0012:
---   1. R with "global": true      -> one preset for every part of the model, own files ignored
---   2. P itself                   -> each part's own file wins
---   3. R                          -> the model's shared preset
---   4. default.json
--- Each step tries user/ then mods/. A mods binding may carry "fingerprints": {part: hash}; when
--- the worn mesh's channel fingerprint differs, the file is stale (left by a mod whose mesh was
--- later overwritten by another mod) and is skipped. user/ files are never skipped for that.
+-- A character has one binding: the one of its primary model (P.primary_part; the body's model when
+-- parts of several models are worn). Lookup for model M with representative R (Wilds: the slot-2
+-- part, ch03_012_0012): 1. R's file, 2. default.json; each step tries user/ then mods/.
+-- A mods binding may carry "fingerprints": {part: hash}; when a worn mesh's channel fingerprint
+-- differs, the file is stale (left by a mod whose mesh was later overwritten by another mod) and
+-- is skipped. user/ files are never skipped for that. "global" is ignored.
 -- A binding's sculpt name is looked up in its own model folder first, then among the general ones.
 -- REFramework Lua cannot delete files reliably, so "deleting" a user file writes a tombstone
 -- { "deleted": true }; tombstoned files are treated as missing.
@@ -141,22 +138,33 @@ function P.validate_sculpt(d)
 end
 
 -- ---------------------------------------------------------------- bindings
+-- One binding covers a whole model: its file is the representative part's
+-- (<src>/<model>/<representative>.json), or the part's own when the adapter names no model.
+-- Files of other parts (<model>/<part>.json, written by earlier versions) take no part in the lookup.
+
+-- the file base that binds a part: its model's representative, else the part itself
+function P.binding_base(part)
+    return P.representative_of(part) or part
+end
+
 -- Returns { part, chain = {{path, exists, hit, level, error?}}, hit = shown path?, source?, data?,
---           base? (part ID of the file, or "default"), level?, folder? }
--- level: "global" / "own" / "model" / "default".
+--           base? (representative part ID, or "default"), level?, folder? }
+-- level: "model" / "default".
 -- only_source = "mods": the chain a mod alone defines (the defaults for reset / A-B preview).
--- fingerprint: the worn mesh's channel fingerprint for this part (stale check), may be nil.
+-- fingerprint: the worn mesh's channel fingerprint for this part; siblings: the other worn parts
+-- ({id, fingerprint}). A mods file whose fingerprints disagree with any worn part of the model is stale.
 function P.resolve_binding(part, only_source, fingerprint, siblings)
-    local rep = P.representative_of(part)
-    local steps = {}
-    if rep then steps[#steps + 1] = { base = rep, level = "global", need_global = true } end
-    steps[#steps + 1] = { base = part, level = "own" }
-    if rep and rep ~= part then steps[#steps + 1] = { base = rep, level = "model" } end
-    steps[#steps + 1] = { base = "default", level = "default" }
+    local base = P.binding_base(part)
+    local steps = { { base = base, level = "model" }, { base = "default", level = "default" } }
+    local worn = { [part] = fingerprint }
+    local folder = P.folder_of(part)
+    for _, s in ipairs(siblings or {}) do
+        if s.id ~= part and P.folder_of(s.id) == folder then worn[s.id] = s.fingerprint end
+    end
     local res = { part = part, chain = {} }
-    local listed, reads = {}, {}
     local sources = only_source and { only_source } or { "user", "mods" }
     local checks = {}
+    -- scoped adapters (several actors) let any user file win over a mod's
     if P.adapter.scoped_bindings then
         for _, source in ipairs(sources) do
             for _, step in ipairs(steps) do checks[#checks+1] = {step, source} end
@@ -166,57 +174,74 @@ function P.resolve_binding(part, only_source, fingerprint, siblings)
             for _, source in ipairs(sources) do checks[#checks+1] = {step, source} end
         end
     end
-    local own = P.adapter.scoped_bindings and fingerprint and live_json((binding_file("mods", part)))
-    local own_matches = own and P.validate_binding(own) and own.fingerprints and own.fingerprints[part] == fingerprint
-    if P.adapter.scoped_bindings and not own_matches then
-        local model = P.model_of(part)
-        for _, sibling in ipairs(siblings or {}) do
-            if P.model_of(sibling.id) == model then
-                local d = live_json((binding_file("mods", sibling.id)))
-                if d and P.validate_binding(d) and d.fingerprints and d.fingerprints[sibling.id] == sibling.fingerprint then
-                    own_matches = true
-                    break
+    for _, check in ipairs(checks) do
+        local step, source = check[1], check[2]
+        local path, shown = binding_file(source, step.base)
+        local data = live_json(path)
+        local entry = { path = shown, exists = data ~= nil, hit = false, level = step.level }
+        if data and not res.hit then
+            local ok, msg = P.validate_binding(data)
+            local fps = type(data.fingerprints) == "table" and data.fingerprints or nil
+            if ok and source == "mods" and fps then
+                for id, fp in pairs(worn) do
+                    if fp and fps[id] and fps[id] ~= fp then
+                        ok, msg = false, "通道指纹不符（可能是被覆盖的旧 mod 留下的），已跳过"
+                    end
                 end
+            end
+            if ok then
+                entry.hit = true
+                res.hit, res.source, res.data, res.base, res.level = shown, source, data, step.base, step.level
+                res.folder = step.base ~= "default" and P.folder_of(step.base) or nil
+            else
+                entry.error = msg
+            end
+        end
+        res.chain[#res.chain + 1] = entry
+    end
+    return res
+end
+
+-- The part whose model binds the whole character: a worn representative part (the one with the
+-- most channels when several are worn), else a part of the model with the most channels in total.
+-- parts: {id, n}; nil when empty.
+function P.primary_part(parts)
+    local rep_best
+    local total, best_of = {}, {}
+    for _, p in ipairs(parts or {}) do
+        local n = p.n or 0
+        if P.representative_of(p.id) == p.id and (not rep_best or n > (rep_best.n or 0)) then rep_best = p end
+        local f = P.folder_of(p.id)
+        total[f] = (total[f] or 0) + n
+        if not best_of[f] or n > (best_of[f].n or 0) then best_of[f] = p end
+    end
+    if rep_best then return rep_best end
+    local pick, most
+    for _, p in ipairs(parts or {}) do
+        local f = P.folder_of(p.id)
+        if not most or total[f] > most then pick, most = best_of[f], total[f] end
+    end
+    return pick
+end
+
+-- Part files left by earlier versions for the worn parts: {part, source, path (shown)}, user first.
+function P.legacy_bindings(parts)
+    local out, seen = {}, {}
+    for _, source in ipairs({ "user", "mods" }) do
+        for _, p in ipairs(parts or {}) do
+            local id = p.id
+            if not seen[source .. id] and P.binding_base(id) ~= id then
+                seen[source .. id] = true
+                local path, shown = binding_file(source, id)
+                if live_json(path) then out[#out + 1] = { part = id, source = source, path = shown } end
             end
         end
     end
-    for _, check in ipairs(checks) do
-            local step, source = check[1], check[2]
-            local path, shown = binding_file(source, step.base)
-            -- 代表部件可能同时出现在 global、own 和 model 步骤；只在本次解析复用读取。
-            local data = reads[path]
-            if data == nil then data = live_json(path) or false; reads[path] = data end
-            if data == false then data = nil end
-            local entry = { path = shown, exists = data ~= nil, hit = false, level = step.level }
-            if step.need_global and not (data and data.global == true) then
-                entry = nil   -- not a global preset: it is listed again at its own / model step
-            elseif listed[shown] then
-                entry = nil   -- the global preset again at its model step
-            elseif data and not res.hit then
-                local ok, msg = P.validate_binding(data)
-                local fps = type(data.fingerprints) == "table" and data.fingerprints or nil
-                if ok and source == "mods" and fingerprint and fps and fps[part] and fps[part] ~= fingerprint then
-                    ok, msg = false, "通道指纹不符（可能是被覆盖的旧 mod 留下的），已跳过"
-                end
-                if ok and source == "mods" and step.need_global and P.adapter.scoped_bindings
-                    and fingerprint and (not fps or fps[part] == nil) then
-                    if own_matches then
-                        ok, msg = false, "MOD 全局绑定未匹配当前部件指纹，使用部件绑定"
-                    else
-                        entry.warning = "MOD 全局绑定缺少当前部件指纹"
-                    end
-                end
-                if ok then
-                    entry.hit = true
-                    res.hit, res.source, res.data, res.base, res.level = shown, source, data, step.base, step.level
-                    res.folder = step.base ~= "default" and P.folder_of(step.base) or nil
-                else
-                    entry.error = msg
-                end
-            end
-            if entry then res.chain[#res.chain + 1] = entry; listed[shown] = true end
-    end
-    return res
+    return out
+end
+
+function P.read_binding(source, base)
+    return live_json((binding_file(source, base)))
 end
 
 -- base: a part ID (written to user/<model>/<part>.json) or "default" (user/default.json)

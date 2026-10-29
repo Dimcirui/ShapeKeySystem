@@ -105,8 +105,19 @@ local Presets = require("ShapeKeySystem_Core.Presets")
 local chain = {}
 for _, e in ipairs(Presets.resolve_binding("Head").chain) do chain[#chain + 1] = e.path end
 chain = table.concat(chain, " ")
-check(chain:find("user/musashi/musashi.json", 1, true) and chain:find("user/musashi/Head.json", 1, true),
-    "bindings: musashi/musashi.json for the character, musashi/Head.json per part (" .. chain .. ")")
+check(chain == "user/musashi/musashi.json mods/musashi/musashi.json user/default.json mods/default.json",
+    "bindings: one musashi/musashi.json for the whole character (" .. chain .. ")")
+-- a Head.json written by an earlier version no longer splits the character between two presets
+local Util = require("ShapeKeySystem_Core.Util")
+Util.save_json(Util.path("user", "musashi", "musashi.json"), { schema = "sks.binding/1", sculpt = "Whole" })
+Util.save_json(Util.path("user", "musashi", "Head.json"), { schema = "sks.binding/1", sculpt = "HeadOnly" })
+local worn = { { id = "Head", n = 40 }, { id = "OniHead", n = 40 }, { id = "Body", n = 10 } }
+check(Presets.resolve_binding("Head", nil, nil, worn).data.sculpt == "Whole"
+    and Presets.resolve_binding("Body", nil, nil, worn).data.sculpt == "Whole", "Head and Body share the character's sculpt preset")
+local legacy = Presets.legacy_bindings(worn)
+check(#legacy == 1 and legacy[1].path == "user/musashi/Head.json", "Head.json is listed as an old part binding")
+Util.save_json(Util.path("user", "musashi", "musashi.json"), { deleted = true })
+Util.save_json(Util.path("user", "musashi", "Head.json"), { deleted = true })
 local Scene = require("ShapeKeySystem_Core.Scene")
 local sig = Scene.children_signature(ROOT)
 local keep_addr = ARMOR._mesh.get_address
