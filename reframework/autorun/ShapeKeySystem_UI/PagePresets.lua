@@ -40,11 +40,12 @@ local function binding_card(ctx, x, y, w)
         if p.id == part then display = p.display or part; break end
     end
     local rows = b and #b.chain or 0
-    local h = 60 + rows * 30 + (b and 50 or 30) + 44
+    local legacy = st.presets.legacy or {}
+    local h = 60 + rows * 30 + (b and 50 or 30) + 44 + (#legacy > 0 and 28 + #legacy * 34 or 0)
     W.panel_box(x, y, w, h, true)
     local cy = y + 10
     local tw = W.h2("绑定（查找过程）", x + 12, cy)
-    D.text(part and L.f("部件 %s", display) or "没有带形态键的部件", x + 24 + tw, cy + 2, C.muted, W.small(), w - tw - 40)
+    D.text(part and L.f("主部件 %s", display) or "没有带形态键的部件", x + 24 + tw, cy + 2, C.muted, W.small(), w - tw - 40)
     cy = cy + 30
     if b then
         for i, c in ipairs(b.chain) do
@@ -78,6 +79,22 @@ local function binding_card(ctx, x, y, w)
         end
         if W.button("恢复 mod 自带的绑定", bx + bw + 10, cy, nil, 30, { kind = "ghost" }) then
             call("restore_mod_binding", { part = part })
+        end
+        cy = cy + 40
+    end
+    if #legacy > 0 then
+        D.text("旧的部件绑定（已不再生效）", x + 12, cy, C.warn, W.small(), w - 24)
+        cy = cy + 28
+        for _, e in ipairs(legacy) do
+            D.text_mid(e.path, x + 20, cy, 30, C.text, W.mono(), w - 330)
+            local del = e.source == "user"
+            if W.button("用它替换整套绑定", x + w - (del and 250 or 178), cy, 166, 30, { kind = "ghost" }) then
+                call("adopt_legacy_binding", { part = e.part, source = e.source })
+            end
+            if del and W.button("删除", x + w - 76, cy, 64, 30, { kind = "danger" }) then
+                call("request_delete", { kind = "binding", name = e.part })
+            end
+            cy = cy + 34
         end
     end
     return h

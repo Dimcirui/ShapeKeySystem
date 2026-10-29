@@ -94,8 +94,6 @@
   "ImGui（REFramework 自带）": "ImGui (REFramework built-in)",
   "JSON 解析失败": "JSON parse failed",
   "Look*（虹膜平面移动）": "Look* (iris slides)",
-  "MOD 全局绑定未匹配当前部件指纹，使用部件绑定": "Mod global binding does not match this part's fingerprint: using the part binding",
-  "MOD 全局绑定缺少当前部件指纹": "Mod global binding has no fingerprint for this part",
   "RE4R 支持多角色": "RE4R supports several characters",
   "RE4R 支持多角色；修复崛起过场中失效问题": "RE4R supports several characters; fixed Rise not working in cutscenes",
   "RE4R 支持缺失面骨与原生修正输入补偿": "RE4R: missing face bones and native correction inputs compensated",
@@ -1049,7 +1047,11 @@
   "编辑：%s": "Editing: %s",
   "%s（玩家）": "%s (player)",
   "捏脸、表情配置和驱动都作用于这里选中的角色": "Sculpt, expression config and drivers apply to the character selected here",
-  "RE4R 减少表情驱动开销；修复切换角色后后台表情停止": "RE4R: reduce expression-driver overhead; keep background expressions running when switching characters"
+  "RE4R 减少表情驱动开销；修复切换角色后后台表情停止": "RE4R: reduce expression-driver overhead; keep background expressions running when switching characters",
+  "主部件 %s": "Main part %s",
+  "旧的部件绑定（已不再生效）": "Old per-part bindings (no longer used)",
+  "用它替换整套绑定": "Use it as the outfit binding",
+  "%s 是旧的部件绑定，已不再生效": "%s is an old per-part binding and is no longer used"
  },
  "untranslated": [
   "Ag国",
