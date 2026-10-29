@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.10.0"
-V.author = "谛听, MK, Funnyguyz"
+V.number = "1.11.0"
+V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka"
 
 V.history = {
+    { version = "1.11.0", notes = "一个角色只用一份绑定；修复鬼武者捏脸预设被改回" },
     { version = "1.10.0", notes = "条件规则的组合可从捏脸配置导入" },
     { version = "1.9.2", notes = "RE4R 减少表情驱动开销；修复切换角色后后台表情停止" },
     { version = "1.9.1", notes = "崛起减少掉帧" },
