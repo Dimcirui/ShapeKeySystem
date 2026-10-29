@@ -92,32 +92,39 @@ check(math.abs(key("Waist_thin").value - 0.25) < 1e-6, "touched Waist_thin keeps
 ok, code = SKS.call("restore_mod_binding", { part = "ch03_012_0012" })
 check(not ok and code == "E_NOT_FOUND", "no user binding left -> E_NOT_FOUND")
 
--- lookup per part: global model preset > own file > the model's slot-2 file > default.json
+-- one binding per model: the slot-2 file, then default.json; part files of earlier versions are ignored
 dump("mods\\" .. M .. "\\ch03_012_0012.json", { deleted = true })
 ARMOR._name = "ch03_012_0014"; ticks(130)
 check(st.scene.parts[1].id == "ch03_012_0014", "now wearing ch03_012_0014 (same model 001, slot 4)")
 dump("user\\" .. M .. "\\ch03_012_0012.json", { schema = "sks.binding/1", profile = "My Test" })
 SKS.call("rescan"); ticks(3)
-check(st.presets.binding and st.presets.binding.hit == "user/" .. M .. "/ch03_012_0012.json", "no own file: the model's slot-2 file is used")
+check(st.presets.binding and st.presets.binding.hit == "user/" .. M .. "/ch03_012_0012.json", "the model's slot-2 file is used")
 check(st.expression.profile.id == "My Test" and st.expression.binding_source == "user/" .. M .. "/ch03_012_0012.json", "model file picked the profile")
 dump("user\\" .. M .. "\\ch03_012_0014.json", { schema = "sks.binding/1", profile = "arkit" })
 SKS.call("rescan"); ticks(3)
-check(st.presets.binding.hit == "user/" .. M .. "/ch03_012_0014.json" and st.expression.profile.id == "arkit", "the part's own file wins")
-dump("user\\" .. M .. "\\ch03_012_0012.json", { schema = "sks.binding/1", profile = "My Test", global = true })
-SKS.call("rescan"); ticks(3)
-check(st.presets.binding.hit == "user/" .. M .. "/ch03_012_0012.json" and st.expression.profile.id == "My Test", "global=true on the slot-2 file overrides own files")
+check(st.presets.binding.hit == "user/" .. M .. "/ch03_012_0012.json" and st.expression.profile.id == "My Test", "a part file left by an earlier version does not win")
+check(#st.presets.legacy == 1 and st.presets.legacy[1].path == "user/" .. M .. "/ch03_012_0014.json", "the part file is listed as legacy")
+local legacy_noted = false
+for _, n in ipairs(st.runtime.notices) do if n.text:find("ch03_012_0014.json", 1, true) then legacy_noted = true end end
+check(legacy_noted, "legacy part file reported")
+ok = SKS.call("adopt_legacy_binding", { part = "ch03_012_0014" }); ticks(3)
+check(ok and st.expression.profile.id == "arkit" and load("user\\" .. M .. "\\ch03_012_0012.json").profile == "arkit",
+    "adopting the part file rewrites the model's binding")
+check(load("user\\" .. M .. "\\ch03_012_0014.json").deleted == true and #st.presets.legacy == 0, "the adopted part file is tombstoned")
+ok = SKS.call("write_binding", { part = "ch03_012_0014", expression = "My Test" }); ticks(3)
+check(ok and load("user\\" .. M .. "\\ch03_012_0012.json").profile == "My Test" and load("user\\" .. M .. "\\ch03_012_0014.json").deleted == true,
+    "write_binding for a slot-4 part writes the model's slot-2 file")
 dump("user\\" .. M .. "\\ch03_012_0012.json", { deleted = true })
-dump("user\\" .. M .. "\\ch03_012_0014.json", { deleted = true })
-dump("mods\\" .. M .. "\\ch03_012_0014.json", { schema = "sks.binding/1", profile = "My Test", fingerprints = { ch03_012_0014 = "deadbeef" } })
+dump("mods\\" .. M .. "\\ch03_012_0012.json", { schema = "sks.binding/1", profile = "My Test", fingerprints = { ch03_012_0014 = "deadbeef" } })
 SKS.call("rescan"); ticks(3)
 check(st.presets.binding == nil and st.expression.profile.id == "arkit", "stale mod binding skipped, back to the global profile")
 local warned = false
 for _, n in ipairs(st.runtime.notices) do if n.text:find("指纹") then warned = true end end
 check(warned, "stale mod binding reported once")
-dump("mods\\" .. M .. "\\ch03_012_0014.json", { schema = "sks.binding/1", profile = "My Test", fingerprints = { ch03_012_0014 = st.scene.parts[1].fingerprint } })
+dump("mods\\" .. M .. "\\ch03_012_0012.json", { schema = "sks.binding/1", profile = "My Test", fingerprints = { ch03_012_0014 = st.scene.parts[1].fingerprint } })
 SKS.call("rescan"); ticks(3)
-check(st.presets.binding and st.presets.binding.hit == "mods/" .. M .. "/ch03_012_0014.json", "matching fingerprint: mod binding used")
-dump("mods\\" .. M .. "\\ch03_012_0014.json", { deleted = true })
+check(st.presets.binding and st.presets.binding.hit == "mods/" .. M .. "/ch03_012_0012.json", "matching fingerprint: mod binding used")
+dump("mods\\" .. M .. "\\ch03_012_0012.json", { deleted = true })
 ARMOR._name = "ch03_012_0012"; ticks(130)
 
 -- tuning follows the part: default.json gains + gaze, edits stay out of settings.json

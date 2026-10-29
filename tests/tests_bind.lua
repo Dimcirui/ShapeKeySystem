@@ -88,8 +88,34 @@ for _, e in ipairs(st.presets.sculpt) do if e.name == "Other" then n_other = n_o
 check(folder ~= nil and n_other == 1 and src_other == "user", "same-name mod sculpt preset hidden behind the user one")
 U.save_json(U.path("mods", folder or "x", "sculpt", "Other.json"), {})
 
+-- one binding per character: the body's model is primary; parts of another model take their own
+-- mod's preset only for keys the character's presets do not name
+local Presets = require("ShapeKeySystem_Core.Presets")
+local Sculpt = require("ShapeKeySystem_Core.Sculpt")
+local mixed = { { id = "ch03_029_0014", n = 40 }, { id = "ch03_012_0012", n = 10 }, { id = "ch03_012_0013", n = 5 } }
+check(Presets.primary_part(mixed).id == "ch03_012_0012", "mixed outfit: the body's model is primary even with fewer channels")
+local bodyless = { { id = "ch03_029_0014", n = 10 }, { id = "ch03_012_0013", n = 6 }, { id = "ch03_012_0011", n = 6 } }
+check(Presets.folder_of(Presets.primary_part(bodyless).id) == "ch03_012_001", "no body worn: the model with the most channels")
+check(Presets.binding_base("ch03_012_0014") == "ch03_012_0012", "a slot-4 part is bound through its slot-2 file")
+local function fake(id, names) return { id = id, names = names, n = #names, mesh = { get_address = function() return id end } } end
+local active = { values = { A = 0.5 }, overrides = {} }
+local mod = { values = { B = 0.2 }, overrides = {} }
+local fill = { values = { A = 0.9, B = 0.9, C = 0.7 }, overrides = {} }
+Sculpt.rebuild({ fake("p1", { "x.A", "x.B" }), fake("p2", { "y.A", "y.B", "y.C" }) }, {},
+    function(id) if id == "p2" then return active, mod, fill end return active, mod end)
+local function key(n) for _, k in ipairs(Sculpt.K.keys) do if k.name == n then return k end end end
+check(key("A").value == 0.5 and next(key("A").overrides) == nil and key("B").value == 0.2 and key("B").default == 0.2,
+    "keys the character's presets name ignore the other model's preset")
+check(key("C").value == 0.7 and key("C").default == 0.7, "a key only the other model's mod names takes its value")
+local values = Sculpt.export_values()
+check(values.C == 0.7, "saving puts that value into the character's preset")
+SKS.call("sculpt_scan"); ticks(5)
+
 -- 总体绑定与配置: the binding lookup and the config files
 Panel.ui.page = "files"; Panel.ui.win.h = 1060; frame()
 check(not find("页面出错"), "总体绑定与配置 page draws")
+st.presets.legacy = { { part = "ch03_012_0014", source = "user", path = "user/ch03_012_001/ch03_012_0014.json" } }
+frame()
+check(not find("页面出错") and find("用它替换整套绑定") and find("ch03_012_0014.json"), "old part bindings are listed with their actions")
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 print("BIND FAILS:", bf)
