@@ -105,8 +105,9 @@ try {
     $info = [ordered]@{
         name = "ShapeKeySystem"
         version = $version
-        author = "谛听 Dimcirui, MonkeySama, funnyguyz"
-        description = "用游戏表情驱动角色形态键（ARKit / Shinano / MMD 等），支持怪物猎人荒野、怪物猎人崛起、生化危机4 重制版和鬼武者·剑之道，提供实时捏脸、条件规则和脸部互动。需要 REFramework。"
+        author = "Dimcirui, MK, funnyguyz, Kevin, Motoka"
+        description = "Drives character shape keys (ARKit / Shinano / MMD, etc.) from the game's own expressions, with live sculpting, condition rules and face touch. Supports Monster Hunter Wilds, Monster Hunter Rise, Resident Evil 4 Remake and Onimusha: Way of the Sword. Requires REFramework."
+        homepage = "https://ifdian.net/a/dimcirui"
     }
     if ($hasShot) { $info.screenshot = "screenshot.jpg" }
     Add-Bytes "ShapeKeySystem/modinfo.ini" (Write-ModInfo $info)

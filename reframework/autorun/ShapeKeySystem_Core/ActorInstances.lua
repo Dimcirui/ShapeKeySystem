@@ -19,7 +19,6 @@ local Ext = require("ShapeKeySystem_Core.External")
 local M = { state = { rev = 0, instances = {}, errors = {} } }
 M.faces = nil   -- function returning the faces to drive (API sets it with Core/Actors.lua)
 local adapter, rigs, frame, next_scan = nil, {}, 0, 0
-local RANK = { global = 3, own = 2, model = 1, default = 0 }
 local auto_profiles, auto_registry, auto_count = {}, nil, 0
 
 function M.init(game)
@@ -45,8 +44,9 @@ local function identity(rig)
     return tostring(rig.face:get_address()) .. ":" .. tostring(rig.parent:get_address())
 end
 
+-- the character's binding is its primary model's (Presets.primary_part), as for the edited one
 local function binding_of(parts)
-    local bindings, best, rank, count, warnings = {}, nil, -1, -1, {}
+    local bindings, warnings = {}, {}
     for _, part in ipairs(parts) do
         local r = Presets.resolve_binding(part.id, nil, part.fingerprint, parts)
         bindings[part.id] = r
@@ -54,12 +54,10 @@ local function binding_of(parts)
             local detail = entry.error or entry.warning
             if detail then warnings[#warnings+1] = part.id .. " · " .. entry.path .. " · " .. detail end
         end
-        local score = (RANK[r.level] or 0) + (r.source == "user" and 10 or 0)
-        if r.hit and (score > rank or score == rank and part.n > count) then
-            best, rank, count = r, score, part.n
-        end
     end
-    return best, bindings, warnings
+    local primary = Presets.primary_part(parts)
+    local best = primary and bindings[primary.id]
+    return best and best.hit and best or nil, bindings, warnings
 end
 
 local function tuning(prog, binding, options)
@@ -97,15 +95,28 @@ local function tuning(prog, binding, options)
     return e, eyes, gains
 end
 
-local function sculpt_values(part, binding)
-    local data = binding and binding.data or {}
-    local preset = Presets.find_sculpt(data.sculpt, binding and binding.folder)
-    local values = {}
-    if not preset then return values end
-    -- `target` names the part the preset was made on, not the only part it applies to: like
-    -- Sculpt.rebuild for the edited character, its values reach every part of the binding's model
+local function preset_values(preset, part, values)
     for name, value in pairs(preset.values) do values[Sculpt.key_of(name)] = value end
     for name, value in pairs(preset.overrides[part.id] or {}) do values[Sculpt.key_of(name)] = value end
+end
+
+-- the binding's preset; a part of another model takes its own mod's preset for keys the binding's
+-- preset does not name, like Sculpt.rebuild for the edited character
+local function sculpt_values(part, binding, parts)
+    local data = binding and binding.data or {}
+    local values = {}
+    local preset = Presets.find_sculpt(data.sculpt, binding and binding.folder)
+    -- `target` names the part the preset was made on, not the only part it applies to
+    if preset then preset_values(preset, part, values) end
+    if binding and Presets.folder_of(part.id) ~= Presets.folder_of(binding.part) then
+        local m = Presets.resolve_binding(part.id, "mods", part.fingerprint, parts)
+        local fill = m.data and m.data.sculpt and Presets.find_sculpt(m.data.sculpt, m.folder, "mods")
+        if fill then
+            local own = {}
+            preset_values(fill, part, own)
+            for k, v in pairs(own) do if values[k] == nil then values[k] = v end end
+        end
+    end
     return values
 end
 
@@ -158,8 +169,7 @@ local function build(raw, options, old)
     raw.targets, raw.manual = {}, {}
     local slots = {}
     for _, part in ipairs(raw.parts) do
-        local own = bindings[part.id]
-        local base = sculpt_values(part, own.hit and own or binding)
+        local base = sculpt_values(part, binding, raw.parts)
         local target = Scene.build_target(part, index, 1, {})
         local owned = {}
         if target then

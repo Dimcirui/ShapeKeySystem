@@ -1,4 +1,4 @@
-local repo, variant = assert(arg[1]), assert(arg[2])
+local repo, variant, game = assert(arg[1]), assert(arg[2]), arg[3] or "re4"
 package.path = repo .. "/reframework/autorun/?.lua;" .. package.path
 sdk = { typeof = function(n) return n end,
     find_type_definition = function()
@@ -32,16 +32,24 @@ local W = require("ShapeKeySystem_Core.Writer")
 local S = require("ShapeKeySystem_Core.Sculpt")
 local G = require("ShapeKeySystem_Core.Guard")
 local Ext = require("ShapeKeySystem_Core.External")
-local Signals = require("ShapeKeySystem_Games.RE4R.Signals")
 local Hash = require("ShapeKeySystem_Core.NameHash")
-assert(Signals.configure({native_names = {"native_input"}, joints = {}, rules = {}}))
-W.adapter = { id = "re4", strict_bounds = true, rewrite_active_weights = true,
+local Signals
+if game == "re9" then
+    -- RE9 authorizes a write only when the key name hashes to the channel's own hash.
+    Signals = require("ShapeKeySystem_Games.RE9.Signals")
+    assert(Signals.configure({schema = "sks.re9-native/1", native_names = {"native_input"}, taps = {}}))
+else
+    Signals = require("ShapeKeySystem_Games.RE4R.Signals")
+    assert(Signals.configure({native_names = {"native_input"}, joints = {}, rules = {}}))
+end
+local PREFIX = game == "re9" and "" or "SK."
+W.adapter = { id = game, strict_bounds = true, rewrite_active_weights = true,
     channel_writable = Signals.writable, write_context = Signals.write_context, active_sculpt = variant == "B", batch_weights = variant == "B" }
 local writes, sdk_calls = 0, 0
 local function mesh(address)
     local m = { weights = {}, names = {}, hashes = {}, ready = true, count = 128, length = 128 }
     for i = 1, m.count do
-        m.names[i] = string.format("SK.shape_%03d", i)
+        m.names[i] = string.format("%sshape_%03d", PREFIX, i)
         m.hashes[i] = Hash.hash(m.names[i])
     end
     m.names[128], m.hashes[128] = "native_input", Hash.hash("native_input")

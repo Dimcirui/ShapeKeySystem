@@ -58,8 +58,10 @@ end
 local warm = {}   -- mesh address -> warm-up count of targets dropped by clear_targets
 
 -- parts: Scene parts { id, mesh, names, n }; owned[mesh] = { [index] = true } (expression)
--- presets_of(part_id) -> active, mod: the sculpt preset the part's binding selects, and the one
--- its mod binding selects (the "default" for reset / A-B preview). Either may be nil.
+-- presets_of(part_id) -> active, mod, fill: the sculpt preset the character's binding selects, the
+-- one its mod binding selects (the "default" for reset / A-B preview), and for a part of another
+-- model the preset that model's mod selects (defaults for keys neither of the others names).
+-- Any may be nil.
 -- A key the user changed keeps its value across rebuilds; untouched keys follow the presets.
 function S.rebuild(parts, owned, presets_of)
     local old = K.by_name
@@ -70,7 +72,7 @@ function S.rebuild(parts, owned, presets_of)
         if not seen_part[part.id] then
             seen_part[part.id] = true
             local own = owned[part.mesh] or {}
-            local active, mod = presets_of(part.id)
+            local active, mod, fill = presets_of(part.id)
             local items = {}
             local item_of = {}
             for i, cn in ipairs(part.names) do
@@ -78,10 +80,12 @@ function S.rebuild(parts, owned, presets_of)
                 if cn ~= "" then
                     local name = S.key_of(cn)
                     local key = by_name[name]
-                    local dv = U.clamp(preset_value(mod, part.id, name) or 0, lo, hi)
                     local av = preset_value(active, part.id, name)
+                    local mv = preset_value(mod, part.id, name)
+                    if mv == nil and av == nil then mv = preset_value(fill, part.id, name) end
+                    local dv = U.clamp(mv or 0, lo, hi)
                     -- named by the mod's or the loaded sculpt preset ("preset key")
-                    local named = av ~= nil or preset_value(mod, part.id, name) ~= nil
+                    local named = av ~= nil or mv ~= nil
                     av = av and U.clamp(av, lo, hi) or dv
                     if not key then
                         local prev = old[name]

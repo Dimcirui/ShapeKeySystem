@@ -186,6 +186,7 @@ local C = {
     -- M2
     binding = nil,        -- the parent preset in effect (Presets.resolve_binding result)
     part_bindings = {},   -- part id -> resolve result
+    legacy_bindings = {}, -- part files left by earlier versions (Presets.legacy_bindings)
     -- per-part tuning (gains + gaze); stash_* = the settings.json fallback while a binding is loaded
     tuning = { source = "settings", path = nil, dirty = false, mismatch = false, stash_expression = nil, stash_eyes = nil },
     sculpt_preset = nil, sculpt_preset_manual = false,
@@ -596,19 +597,18 @@ local function part_labels(parts)
     return out
 end
 
--- where "绑定到" writes: the binding in effect (its file base) or, without one, a model-wide
--- binding for the part with the most channels. Returns base, model, display name, data to start from
+-- where "绑定到" writes: the primary model's binding file. Returns base, model, display name, data
+-- to start from (the binding in effect when it is that file)
 local function bind_target()
     local b = C.binding
     if b and b.base and b.base ~= "default" and b.data then
         local model = Presets.model_of(b.base) or b.base
         return b.base, model, b.data.name or armor_name(model) or model, U.copy(b.data)
     end
-    local best
-    for _, p in ipairs(C.parts) do if not best or (p.n or 0) > (best.n or 0) then best = p end end
+    local best = Presets.primary_part(C.parts)
     if not best then return nil end
     local model = Presets.model_of(best.id) or best.id
-    return Presets.representative_of(best.id) or best.id, model, armor_name(model) or model, { global = true }
+    return Presets.binding_base(best.id), model, armor_name(model) or model, {}
 end
 
 local function build_presets_state()
@@ -652,6 +652,7 @@ local function build_presets_state()
     state.presets.bind = base and { base = base, model = model, display = display,
                                     active = C.binding ~= nil and C.binding.base == base,
                                     global_default = gd } or nil
+    state.presets.legacy = U.copy(C.legacy_bindings or {})
     state.presets.pending_delete = C.pending_delete and U.copy(C.pending_delete) or nil
     bump("presets")
 end
@@ -695,13 +696,11 @@ local function build_sculpt_state()
 end
 
 -- ---------------------------------------------------------------- bindings (M2)
--- The binding in effect: the most specific hit over all worn parts (a model-wide global preset,
--- then a part's own file, then the model's slot-2 file, then default.json), ties broken by
--- channel count. Its profile replaces cfg.profile while it is in effect.
-local LEVEL_RANK = { global = 3, own = 2, model = 1, default = 0 }
+-- The binding in effect: the primary model's (Presets.primary_part), else default.json. Its profile
+-- replaces cfg.profile while it is in effect. C.part_bindings keeps every worn part's own model
+-- lookup; parts of other models only lend their mods sculpt preset as defaults (sculpt_presets_of).
 local function resolve_bindings(parts)
     C.part_bindings = {}
-    local best, best_rank, best_n = nil, -1, -1
     for _, p in ipairs(parts) do
         local r = C.part_bindings[p.id]
         if not r then
@@ -716,14 +715,18 @@ local function resolve_bindings(parts)
                 end
             end
         end
-        if r.hit then
-            local rank = (LEVEL_RANK[r.level] or 0) + (SKS.adapter.scoped_bindings and r.source == "user" and 10 or 0)
-            if rank > best_rank or (rank == best_rank and (p.n or 0) > best_n) then
-                best, best_rank, best_n = r, rank, p.n or 0
-            end
+    end
+    local primary = Presets.primary_part(parts)
+    local r = primary and C.part_bindings[primary.id]
+    C.binding = r and r.hit and r or nil
+    C.legacy_bindings = Presets.legacy_bindings(parts)
+    for _, e in ipairs(C.legacy_bindings) do
+        local key = "legacy|" .. e.path
+        if not C.warned[key] then
+            C.warned[key] = true
+            notice("warn", I18n.f("%s 是旧的部件绑定，已不再生效", e.path))
         end
     end
-    C.binding = best
 end
 
 -- ---------------------------------------------------------------- tuning (M2)
@@ -847,14 +850,23 @@ local function fingerprint_of(part_id)
     for _, p in ipairs(C.parts) do if p.id == part_id then return p.fingerprint end end
 end
 
--- active: the preset the part's binding names; mod: the one its mods-only chain names (defaults).
+local function mods_sculpt_of(part_id)
+    local m = Presets.resolve_binding(part_id, "mods", fingerprint_of(part_id), C.parts)
+    return m.data and m.data.sculpt and Presets.find_sculpt(m.data.sculpt, m.folder, "mods") or nil
+end
+
+-- active: the preset the character's binding names; mod: the one the primary model's mods-only
+-- chain names (defaults); fill: for a part of another model, the preset its own mod names, which
+-- supplies defaults only for keys neither of the others names.
 -- Names are looked up in the binding's model folder first, then among the general presets.
 local function sculpt_presets_of(part_id)
-    local r = C.part_bindings[part_id]
+    local r = C.binding
     local active = r and r.data and r.data.sculpt and Presets.find_sculpt(r.data.sculpt, r.folder) or nil
-    local m = Presets.resolve_binding(part_id, "mods", fingerprint_of(part_id), C.parts)
-    local mod = m.data and m.data.sculpt and Presets.find_sculpt(m.data.sculpt, m.folder, "mods") or nil
-    return active, mod
+    local primary = r and r.part or part_id
+    local mod = mods_sculpt_of(primary)
+    local fill
+    if Presets.folder_of(part_id) ~= Presets.folder_of(primary) then fill = mods_sculpt_of(part_id) end
+    return active, mod, fill
 end
 
 local link_base_keys   -- defined with the expression writer below
@@ -2140,14 +2152,9 @@ function cmds.set_ab_preview(a)
     return true
 end
 
--- the part a preset is "for": the binding in effect, else the part with the most channels
+-- the part a preset is "for": the primary model's (Presets.primary_part)
 local function primary_part()
-    if C.binding and C.binding.part then
-        for _, p in ipairs(C.parts) do if p.id == C.binding.part then return p end end
-    end
-    local best
-    for _, p in ipairs(C.parts) do if not best or (p.n or 0) > (best.n or 0) then best = p end end
-    return best
+    return Presets.primary_part(C.parts)
 end
 
 -- the model folder new user presets go to (nil = general)
@@ -2197,9 +2204,11 @@ local function resolve_profile_arg(v)
 end
 
 -- args: part, expression (profile id or name), sculpt (preset name), gains (table, or true =
--- the current gains + gaze settings). Writes user/<model>/<part>.json.
+-- the current gains + gaze settings). Writes the binding of the part's model,
+-- user/<model>/<representative>.json.
 function cmds.write_binding(a)
     if type(a.part) ~= "string" or a.part == "" then return false, "E_BAD_ARGS", "part required" end
+    local base = Presets.binding_base(a.part)
     local data = {}
     if a.expression ~= nil then
         local id = resolve_profile_arg(a.expression)
@@ -2217,7 +2226,7 @@ function cmds.write_binding(a)
             return false, "E_NOT_FOUND", "condition set not found: " .. tostring(a.conditions)
         end
         data.conditions = a.conditions ~= "" and a.conditions or nil
-    elseif C.binding and C.binding.part == a.part and C.binding.data then
+    elseif C.binding and C.binding.base == base and C.binding.data then
         data.conditions = C.binding.data.conditions   -- callers that do not know it keep it
     end
     if a.gains == true then
@@ -2225,7 +2234,7 @@ function cmds.write_binding(a)
     elseif type(a.gains) == "table" then
         data.gains = U.copy(a.gains)
     end
-    local ok, code, msg, res = Presets.write_binding(a.part, data)
+    local ok, code, msg, res = Presets.write_binding(base, data)
     if not ok then return false, code, msg end
     request_rescan(1)
     notice("info", I18n.f("已写入绑定：%s", res.path))
@@ -2279,13 +2288,34 @@ function cmds.save_tuning()
     return true, nil, nil, res
 end
 
--- args: part (or "default"): drop the user file so the mods one (or nothing) applies again
+-- args: part (or "default"): drop the user file of the part's model so the mods one (or nothing)
+-- applies again
 function cmds.restore_mod_binding(a)
     if type(a.part) ~= "string" then return false, "E_BAD_ARGS", "part required" end
-    if not Presets.user_binding_exists(a.part) then return false, "E_NOT_FOUND", "no user binding for " .. a.part end
-    if not Presets.tombstone_binding(a.part) then return false, "E_IO", "write failed" end
+    local base = a.part == "default" and "default" or Presets.binding_base(a.part)
+    if not Presets.user_binding_exists(base) then return false, "E_NOT_FOUND", "no user binding for " .. base end
+    if not Presets.tombstone_binding(base) then return false, "E_IO", "write failed" end
     request_rescan(1)
     return true
+end
+
+-- args: part, source ("user" default): a part file left by an earlier version becomes the binding of
+-- its model; a user part file is then tombstoned
+function cmds.adopt_legacy_binding(a)
+    if type(a.part) ~= "string" then return false, "E_BAD_ARGS", "part required" end
+    local source = a.source == "mods" and "mods" or "user"
+    local base = Presets.binding_base(a.part)
+    if base == a.part then return false, "E_BAD_ARGS", "not a part file: " .. a.part end
+    local data = Presets.read_binding(source, a.part)
+    if not data then return false, "E_NOT_FOUND", "no " .. source .. " part binding for " .. a.part end
+    data = U.copy(data)
+    data.global, data.part = nil, nil
+    local ok, code, msg, res = Presets.write_binding(base, data)
+    if not ok then return false, code, msg end
+    if source == "user" and not Presets.tombstone_binding(a.part) then return false, "E_IO", "write failed" end
+    request_rescan(1)
+    notice("info", I18n.f("已写入绑定：%s", res.path))
+    return true, nil, nil, res
 end
 
 local DELETE_KINDS = { binding = true, sculpt = true, profile = true, conditions = true }

@@ -77,27 +77,28 @@ local function profile(id, prefix)
 end
 profile("profile_a", "A_"); profile("profile_b", "B_"); P.load_all()
 local function own(root, name, id, neutral, gain)
-    json.dump_file("ShapeKeySystem/mods/"..name.."/"..name.."_head.json", {
+    json.dump_file("ShapeKeySystem/mods/"..name.."/"..name..".json", {
         schema = "sks.binding/1", profile = id, fingerprints = {[name.."_head"] = root.fingerprint},
         gains = {master_gain = gain}, eyes = {neutral = {L = {yaw = neutral, pitch = 0}}}})
 end
 own(a, "leon", "profile_a", 15, .5); own(b, "ada", "profile_b", 20, 1)
-json.dump_file("ShapeKeySystem/mods/leon/leon.json", {profile = "legacy_wrong", global = true})
 local r = Presets.resolve_binding("leon_head", nil, a.fingerprint)
+check(r.data.profile == "profile_a" and r.base == "leon", "the actor's model binding is found through its head part")
+json.dump_file("ShapeKeySystem/mods/leon/leon_head.json", {profile = "legacy_part"})
+r = Presets.resolve_binding("leon_head", nil, a.fingerprint)
+check(r.data.profile == "profile_a", "a part file left by an earlier version is ignored")
+json.dump_file("ShapeKeySystem/mods/leon/leon_head.json", {deleted = true})
+local siblings = {{id = "leon_head", fingerprint = a.fingerprint}, {id = "leon_body", fingerprint = "body"}}
+json.dump_file("ShapeKeySystem/mods/leon/leon.json", {profile = "legacy_wrong", fingerprints = {leon_body = "stale"}})
+r = Presets.resolve_binding("leon_head", nil, a.fingerprint, siblings)
 local warned = false
 for _, entry in ipairs(r.chain) do warned = warned or entry.error ~= nil end
-check(r.data.profile == "profile_a" and warned, "fingerprinted own binding wins over unscoped stale global")
-local siblings = {{id = "leon_head", fingerprint = a.fingerprint}, {id = "leon_body", fingerprint = "body"}}
-r = Presets.resolve_binding("leon_body", nil, "body", siblings)
-check(not r.hit, "stale global does not re-enter through an actor's body")
-json.dump_file("ShapeKeySystem/user/leon/leon_head.json", {profile = "user_choice"})
-r = Presets.resolve_binding("leon_head", nil, a.fingerprint)
-check(r.source == "user" and r.data.profile == "user_choice", "user own binding stays above mod global")
-json.dump_file("ShapeKeySystem/user/leon/leon_head.json", {deleted = true})
-json.dump_file("ShapeKeySystem/mods/leon/leon.json", {profile = "profile_a", global = true,
-    fingerprints = {leon_head = a.fingerprint}})
-check(Presets.resolve_binding("leon_head", nil, a.fingerprint).level == "global", "matching global fingerprint retains explicit global precedence")
-json.dump_file("ShapeKeySystem/mods/leon/leon.json", {profile = "legacy_wrong", global = true})
+check(not r.hit and warned, "a mod binding stale for any worn part of the model is skipped")
+json.dump_file("ShapeKeySystem/user/leon/leon.json", {profile = "user_choice"})
+r = Presets.resolve_binding("leon_head", nil, a.fingerprint, siblings)
+check(r.source == "user" and r.data.profile == "user_choice", "the user's model binding stays above the mod's")
+json.dump_file("ShapeKeySystem/user/leon/leon.json", {deleted = true})
+own(a, "leon", "profile_a", 15, .5)
 check(not Presets.validate_binding({eyes = {neutral = {L = {yaw = math.huge}}}}), "non-finite neutral calibration is rejected")
 local options = {enabled = true, cutscene_drive = true, profile = "profile_a", inv_full = 1,
     clamp = true, epsilon = .001, expression = {master_gain = 1, gaze_gain = 1, smoothing = 0,
@@ -147,7 +148,7 @@ check(math.abs(b.mesh.values[0] - .8) < 1e-6 and b.mesh.values[3] == 0, "without
 -- a sculpt preset made on another part (its `target`) still reaches this character's parts
 json.dump_file("ShapeKeySystem/mods/ada/sculpt/made_on_body.json", {schema = "sks.sculpt/1",
     name = "made_on_body", target = {part = "ada_body"}, values = {B_size = .6}})
-json.dump_file("ShapeKeySystem/mods/ada/ada_head.json", {schema = "sks.binding/1", profile = "profile_b",
+json.dump_file("ShapeKeySystem/mods/ada/ada.json", {schema = "sks.binding/1", profile = "profile_b",
     sculpt = "made_on_body", fingerprints = {ada_head = b.fingerprint}, gains = {master_gain = 1},
     eyes = {neutral = {L = {yaw = 20, pitch = 0}}}})
 Presets.load_sculpt()

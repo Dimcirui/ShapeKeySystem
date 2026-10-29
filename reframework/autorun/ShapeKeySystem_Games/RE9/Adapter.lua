@@ -8,8 +8,10 @@ local Input = require("ShapeKeySystem_Games.RE9.Input")
 local Eyes = require('ShapeKeySystem_Games.RE9.Eyes')
 local A = {id = "re9", name = "Resident Evil Requiem", strict_bounds = true, hash_names = true,
     hash_item_only = true, rewrite_active_weights = true, scene_search = false, scoped_bindings = true,
+    active_sculpt = true, batch_weights = true,
     terms = {primary = "里昂", part = "部件"}, raw = Signals.raw, read = Signals.read,
-    channel_writable = Signals.writable, native_snapshot = Signals.snapshot, input = Input}
+    channel_writable = Signals.writable, write_context = Signals.write_context,
+    native_snapshot = Signals.snapshot, input = Input}
 function A.primary_root() return R.root() end
 function A.primary_ready() return R.find() ~= nil end
 function A.is_face(face) return R.is_head(face) end
