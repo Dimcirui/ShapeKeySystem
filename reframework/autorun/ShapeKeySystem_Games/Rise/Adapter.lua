@@ -17,6 +17,10 @@
 --   breathing stays below jawOpen's `lo`. `procedural` lets Core's procedural layer supply the
 --   blinking and the idle mouth opening in its default (fallback) mode; gaze follows from the
 --   missing eye joints.
+-- - Periodic scans only compare the hunter root and its children signature
+--   (`inspect_before_scan`); the whole-scene face search runs only when that changes. child_tag
+--   adds each armor part's mesh and channel count, so a part rebuilt under the same name or a mesh
+--   that loads after its part appeared still rescans.
 local B = require("ShapeKeySystem_Core.BoneSignals")
 local L = require("ShapeKeySystem_Core.I18n")
 local Cond = require("ShapeKeySystem_Games.Rise.Conditions")
@@ -27,11 +31,12 @@ local A = {
     terms = { primary = "猎人", part = "防具" },
     hash_names = true, hash_item_only = true,
     scene_search = false,
+    inspect_before_scan = true,
     raw = B.raw, read = B.read,
     procedural = { blink = true, breath = true },
 }
 
-local M_JBN, T_MOTION
+local M_JBN, T_MOTION, T_MESH
 local calibration
 local EVENT_OK, LIST_OK = false, false
 local disabled = {}   -- optional sources that init turned off, with the missing type or method
@@ -186,6 +191,17 @@ end
 
 A.slot_names = SLOTS
 
+-- an armor part's mesh and channel count: re-equipping keeps the name but not the mesh, and a mod
+-- mesh can load its channels after the part appeared
+function A.child_tag(tr, name)
+    if not A.is_part(name) then return nil end
+    local ok, tag = pcall(function()
+        local mesh = tr:call("get_GameObject"):call("getComponent(System.Type)", T_MESH)
+        return "@" .. tostring(mesh:get_address()) .. "#" .. tostring(mesh:call("get_BlendShapeChannelNum"))
+    end)
+    return ok and tag or "@-"
+end
+
 -- f_body279 -> "f_279", "body": the parts of one equipment number share a binding; the body part
 -- represents the set
 function A.model_of(part)
@@ -283,6 +299,7 @@ function A.init()
     end
     M_JBN = sdk.find_type_definition("via.Transform"):get_method("getJointByName(System.String)")
     T_MOTION = sdk.typeof("via.motion.Motion")
+    T_MESH = sdk.typeof("via.render.Mesh")
     local ok, data = pcall(json.load_file, "ShapeKeySystem/builtin/mhrise/face.json")
     if not ok then return false, "崛起面部标定文件无法读取" end
     local valid, why = B.validate(data, { label = L.tr("崛起") })

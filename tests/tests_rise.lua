@@ -220,6 +220,35 @@ SKS.call("set_procedural", { patch = { mode = "game" } })
 ticks(60)
 check(run_for(0.6) == 0, "Rise, game only: no blink")
 
+-- periodic scans stop at the signature check while the hunter is unchanged
+local Scene = require("ShapeKeySystem_Core.Scene")
+local function wait_real(sec)
+    local stop = os.clock() + sec
+    while os.clock() < stop do
+        local w = os.clock() + 0.01
+        while os.clock() < w do end
+        ticks(1)
+    end
+end
+ROOT.get_address = function() return 0x7000 end   -- the root is matched by address
+SKS.call("set_setting", { key = "periodic_scan_sec", value = 1 }); ticks(5)
+local scanned = st.scene.last_scan
+wait_real(1.2)
+check(A.inspect_before_scan and st.scene.last_scan == scanned, "unchanged hunter: the periodic scan does not run")
+local sig = Scene.children_signature(ROOT)
+check(sig:find("f_body279@", 1, true) and sig:find("#" .. #CHANNELS, 1, true), "armor parts carry mesh and channel count")
+local channel_num = ARMOR._mesh.get_BlendShapeChannelNum
+ARMOR._mesh.get_BlendShapeChannelNum = function() return 0 end
+check(Scene.children_signature(ROOT) ~= sig, "a mesh without channels yet changes the signature")
+ARMOR._mesh.get_BlendShapeChannelNum = channel_num
+local mesh_addr = ARMOR._mesh.get_address
+ARMOR._mesh.get_address = function() return 0x9000 end
+check(Scene.children_signature(ROOT) ~= sig, "a part rebuilt under the same name changes the signature")
+ticks(10)
+check(st.scene.last_scan ~= scanned, "a changed part: the next scan runs in full")
+ARMOR._mesh.get_address = mesh_addr
+SKS.call("set_setting", { key = "periodic_scan_sec", value = 5 }); ticks(10)
+
 -- Cutscenes play a copy of the hunter (snow.eventcut.EventPlayer) whose face is DummyFace.
 local function obj(t)
     t.call = function(self, m, ...) return self[m](self, ...) end
