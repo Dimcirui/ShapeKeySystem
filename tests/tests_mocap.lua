@@ -252,5 +252,26 @@ SKS.call("mocap", { patch = { enabled = true, timeout = 5, fade_sec = 0 } })
 frame_in({ eyeBlinkLeft = 0.8 }); for _ = 1, 5 do wait(0.002); ticks(1) end
 check(st.mocap.resolved == 0, "coverage 0 on a face without ARKit keys")
 SKS.call("mocap", { patch = { enabled = false, timeout = 0.5, fade_sec = 0.25 } }); ticks(2)
+-- the same kind of face under its own profile: the phone reaches it through the game signals
+local prof0 = st.expression.profile and st.expression.profile.id
+set_channels({ "blendShape1.eye_close_L", "blendShape1.eye_close_R", "blendShape1.eye_look_left",
+               "blendShape1.mouth_smile_L" })
+check(SKS.call("set_profile", { id = "shinano", discard = true }), "Shinano profile selected")
+ticks(3)
+SKS.call("mocap", { patch = { enabled = true, timeout = 5, fade_sec = 0, smoothing = 0 } })
+frame_in({ eyeBlinkLeft = 0.8, eyeLookOutLeft = 0.5, mouthSmileLeft = 0.6 })
+for _ = 1, 40 do wait(0.002); ticks(1) end
+local ci, li, si = mesh_idx("eye_close_L"), mesh_idx("eye_look_left"), mesh_idx("mouth_smile_L")
+check(st.mocap.resolved == 0 and (st.mocap.signals or 0) > 20, "Shinano: no ARKit keys, game signals counted ("
+    .. tostring(st.mocap.signals) .. ")")
+check(math.abs((WEIGHTS[ci] or -1) - 0.8) < 0.02, "Shinano: eyeBlinkLeft closes eye_close_L through blink.L ("
+    .. tostring(WEIGHTS[ci]) .. ")")
+check((WEIGHTS[mesh_idx("eye_close_R")] or 1) < 0.02, "Shinano: the other eye stays open, the game's blink is out")
+check(math.abs((WEIGHTS[si] or -1) - 0.6) < 0.02, "Shinano: mouthSmileLeft reaches mouth_smile_L")
+check((WEIGHTS[li] or 0) > 0.3, "Shinano: eyeLookOutLeft turns the eyes to the character's left ("
+    .. tostring(WEIGHTS[li]) .. ")")
+SKS.call("mocap", { patch = { enabled = false, timeout = 0.5, fade_sec = 0.25, smoothing = 0.3 } }); ticks(3)
+check((WEIGHTS[li] or 1) < 0.02, "Shinano: mocap off hands the gaze back")
+if prof0 then SKS.call("set_profile", { id = prof0, discard = true }) end
 set_channels(saved_channels)
 print("MOCAP FAILS:", mfails)

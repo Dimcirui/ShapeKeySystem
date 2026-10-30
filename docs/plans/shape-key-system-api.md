@@ -747,7 +747,9 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 
 `live.json`：`{"seq": n, "w": [52 个 0..1，顺序同 Names.ARKIT52], "head": [6 个数] | null, "le": [...], "re": [...]}`（`le` / `re` 只有 iFacialMocap 写）。`seq` 不变就当没有新数据；SKS 启动后看到的第一份文件不算数（可能是上次留下的）。Windows Defender 实时扫描开着时每次读取约 5 毫秒，需要把 `mocap/` 加入排除项。
 
-写入：52 个通道作为外部值（`External.lua`，所有者 `mocap`）每帧续租，和其他插件一样覆盖表情和捏脸、走同一套写入保护（预热、过场、换装重建）。每个通道 = 手机值 × 淡入系数 + 纯表情值 ×（1 − 淡入系数），所以数据开始或中断时脸在 `fade_sec` 秒内平滑交接；系数回到 0 时放掉全部外部值。通道名先按当前表情配置的槽位解析，解析不到的再按名字匹配捏脸键；部件上没有 ARKit 键（或别名）的脸收不到。
+写入：52 个通道作为外部值（`External.lua`，所有者 `mocap`）每帧续租，和其他插件一样覆盖表情和捏脸、走同一套写入保护（预热、过场、换装重建）。每个通道 = 手机值 × 淡入系数 + 纯表情值 ×（1 − 淡入系数），所以数据开始或中断时脸在 `fade_sec` 秒内平滑交接；系数回到 0 时放掉全部外部值。通道名先按当前表情配置的槽位解析，解析不到的再按名字匹配捏脸键。
+
+经游戏信号（`MocapSignals.lua`）：同一组值还在主角色读完游戏输入后、计算表情前替换面部信号，所以通道不叫 ARKit 名字的表情配置（Shinano、MMD 等，公式写在 `smile.L`、`blink.L` 这些各游戏共用的信号上）也跟着手机动。对应关系是 `arkit.json` 反过来：每个信号取一个 ARKit 值，ARKit 只给一个值的（browInnerUp、cheekPuff、mouthFunnel、mouthPucker、mouthClose）左右两个信号都取它；`browBring`、`smileMinor`、`mouthMove.down`、`cheekShrink` 和其他游戏信号没有对应，按淡入系数降到 0，脸只跟手机。游戏没有的信号（`no_signal`）写在 `Profile.no_signal_key(名字)` 下，公式照样读得到。8 个 eyeLook 通道换成眼球角度（yaw 正 = 角色自己的左边，pitch 正 = 向上，满值角度用「视线」里的设置），同样按淡入系数和游戏读数混合。录制回放的「最终信号测试」仍然覆盖这些值。
 
 头部转动：`UpdateMotion` 之后，把转角按 Neck_0 25%、Neck_1 25%、Head 50% 分到荒野猎人的骨骼上（角色空间：yaw 绕上、pitch 绕侧、roll 绕前，叠加在动画之上）。只在上一帧驱动了主角色时才碰骨骼；SKS 放掉角色（换装、过场跳过或结束、菜单）时同时放掉骨骼引用，下次再重新取。
 
@@ -757,7 +759,7 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 | `mocap_refresh_ips` | `{}` | 重新查一次本机局域网 IP（`state.mocap.native.ips`）；插件加载后自动查一次，之后只在「基础配置」框点「刷新」时查 | — |
 | `mocap_calibrate` | `{what}` | `face`：把手机当前各通道值记为放松时的基准（之后按 `(v − 基准) / (1 − 基准)` 换算）；`head`：把当前头部角度记为正前方；`clear`：清除面部基准 | `user/mocap.json` |
 
-`state.mocap`：`native = {available, running, error, sender, packets, rejected, port, ips}`（游戏内接收的状态）、`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
+`state.mocap`：`native = {available, running, error, sender, packets, rejected, port, ips}`（游戏内接收的状态）、`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`signals`（当前表情配置读到的、面捕会写入的游戏信号数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
 
 ## 驱动
 

@@ -1257,6 +1257,7 @@ local function drive(rig, primary)
     local t0 = clock()
     local P = primary and C.P or C.Pbuf
     X.read(rig, P, C.inv_full, primary and C.want_signals and state.runtime.ui_open, cfg.eyes, rig.use_eyes)
+    if primary then Mocap.drive_signals(rig, P, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch) end
     -- 播放、循环和跳转改变 `Playback.epoch`，主角色不得沿用此前的平滑缓存。
     if rig.primary and rig.playback_epoch ~= Playback.epoch then
         rig.W, rig.V, rig.playback_epoch = {}, {}, Playback.epoch
