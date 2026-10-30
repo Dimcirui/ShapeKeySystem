@@ -142,6 +142,8 @@ local function draw_sculpt(st)
                 local k = sc.keys[i]
                 if k.locked then
                     imgui.text(L.f("   %s  （表情驱动，锁定）", k.name))
+                elseif k.in_group then
+                    imgui.text(L.f("   %s  %.2f（由键组控制）", k.name, k.value))
                 else
                     local extra = ""
                     for p, ov in pairs(k.overrides) do extra = extra .. string.format("  [%s=%.2f]", p, ov) end

@@ -666,6 +666,7 @@ local function build_sculpt_state()
         keys[i] = { name = k.name, label = label_of(k.name), group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts), value = k.value,
                     default = k.default, overrides = o, owner = k.owner,
                     locked = false, mixed = k.owner == "expression", in_preset = k.in_preset == true,
+                    in_group = Sculpt.group_of(k.name) ~= nil,
                     range = { Sculpt.RANGE[1], Sculpt.RANGE[2] } }
         local g = gi[k.group]
         if not g then
@@ -688,6 +689,25 @@ local function build_sculpt_state()
         end
     end
     sc.keys, sc.groups = keys, groups
+    -- key groups: options list their keys (missing = not on the worn parts)
+    local index = {}
+    for i, k in ipairs(keys) do index[k.name] = i end
+    local kg = {}
+    for gi2, g in ipairs(Sculpt.K.groups) do
+        local options = {}
+        for oi, o in ipairs(g.options) do
+            local list = {}
+            for n, v in pairs(o.values) do
+                local k = index[n] and keys[index[n]]
+                list[#list + 1] = { name = n, label = k and k.label or label_of(n), value = v,
+                                    mixed = k and k.mixed or false, missing = k == nil }
+            end
+            table.sort(list, function(a, b) return a.name < b.name end)
+            options[oi] = { name = o.name, keys = list }
+        end
+        kg[gi2] = { name = g.name, value = g.value, options = options }
+    end
+    sc.key_groups, sc.max_options = kg, Sculpt.MAX_OPTIONS
     sc.edit_mode, sc.ab_preview = C.edit_mode, C.preview
     sc.dirty = Sculpt.is_dirty()
     sc.can_undo, sc.can_redo = Sculpt.can_undo(), Sculpt.can_redo()
@@ -2116,6 +2136,115 @@ function cmds.reset_sculpt_key(a)
     return true
 end
 
+-- ---------------------------------------------------------------- key groups (Sculpt.lua)
+-- `group` is a key group's name or its 1-based index; `option` a 1-based option index.
+local function group_ref(v)
+    if type(v) == "string" and v ~= "" then return v end
+    if math.type(v) == "integer" then return v end
+    return nil
+end
+
+local function name_arg(v)
+    local t = type(v) == "string" and v:match("^%s*(.-)%s*$") or ""
+    return t ~= "" and t or nil
+end
+
+-- runs a Sculpt key group edit for the commands below
+local function group_cmd(fn, ...)
+    local ok, code, msg = scanned(); if not ok then return false, code, msg end
+    local r1, r2, r3, r4 = fn(...)
+    if not r1 then
+        if r2 == "E_CONFLICT" then
+            return false, r2, I18n.f("形态键 %s 已在键组「%s」里，不同键组不能共用形态键", tostring(r3), tostring(r4))
+        end
+        return false, r2, r3
+    end
+    build_sculpt_state()
+    return true, nil, nil, r2 ~= nil and { option = r2 } or nil
+end
+
+function cmds.key_group_new(a)
+    local name = name_arg(a.name)
+    if not name then return false, "E_BAD_ARGS", "name required" end
+    return group_cmd(Sculpt.group_new, name)
+end
+
+function cmds.key_group_rename(a)
+    local g, name = group_ref(a.group), name_arg(a.name)
+    if not g or not name then return false, "E_BAD_ARGS", "group and name required" end
+    return group_cmd(Sculpt.group_rename, g, name)
+end
+
+function cmds.key_group_delete(a)
+    local g = group_ref(a.group)
+    if not g then return false, "E_BAD_ARGS", "group required" end
+    return group_cmd(Sculpt.group_delete, g)
+end
+
+-- {group, value}: 0 = off, n = option n. Conditions and drivers will switch groups through this.
+function cmds.key_group_set(a)
+    local g = group_ref(a.group)
+    local v = type(a.value) == "number" and math.tointeger(a.value) or nil
+    if not g or not v then return false, "E_BAD_ARGS", "group and an integer value required" end
+    return group_cmd(Sculpt.group_set, g, v)
+end
+
+function cmds.key_group_option_add(a)
+    local g, name = group_ref(a.group), name_arg(a.name)
+    if not g or not name then return false, "E_BAD_ARGS", "group and name required" end
+    return group_cmd(Sculpt.option_add, g, name)
+end
+
+function cmds.key_group_option_rename(a)
+    local g, name = group_ref(a.group), name_arg(a.name)
+    if not g or not name then return false, "E_BAD_ARGS", "group, option and name required" end
+    return group_cmd(Sculpt.option_rename, g, a.option, name)
+end
+
+function cmds.key_group_option_delete(a)
+    local g = group_ref(a.group)
+    if not g then return false, "E_BAD_ARGS", "group and option required" end
+    return group_cmd(Sculpt.option_delete, g, a.option)
+end
+
+-- {group, option, names, values?}: names given = those keys; "modified" = every key outside the
+-- groups whose value differs from its default (the panel's 收入已修改的键)
+function cmds.key_group_assign(a)
+    local g = group_ref(a.group)
+    if not g then return false, "E_BAD_ARGS", "group and option required" end
+    local names = a.names
+    if names == "modified" then
+        names = {}
+        for _, k in ipairs(Sculpt.K.keys) do
+            if not Sculpt.group_of(k.name) and math.abs(k.value - k.default) > 1e-6 then names[#names + 1] = k.name end
+        end
+        if #names == 0 then return false, "E_EMPTY", "没有可收入的已修改形态键" end
+    elseif type(names) ~= "table" or #names == 0 then
+        return false, "E_BAD_ARGS", "names must be a list of key names or \"modified\""
+    end
+    local values = type(a.values) == "table" and a.values or nil
+    return group_cmd(Sculpt.option_assign, g, a.option, names, values)
+end
+
+-- {name | names, group?, option?}: out of that option, or (no group) out of the key group altogether
+function cmds.key_group_unassign(a)
+    local names = type(a.names) == "table" and a.names or (type(a.name) == "string" and { a.name }) or nil
+    if not names or #names == 0 then return false, "E_BAD_ARGS", "name or names required" end
+    local g = group_ref(a.group)
+    if a.group ~= nil and not g then return false, "E_BAD_ARGS", "group must be a name or an index" end
+    return group_cmd(Sculpt.unassign, names, g, a.option)
+end
+
+-- {group, option, name, value}: the fixed value of a key in one option
+function cmds.key_group_set_key(a)
+    local g = group_ref(a.group)
+    local v = num(a.value, Sculpt.RANGE[1], Sculpt.RANGE[2])
+    if not g or type(a.name) ~= "string" or not v then
+        return false, "E_BAD_ARGS", "group, option, name and a number value required"
+    end
+    return group_cmd(Sculpt.option_set_value, g, a.option, a.name, v)
+end
+
 -- take keys back from other plugins: {owner?, name?}; nothing given = everything
 function cmds.external_release(a)
     local n = 0
@@ -2185,7 +2314,7 @@ function cmds.save_sculpt(a)
     local folder = (a.general ~= true) and current_folder() or nil
     local r1, r2, r3, r4 = Presets.save_sculpt(a.name, folder, {
         target = part and { part = part.id, channel_hash = part.fingerprint } or nil,
-        values = values, overrides = overrides,
+        values = values, overrides = overrides, key_groups = Sculpt.export_groups(),
     })
     if not r1 then return false, r2, r3 end
     Sculpt.mark_saved()

@@ -274,6 +274,79 @@ check(math.abs(WEIGHTS[i_waist] - 0.25) < 1e-6, "loading is one undo step")
 ok, code = SKS.call("load_sculpt", { name = "nope" })
 check(not ok and code == "E_NOT_FOUND", "unknown preset -> E_NOT_FOUND")
 
+-- key groups: an integer switches between sets of keys with fixed values; 0 = all at the mod default
+do
+    local res
+    ok = SKS.call("key_group_new", { name = "体型" })
+    ok, code = SKS.call("key_group_new", { name = "体型" })
+    check(not ok and code == "E_EXISTS", "a key group name is used once")
+    ok, res = select(1, SKS.call("key_group_option_add", { group = "体型", name = "细腰" })), select(4, SKS.call("key_group_option_add", { group = "体型", name = "标准" }))
+    check(ok and res and res.option == 2, "options are numbered from 1")
+    SKS.call("reset_sculpt_key", { name = "Other" })
+    SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.9 })
+    ok = SKS.call("key_group_assign", { group = "体型", option = 1, names = "modified" }); ticks(1)
+    check(ok and math.abs(WEIGHTS[i_waist] - 0.25) < 1e-6 and key("Waist_thin").in_group,
+        "modified keys go into an option with their value; group at 0: back to the mod default")
+    ok = SKS.call("key_group_assign", { group = "体型", option = 2, names = { "Other" }, values = { Other = 0.3 } })
+    local ok2 = SKS.call("key_group_assign", { group = "体型", option = 2, names = { "Waist_thin" }, values = { Waist_thin = 0.5 } })
+    check(ok and ok2, "options of one group share a key with their own values")
+    SKS.call("key_group_new", { name = "眼" }); SKS.call("key_group_option_add", { group = "眼", name = "x" })
+    local _, c3, m3 = SKS.call("key_group_assign", { group = "眼", option = 1, names = { "Other" } })
+    check(c3 == "E_CONFLICT" and tostring(m3):find("体型", 1, true), "a key of another group is refused and that group named")
+    SKS.call("key_group_delete", { group = "眼" })
+    SKS.call("key_group_set", { group = "体型", value = 1 }); ticks(1)
+    check(math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6 and math.abs(WEIGHTS[i_other] - 1.5) < 1e-6, "value 1: option 1 on, the other option's keys at their default")
+    SKS.call("key_group_set", { group = 1, value = 2 }); ticks(1)
+    check(math.abs(WEIGHTS[i_waist] - 0.5) < 1e-6 and math.abs(WEIGHTS[i_other] - 0.3) < 1e-6, "value 2 (group by index): the shared key takes option 2's value")
+    ok, code = SKS.call("key_group_set", { group = "体型", value = 3 })
+    check(not ok and code == "E_BAD_ARGS", "a value past the last option is refused")
+    ok, code = SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.5 })
+    check(not ok and code == "E_IN_GROUP", "a grouped key is not set from the key list")
+    ok = SKS.call("key_group_assign", { group = "体型", option = 1, names = { "EyeBlinkLeft" }, values = { EyeBlinkLeft = 0.5 } })
+    local o1 = st.sculpt.key_groups[1].options[1]
+    check(ok and #o1.keys == 2 and o1.keys[1].name == "EyeBlinkLeft" and o1.keys[1].mixed, "an expression key may join and is marked as mixed")
+    SKS.call("sculpt_undo")
+    check(#st.sculpt.key_groups[1].options[1].keys == 1, "group edits are undo steps")
+    local _, _, _, saved = SKS.call("save_sculpt", { name = "Groups" })
+    local f = load("user\\" .. M .. "\\sculpt\\Groups.json")
+    check(saved and f.key_groups and f.key_groups[1].value == 2 and math.abs(f.key_groups[1].options[1].values.Waist_thin - 0.9) < 1e-6,
+        "the preset file stores the groups and the selected value")
+    SKS.call("load_sculpt", { name = "Slim" }); ticks(1)
+    check(#st.sculpt.key_groups == 0 and math.abs(WEIGHTS[i_waist] - 1.2) < 1e-6, "another preset brings its own (no) groups")
+    SKS.call("load_sculpt", { name = "Groups" }); ticks(1)
+    check(st.sculpt.key_groups[1].value == 2 and math.abs(WEIGHTS[i_other] - 0.3) < 1e-6 and not st.sculpt.dirty,
+        "loading the preset brings its groups back")
+    SKS.call("key_group_set_key", { group = "体型", option = 2, name = "Other", value = 0.6 }); ticks(1)
+    check(math.abs(WEIGHTS[i_other] - 0.6) < 1e-6 and st.sculpt.dirty, "a key's fixed value changes in its active option")
+    SKS.call("key_group_option_delete", { group = "体型", option = 1 }); ticks(1)
+    check(st.sculpt.key_groups[1].value == 1 and key("Waist_thin").in_group and math.abs(WEIGHTS[i_waist] - 0.5) < 1e-6,
+        "deleting an option moves the later ones down; a key another option shares stays")
+    SKS.call("key_group_unassign", { group = "体型", option = 1, name = "Waist_thin" }); ticks(1)
+    check(not key("Waist_thin").in_group and math.abs(WEIGHTS[i_waist] - 0.5) < 1e-6, "a key out of its last option is free and keeps its value")
+    for i = 2, 8 do SKS.call("key_group_option_add", { group = "体型", name = "o" .. i }) end
+    ok, code = SKS.call("key_group_option_add", { group = "体型", name = "o9" })
+    check(not ok and code == "E_LIMIT" and #st.sculpt.key_groups[1].options == 8, "at most 8 options")
+    dump("user\\sculpt\\Twice.json", { schema = "sks.sculpt/1", name = "Twice", key_groups = {
+        { name = "a", value = 0, options = { { name = "x", values = { Other = 1 } } } },
+        { name = "b", value = 0, options = { { name = "y", values = { Other = 1 } } } } } })
+    SKS.call("sculpt_scan"); ticks(3)
+    local twice = false
+    for _, e in ipairs(st.presets.sculpt) do if e.name == "Twice" then twice = true end end
+    check(not twice, "a preset with a key in two groups is rejected")
+    dump("user\\sculpt\\Twice.json", { schema = "sks.sculpt/1", name = "Twice", key_groups = {
+        { name = "a", value = 2, options = { { name = "x", values = { Other = 1 } }, { name = "y", values = { Other = 0.4 } } } } } })
+    SKS.call("sculpt_scan"); ticks(3)
+    twice = false
+    for _, e in ipairs(st.presets.sculpt) do if e.name == "Twice" then twice = true end end
+    check(twice, "a preset with a key in two options of one group loads")
+    SKS.call("key_group_delete", { group = "体型" })
+    SKS.call("load_sculpt", { name = "Slim" }); SKS.call("sculpt_undo")
+    dump("user\\sculpt\\Twice.json", { deleted = true })
+    dump("user\\" .. M .. "\\sculpt\\Groups.json", { deleted = true })
+    SKS.call("sculpt_scan"); ticks(3)
+    SKS.call("reset_sculpt_key", { name = "Waist_thin" }); SKS.call("reset_sculpt_key", { name = "Other" }); ticks(1)
+end
+
 -- back to the mod binding: untouched keys follow the mod preset, touched ones stay
 ok = SKS.call("restore_mod_binding", { part = "ch03_012_0012" }); ticks(3)
 check(ok and st.presets.binding.hit == "mods/" .. M .. "/ch03_012_0012.json", "restore_mod_binding -> mods file in effect")
