@@ -24,9 +24,9 @@ local A = {
 }
 
 local M_JBN, M_BUSY, M_LOAD, M_LPOS
--- direct children of the player root (Hair hangs under Head and is not one)
+-- children of the player root, and Hair, which hangs under Head once the player is set up
 local PARTS = { Head = true, Body = true, Cloak = true, Gauntlet = true, Amulet = true,
-                OniHead = true, OniBody = true }
+                OniHead = true, OniBody = true, Hair = true }
 local HEADS = { Head = true, OniHead = true }
 local PLAYER_MESH = "/ch001_"   -- the player character's meshes (mods replace the same files)
 local T_MESH
@@ -111,18 +111,54 @@ end
 -- Only parts count: in combat the game hangs effect_Player_00 objects on the player and removes
 -- them again, and a signature that changed with them dropped the rigs and rescanned every few
 -- frames (a full collect and every channel name read again each time).
-function A.signature(root)
-    local parts, c = {}, root:call("get_Child")
-    while c do
-        local name = go_name(c)
-        if name and A.is_part(name) then parts[#parts + 1] = name .. (A.child_tag(c, name) or "") end
-        c = c:call("get_Next")
+-- Parts are the root's part children plus the parts one level below them (Hair under Head).
+local function part_list(root)
+    local list, names = {}, {}
+    local function add_children(tr, nested)
+        local ok, c = pcall(tr.call, tr, "get_Child")
+        if not ok then return end
+        while c do
+            local name = go_name(c)
+            if name and A.is_part(name) then
+                list[#list + 1], names[#names + 1] = c, name
+                if not nested then add_children(c, true) end
+            end
+            c = c:call("get_Next")
+        end
     end
-    return table.concat(parts, "|")
+    if root then add_children(root, false) end
+    return list, names
+end
+
+function A.parts(parent) return (part_list(parent)) end
+
+function A.signature(root)
+    local list, names = part_list(root)
+    for i, c in ipairs(list) do names[i] = names[i] .. (A.child_tag(c, names[i]) or "") end
+    return table.concat(names, "|")
+end
+
+-- A mod mesh on a part the game never drives (Hair) comes with a weight count of 0, so Core never
+-- writes it. The count is raised to the channel count only when the managed weight list is already
+-- that long: writing past the buffer can freeze the game.
+function A.prepare_parts(parts)
+    for _, part in ipairs(parts) do
+        local m, n = part.mesh, part.n
+        local ok, wc = pcall(m.call, m, "get_BlendShapeChannelWeightCount")
+        if ok and type(wc) == "number" and wc < n then
+            pcall(function()
+                local length = m:call("get_ChannelWeightList"):call("get_Length")
+                if type(length) == "number" and length >= n and m:call("get_BlendShapeChannelNum") == n
+                    and m:call("get_MeshReady") == true and m:call("get_BlendShapeReleasedBuffers") ~= true then
+                    m:call("set_BlendShapeChannelWeightCount", n)
+                end
+            end)
+        end
+    end
 end
 
 A.slot_names = { Head = "头部", Body = "身体", Cloak = "披风", Gauntlet = "护手", Amulet = "护身符",
-                 OniHead = "鬼化头部", OniBody = "鬼化身体" }
+                 OniHead = "鬼化头部", OniBody = "鬼化身体", Hair = "头发" }
 
 function A.model_of(part)
     if type(part) ~= "string" or not A.is_part(part) then return nil end

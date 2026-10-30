@@ -99,7 +99,7 @@ ARMOR._mesh.getMesh = function() return { call = function() return "Art/Model/Ch
 check(not A.is_face(ARMOR), "an NPC head with bsControl is not a face")
 ARMOR._mesh.getMesh = npc_path
 check(A.is_part("ch001_00_10_event") and not A.is_part("ch034_00_10"), "the cutscene copy's parts are named after the player's meshes")
-check(not A.is_part("Hair") and A.model_of("Head") == "musashi" and A.model_of("ch001_00_10_event") == "musashi"
+check(A.is_part("Hair") and A.model_of("Hair") == "musashi" and A.model_of("Head") == "musashi" and A.model_of("ch001_00_10_event") == "musashi"
     and A.representative_of("Body") == "musashi" and A.model_of("Gm800_000_00") == nil, "every player part belongs to musashi")
 local Presets = require("ShapeKeySystem_Core.Presets")
 local chain = {}
@@ -232,6 +232,38 @@ do
     ticks(3)
     check(scans == 0 and #writes > count, "effects spawning every 15 frames: no rescan, writing goes on (" .. scans .. " scans)")
     ARMOR.get_Next, shown = next_of_armor, false
+end
+-- Hair hangs under Head; its mod mesh comes without a weight buffer until prepare_parts raises it
+do
+    local hw, written = { count = 0, length = #CHANNELS }, {}
+    local hmesh = {}
+    for k, v in pairs(ARMOR._mesh) do hmesh[k] = v end
+    hmesh.get_address = function() return 0x3000 end
+    hmesh.get_BlendShapeChannelWeightCount = function() return hw.count end
+    hmesh.set_BlendShapeChannelWeightCount = function(_, n) hw.count = n end
+    hmesh.get_ChannelWeightList = function() return { call = function() return hw.length end } end
+    hmesh.setBlendShapeChannelWeightParam = function(_, i, w) written[i] = w end
+    hmesh.getBlendShapeChannelWeightParam = function(_, i) return written[i] or 0 end
+    local hair = { get_Next = function() return nil end, get_Child = function() return nil end }
+    hair.get_GameObject = function()
+        return { call = function(_, m) if m == "get_Name" then return "Hair" end return hmesh end }
+    end
+    hair.call = function(self, m, ...) return self[m](self, ...) end
+    local child_of_armor = ARMOR.get_Child
+    ARMOR.get_Child = function() return hair end
+    local found = false
+    for _, c in ipairs(A.parts(ROOT)) do if c == hair then found = true end end
+    check(found and Scene.children_signature(ROOT):find("Hair@", 1, true) ~= nil,
+        "Hair under Head is a part and is in the children signature")
+    hw.length = 2
+    A.prepare_parts({ { mesh = hmesh, n = #CHANNELS } })
+    check(hw.count == 0, "a weight list shorter than the channels keeps the weight count")
+    hw.length = #CHANNELS
+    ticks(80)
+    check(hw.count == #CHANNELS and math.abs((written[0] or 0) - 0.8) < 1e-6,
+        "the hair's weight count is raised and its sculpt key is written")
+    ARMOR.get_Child = child_of_armor
+    ticks(10)
 end
 debug.setmetatable(vector, original_meta)
 vector:close()
