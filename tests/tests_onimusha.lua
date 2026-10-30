@@ -265,6 +265,17 @@ do
     ARMOR.get_Child = child_of_armor
     ticks(10)
 end
+-- the equipment menu's Player_UI: its creation turns the scene search on, a rebuild or its
+-- destruction drops every reference first
+check(HOOKS.onCreateModel and HOOKS.requestChangeModel and HOOKS.onDestroy, "PlayerUICharacter hooks installed")
+HOOKS.onCreateModel(); ticks(15)
+check(SKS.state.scene.last_scan and SKS.state.scene.last_scan.preview == true, "Player_UI created: the scan searches for the menu copy")
+HOOKS.requestChangeModel()
+local released = false
+for _, l in ipairs(SKS.state.debug.log) do if l.text:find("equipment rebuilt", 1, true) then released = true end end
+check(released, "an outfit change in the menu drops the rigs at once")
+HOOKS.onDestroy(); ticks(80)
+check(SKS.state.scene.last_scan.preview == false and #SKS.state.scene.rigs > 0, "menu closed: back to the player alone")
 debug.setmetatable(vector, original_meta)
 vector:close()
 do

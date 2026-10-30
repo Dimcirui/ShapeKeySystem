@@ -5,7 +5,8 @@
 -- of builtin/onimusha_wots/face.json (BoneReads), so only profiles naming those signals move it.
 -- Cutscenes show a copy of the player (Pl000_00, face ch001_00_10_event); Core finds it by searching
 -- the scene. The DemoMediator hooks are the Wilds ones (same names here) and are pre-hooks, so
--- `events.release` drops every reference before the game skips, stops or unloads.
+-- `events.release` drops every reference before the game skips, stops or unloads. The equipment
+-- menu's copy (Player_UI) has the same parts and is found the same way while the menu is open.
 -- Part names stay Head / Body across outfit changes, so child_tag adds each part's mesh address
 -- to Core's children signature. The demon form (OniHead / OniBody) is hidden until the player
 -- turns; the drawn head is the face, and child_tag adds the draw state so the switch rescans.
@@ -258,6 +259,30 @@ local function hook_cutscene(T_DEMO, events)
     end)
 end
 
+-- The equipment menu shows a copy of the player (Player_UI, app.PlayerUICharacter) with the same
+-- parts as Player_00; Core finds it by the scene search the preview event turns on. Changing an
+-- outfit in the menu rebuilds its parts, and closing the menu destroys it: both pre-hooks drop
+-- every reference first.
+local function hook_ui_character(events)
+    local T = sdk.find_type_definition("app.PlayerUICharacter")
+    if not T then return end
+    local function hook(name, pre, post)
+        pcall(function()
+            local m = T:get_method(name)
+            if m then
+                sdk.hook(m, pre and function() pcall(pre) end or nil,
+                    post and function(r) pcall(post); return r end or nil)
+            end
+        end)
+    end
+    hook("onCreateModel()", nil, function() events.preview(true) end)
+    for _, name in ipairs({ "requestChangeModel(System.Collections.Generic.List`1<app.PlayerPartsDef.cChangeArgument>)",
+                            "requestChangeModel(app.PlayerPartsDef.PARTS_TYPE, System.Int32)" }) do
+        hook(name, function() events.rebuilt() end)
+    end
+    hook("onDestroy()", function() events.preview(false); events.rebuilt() end)
+end
+
 function A.init(events)
     local methods = {}
     for _, spec in ipairs({
@@ -278,7 +303,10 @@ function A.init(events)
     M_LPOS = methods["get_LocalPosition()"]
     M_BUSY, M_LOAD = methods["get_IsBusy()"], methods["get_IsBusyLoad()"]
     T_MESH = sdk.typeof("via.render.Mesh")
-    if events then hook_cutscene(sdk.find_type_definition("app.DemoMediator"), events) end
+    if events then
+        hook_cutscene(sdk.find_type_definition("app.DemoMediator"), events)
+        hook_ui_character(events)
+    end
     return true
 end
 
