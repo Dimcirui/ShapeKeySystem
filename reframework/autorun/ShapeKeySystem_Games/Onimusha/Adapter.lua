@@ -5,7 +5,8 @@
 -- of builtin/onimusha_wots/face.json (BoneReads), so only profiles naming those signals move it.
 -- Cutscenes show a copy of the player (Pl000_00, face ch001_00_10_event); Core finds it by searching
 -- the scene. The DemoMediator hooks are the Wilds ones (same names here) and are pre-hooks, so
--- `events.release` drops every reference before the game skips, stops or unloads.
+-- `events.release` drops every reference before the game skips, stops or unloads. The equipment
+-- menu's copy (Player_UI) has the same parts and is found the same way while the menu is open.
 -- Part names stay Head / Body across outfit changes, so child_tag adds each part's mesh address
 -- to Core's children signature. The demon form (OniHead / OniBody) is hidden until the player
 -- turns; the drawn head is the face, and child_tag adds the draw state so the switch rescans.
@@ -18,12 +19,15 @@ local A = {
     name = "Onimusha: Way of the Sword",
     terms = { primary = "主角色", part = "部件" },
     input = require("ShapeKeySystem_Games.Onimusha.Input"),
+    -- the periodic rescan only compares the player and its parts; a full scan of a mod with
+    -- hundreds of channels was a hitch every periodic_scan_sec
+    inspect_before_scan = true,
 }
 
 local M_JBN, M_BUSY, M_LOAD, M_LPOS
--- direct children of the player root (Hair hangs under Head and is not one)
+-- children of the player root, and Hair, which hangs under Head once the player is set up
 local PARTS = { Head = true, Body = true, Cloak = true, Gauntlet = true, Amulet = true,
-                OniHead = true, OniBody = true }
+                OniHead = true, OniBody = true, Hair = true }
 local HEADS = { Head = true, OniHead = true }
 local PLAYER_MESH = "/ch001_"   -- the player character's meshes (mods replace the same files)
 local T_MESH
@@ -105,8 +109,57 @@ function A.child_tag(tr, name)
     return tag
 end
 
+-- Only parts count: in combat the game hangs effect_Player_00 objects on the player and removes
+-- them again, and a signature that changed with them dropped the rigs and rescanned every few
+-- frames (a full collect and every channel name read again each time).
+-- Parts are the root's part children plus the parts one level below them (Hair under Head).
+local function part_list(root)
+    local list, names = {}, {}
+    local function add_children(tr, nested)
+        local ok, c = pcall(tr.call, tr, "get_Child")
+        if not ok then return end
+        while c do
+            local name = go_name(c)
+            if name and A.is_part(name) then
+                list[#list + 1], names[#names + 1] = c, name
+                if not nested then add_children(c, true) end
+            end
+            c = c:call("get_Next")
+        end
+    end
+    if root then add_children(root, false) end
+    return list, names
+end
+
+function A.parts(parent) return (part_list(parent)) end
+
+function A.signature(root)
+    local list, names = part_list(root)
+    for i, c in ipairs(list) do names[i] = names[i] .. (A.child_tag(c, names[i]) or "") end
+    return table.concat(names, "|")
+end
+
+-- A mod mesh on a part the game never drives (Hair) comes with a weight count of 0, so Core never
+-- writes it. The count is raised to the channel count only when the managed weight list is already
+-- that long: writing past the buffer can freeze the game.
+function A.prepare_parts(parts)
+    for _, part in ipairs(parts) do
+        local m, n = part.mesh, part.n
+        local ok, wc = pcall(m.call, m, "get_BlendShapeChannelWeightCount")
+        if ok and type(wc) == "number" and wc < n then
+            pcall(function()
+                local length = m:call("get_ChannelWeightList"):call("get_Length")
+                if type(length) == "number" and length >= n and m:call("get_BlendShapeChannelNum") == n
+                    and m:call("get_MeshReady") == true and m:call("get_BlendShapeReleasedBuffers") ~= true then
+                    m:call("set_BlendShapeChannelWeightCount", n)
+                end
+            end)
+        end
+    end
+end
+
 A.slot_names = { Head = "头部", Body = "身体", Cloak = "披风", Gauntlet = "护手", Amulet = "护身符",
-                 OniHead = "鬼化头部", OniBody = "鬼化身体" }
+                 OniHead = "鬼化头部", OniBody = "鬼化身体", Hair = "头发" }
 
 function A.model_of(part)
     if type(part) ~= "string" or not A.is_part(part) then return nil end
@@ -206,6 +259,30 @@ local function hook_cutscene(T_DEMO, events)
     end)
 end
 
+-- The equipment menu shows a copy of the player (Player_UI, app.PlayerUICharacter) with the same
+-- parts as Player_00; Core finds it by the scene search the preview event turns on. Changing an
+-- outfit in the menu rebuilds its parts, and closing the menu destroys it: both pre-hooks drop
+-- every reference first.
+local function hook_ui_character(events)
+    local T = sdk.find_type_definition("app.PlayerUICharacter")
+    if not T then return end
+    local function hook(name, pre, post)
+        pcall(function()
+            local m = T:get_method(name)
+            if m then
+                sdk.hook(m, pre and function() pcall(pre) end or nil,
+                    post and function(r) pcall(post); return r end or nil)
+            end
+        end)
+    end
+    hook("onCreateModel()", nil, function() events.preview(true) end)
+    for _, name in ipairs({ "requestChangeModel(System.Collections.Generic.List`1<app.PlayerPartsDef.cChangeArgument>)",
+                            "requestChangeModel(app.PlayerPartsDef.PARTS_TYPE, System.Int32)" }) do
+        hook(name, function() events.rebuilt() end)
+    end
+    hook("onDestroy()", function() events.preview(false); events.rebuilt() end)
+end
+
 function A.init(events)
     local methods = {}
     for _, spec in ipairs({
@@ -226,7 +303,10 @@ function A.init(events)
     M_LPOS = methods["get_LocalPosition()"]
     M_BUSY, M_LOAD = methods["get_IsBusy()"], methods["get_IsBusyLoad()"]
     T_MESH = sdk.typeof("via.render.Mesh")
-    if events then hook_cutscene(sdk.find_type_definition("app.DemoMediator"), events) end
+    if events then
+        hook_cutscene(sdk.find_type_definition("app.DemoMediator"), events)
+        hook_ui_character(events)
+    end
     return true
 end
 

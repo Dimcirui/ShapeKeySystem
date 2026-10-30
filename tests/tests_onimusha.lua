@@ -99,7 +99,7 @@ ARMOR._mesh.getMesh = function() return { call = function() return "Art/Model/Ch
 check(not A.is_face(ARMOR), "an NPC head with bsControl is not a face")
 ARMOR._mesh.getMesh = npc_path
 check(A.is_part("ch001_00_10_event") and not A.is_part("ch034_00_10"), "the cutscene copy's parts are named after the player's meshes")
-check(not A.is_part("Hair") and A.model_of("Head") == "musashi" and A.model_of("ch001_00_10_event") == "musashi"
+check(A.is_part("Hair") and A.model_of("Hair") == "musashi" and A.model_of("Head") == "musashi" and A.model_of("ch001_00_10_event") == "musashi"
     and A.representative_of("Body") == "musashi" and A.model_of("Gm800_000_00") == nil, "every player part belongs to musashi")
 local Presets = require("ShapeKeySystem_Core.Presets")
 local chain = {}
@@ -211,6 +211,71 @@ for _, flag in ipairs({ "ready", "valid", "character", "busy", "load" }) do
     ticks(65)
 end
 check(A.gate() and not SKS.state.debug.status:find("tick error", 1, true), "gameplay resumes after gating")
+-- combat effects come and go under the player root: they must not drop the rigs or rescan
+do
+    local effect = { get_Next = function() return ARMOR.get_Next(ARMOR) end }
+    effect.get_GameObject = function() return { call = function() return "effect_Player_00" end } end
+    effect.call = function(self, m, ...) return self[m](self, ...) end
+    local next_of_armor, shown = ARMOR.get_Next, false
+    ARMOR.get_Next = function(self) if shown then return effect end return next_of_armor(self) end
+    effect.get_Next = function() return next_of_armor(ARMOR) end
+    local sig = Scene.children_signature(ROOT)
+    shown = true
+    check(Scene.children_signature(ROOT) == sig, "an effect object under the player leaves the children signature alone")
+    local scans, last_scan, count = 0, SKS.state.scene.last_scan, #writes
+    for i = 1, 300 do
+        shown = (i // 15) % 2 == 1
+        CB.tick()
+        if SKS.state.scene.last_scan ~= last_scan then scans, last_scan = scans + 1, SKS.state.scene.last_scan end
+    end
+    positions[3].z = 0.0
+    ticks(3)
+    check(scans == 0 and #writes > count, "effects spawning every 15 frames: no rescan, writing goes on (" .. scans .. " scans)")
+    ARMOR.get_Next, shown = next_of_armor, false
+end
+-- Hair hangs under Head; its mod mesh comes without a weight buffer until prepare_parts raises it
+do
+    local hw, written = { count = 0, length = #CHANNELS }, {}
+    local hmesh = {}
+    for k, v in pairs(ARMOR._mesh) do hmesh[k] = v end
+    hmesh.get_address = function() return 0x3000 end
+    hmesh.get_BlendShapeChannelWeightCount = function() return hw.count end
+    hmesh.set_BlendShapeChannelWeightCount = function(_, n) hw.count = n end
+    hmesh.get_ChannelWeightList = function() return { call = function() return hw.length end } end
+    hmesh.setBlendShapeChannelWeightParam = function(_, i, w) written[i] = w end
+    hmesh.getBlendShapeChannelWeightParam = function(_, i) return written[i] or 0 end
+    local hair = { get_Next = function() return nil end, get_Child = function() return nil end }
+    hair.get_GameObject = function()
+        return { call = function(_, m) if m == "get_Name" then return "Hair" end return hmesh end }
+    end
+    hair.call = function(self, m, ...) return self[m](self, ...) end
+    local child_of_armor = ARMOR.get_Child
+    ARMOR.get_Child = function() return hair end
+    local found = false
+    for _, c in ipairs(A.parts(ROOT)) do if c == hair then found = true end end
+    check(found and Scene.children_signature(ROOT):find("Hair@", 1, true) ~= nil,
+        "Hair under Head is a part and is in the children signature")
+    hw.length = 2
+    A.prepare_parts({ { mesh = hmesh, n = #CHANNELS } })
+    check(hw.count == 0, "a weight list shorter than the channels keeps the weight count")
+    hw.length = #CHANNELS
+    ticks(80)
+    check(hw.count == #CHANNELS and math.abs((written[0] or 0) - 0.8) < 1e-6,
+        "the hair's weight count is raised and its sculpt key is written")
+    ARMOR.get_Child = child_of_armor
+    ticks(10)
+end
+-- the equipment menu's Player_UI: its creation turns the scene search on, a rebuild or its
+-- destruction drops every reference first
+check(HOOKS.onCreateModel and HOOKS.requestChangeModel and HOOKS.onDestroy, "PlayerUICharacter hooks installed")
+HOOKS.onCreateModel(); ticks(15)
+check(SKS.state.scene.last_scan and SKS.state.scene.last_scan.preview == true, "Player_UI created: the scan searches for the menu copy")
+HOOKS.requestChangeModel()
+local released = false
+for _, l in ipairs(SKS.state.debug.log) do if l.text:find("equipment rebuilt", 1, true) then released = true end end
+check(released, "an outfit change in the menu drops the rigs at once")
+HOOKS.onDestroy(); ticks(80)
+check(SKS.state.scene.last_scan.preview == false and #SKS.state.scene.rigs > 0, "menu closed: back to the player alone")
 debug.setmetatable(vector, original_meta)
 vector:close()
 do
