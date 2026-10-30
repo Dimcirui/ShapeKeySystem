@@ -1051,6 +1051,7 @@
   "条件规则的组合可从捏脸配置导入": "Condition rule combinations can be imported from sculpt configs",
   "一个角色只用一份绑定；修复鬼武者捏脸预设被改回": "One binding per character; fixed Onimusha sculpt presets reverting",
   "捏脸支持键组；鬼武者头发和装备菜单角色可驱动": "Sculpt key groups; Onimusha hair and equipment-menu character are driven",
+  "崛起减少定期扫描开销": "Rise: less periodic scanning overhead",
   "已从捏脸配置「%s」导入 %d 个形态键": "Sculpt config \"%s\": imported %d shape keys",
   "从捏脸配置导入…": "Import from sculpt config…",
   "把该捏脸配置里所有不为 0 的形态键值原样加入这个组合；组合里已有的同名键会被覆盖": "Adds every non-zero shape key value of that sculpt config to this combination as is; keys already in the combination are overwritten",
