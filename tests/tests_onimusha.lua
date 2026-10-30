@@ -211,6 +211,28 @@ for _, flag in ipairs({ "ready", "valid", "character", "busy", "load" }) do
     ticks(65)
 end
 check(A.gate() and not SKS.state.debug.status:find("tick error", 1, true), "gameplay resumes after gating")
+-- combat effects come and go under the player root: they must not drop the rigs or rescan
+do
+    local effect = { get_Next = function() return ARMOR.get_Next(ARMOR) end }
+    effect.get_GameObject = function() return { call = function() return "effect_Player_00" end } end
+    effect.call = function(self, m, ...) return self[m](self, ...) end
+    local next_of_armor, shown = ARMOR.get_Next, false
+    ARMOR.get_Next = function(self) if shown then return effect end return next_of_armor(self) end
+    effect.get_Next = function() return next_of_armor(ARMOR) end
+    local sig = Scene.children_signature(ROOT)
+    shown = true
+    check(Scene.children_signature(ROOT) == sig, "an effect object under the player leaves the children signature alone")
+    local scans, last_scan, count = 0, SKS.state.scene.last_scan, #writes
+    for i = 1, 300 do
+        shown = (i // 15) % 2 == 1
+        CB.tick()
+        if SKS.state.scene.last_scan ~= last_scan then scans, last_scan = scans + 1, SKS.state.scene.last_scan end
+    end
+    positions[3].z = 0.0
+    ticks(3)
+    check(scans == 0 and #writes > count, "effects spawning every 15 frames: no rescan, writing goes on (" .. scans .. " scans)")
+    ARMOR.get_Next, shown = next_of_armor, false
+end
 debug.setmetatable(vector, original_meta)
 vector:close()
 do

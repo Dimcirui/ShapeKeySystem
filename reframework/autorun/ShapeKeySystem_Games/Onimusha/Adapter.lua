@@ -18,6 +18,9 @@ local A = {
     name = "Onimusha: Way of the Sword",
     terms = { primary = "主角色", part = "部件" },
     input = require("ShapeKeySystem_Games.Onimusha.Input"),
+    -- the periodic rescan only compares the player and its parts; a full scan of a mod with
+    -- hundreds of channels was a hitch every periodic_scan_sec
+    inspect_before_scan = true,
 }
 
 local M_JBN, M_BUSY, M_LOAD, M_LPOS
@@ -103,6 +106,19 @@ function A.child_tag(tr, name)
     local tag = ok and addr and ("@" .. tostring(addr)) or "@-"
     if HEADS[name] and not drawn(tr) then tag = tag .. "~hidden" end
     return tag
+end
+
+-- Only parts count: in combat the game hangs effect_Player_00 objects on the player and removes
+-- them again, and a signature that changed with them dropped the rigs and rescanned every few
+-- frames (a full collect and every channel name read again each time).
+function A.signature(root)
+    local parts, c = {}, root:call("get_Child")
+    while c do
+        local name = go_name(c)
+        if name and A.is_part(name) then parts[#parts + 1] = name .. (A.child_tag(c, name) or "") end
+        c = c:call("get_Next")
+    end
+    return table.concat(parts, "|")
 end
 
 A.slot_names = { Head = "头部", Body = "身体", Cloak = "披风", Gauntlet = "护手", Amulet = "护身符",
