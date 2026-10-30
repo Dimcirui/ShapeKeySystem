@@ -288,6 +288,31 @@ Panel.ui.win.w = 640; frame()
 check(find("页面出错", false) == nil and #DRAWS > 0, "narrow window draws")
 Panel.ui.win.w = 920; frame()
 
+-- key groups: create one from the page, fill an option, switch it, delete it
+check(find("键组", true) ~= nil and find("新建键组", true) ~= nil, "the key group section sits on the sculpt page")
+click_text("新建键组", true); frames(2)
+check(INPUT_RECTS.kg_name ~= nil, "新建键组 asks for a name")
+INPUT_EDITS.kg_name = "发型"; frames(2)
+click_text("确定", true); frames(2)
+check(st.sculpt.key_groups[1] and st.sculpt.key_groups[1].name == "发型" and find("新增选项", true) ~= nil,
+    "the new group opens in edit mode")
+click_text("新增选项", true); frames(2)
+click_text("确定", true); frames(2)
+check(#st.sculpt.key_groups[1].options == 1 and find("1 选项 1", true) ~= nil, "an option added with its default name")
+SKS.call("set_sculpt_key", { name = "Other", value = 0.8 }); frames(2)
+click_text("收入已修改的键", true); frames(2)
+local kopt = st.sculpt.key_groups[1].options[1]
+check(#kopt.keys >= 1 and find("移出", true) ~= nil and find("添加形态键…", false) ~= nil,
+    "收入已修改的键 lists the keys under the option, with a search box to add more")
+SNAPS[#SNAPS + 1] = { name = "键组", cmds = CMDS }
+click_text("完成", true); frames(2)
+click_text("1 选项 1", true); frames(2)
+check(st.sculpt.key_groups[1].value == 1, "clicking an option switches the group")
+click_text("编辑", true); frames(2)
+click_text("删除键组", true); frames(2)
+check(#st.sculpt.key_groups == 0 and find("页面出错", false) == nil, "删除键组 removes it")
+SKS.call("reset_sculpt_key", { name = "Other" }); frames(2)
+
 hotkey()
 check(not Panel.open, "Delete closes the panel")
 frame()

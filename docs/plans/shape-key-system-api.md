@@ -807,3 +807,30 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 - 没有条目的文字原样显示中文。离线测试 `tests/i18n_check.py` 检查每条中文字面量和每条内置数据文字都有条目（或在 `untranslated` 里），并且译文的格式符与原文一致。
 - `SKS_LANG=en python run.py --shots`：页面截图用英文，检查排版。
 - 拼好的通知和状态行在生成时定下语言，切换语言后已经显示的这些文字要等重新生成才换。
+
+## 键组（捏脸配置内）
+
+键组用一个整数在几组形态键之间切换，比如几种发型、几种眼型。键组存在捏脸配置文件里，只属于这份配置：加载另一份配置时换成那份的键组，没有键组的配置清空当前键组。
+
+- **取值**：`value = 0` 时整组关闭，组里所有形态键回到 mod 默认值；`value = n` 时第 n 个选项里的形态键取它在这个选项里的固定值，组里其他形态键回到 mod 默认值。一个键组最多 8 个选项。
+- **不重叠**：同一个键组的几个选项可以共用一个形态键，各存各的值（一个键做出几档）；不同键组不能共用。收入另一个键组已有的键返回 `E_CONFLICT`，消息里写明所在的键组；文件里同一个键出现在两个键组时整份配置不读取。
+- **和其他层的关系**：键组改的是捏脸值，外部插件、驱动、条件表情照样能盖过它。键组里的键不在按部件分组的列表里，`set_sculpt_key` / `set_sculpt_override` / `reset_sculpt_key` 返回 `E_IN_GROUP`，也不使用按部件的单独值。表情配置驱动的键也可以收入，界面标出"与表情冲突"：它的固定值是表情叠加的起点（`S.mix`）。
+- **重置 / 归零**：`reset_sculpt_all`、`zero_sculpt_all` 把所有键组切回 0。键组的每次修改都算一步撤销，几帧之内连续切换同一个键组合并为一步。
+- **文件**：`sks.sculpt/1` 增加可选字段 `key_groups`：
+  `[{"name": "发型", "value": 2, "options": [{"name": "马尾", "values": {"Hair_ponytail": 1}}, {"name": "短发", "values": {"Hair_short": 1, "Hair_bangs_cut": 0.6}}]}]`。
+  键组里的键的当前值也照常写进 `values`。名字未知时存成 `#XXXXXXXX` 的键，名字找到后按名字使用。
+
+命令（`group` 为键组名或从 1 开始的序号，`option` 为从 1 开始的选项序号）：
+
+| 命令 | 参数 | 作用 |
+|---|---|---|
+| `key_group_new` | `{name}` | 新建空键组，值为 0；重名返回 `E_EXISTS` |
+| `key_group_rename` / `key_group_delete` | `{group, name}` / `{group}` | 改名 / 删除；删除后组里的形态键回到列表，保留当前值 |
+| `key_group_set` | `{group, value}` | 切换到 0..选项数；条件表情和驱动以后也经这个命令切换 |
+| `key_group_option_add` | `{group, name}` | 新增选项，结果 `{option}`；满 8 个返回 `E_LIMIT` |
+| `key_group_option_rename` / `key_group_option_delete` | `{group, option, name}` / `{group, option}` | 改名 / 删除选项；不在本组其他选项里的形态键回到列表，后面的选项序号减一 |
+| `key_group_assign` | `{group, option, names, values?}` | 把形态键收入选项。`names` 为键名列表，或 `"modified"`（所有不在键组里、值和 mod 默认值不同的键）。固定值取 `values[name]`，没有时取当前值（等于默认值时取 1）；已在这个选项里的键只改值 |
+| `key_group_unassign` | `{name 或 names, group?, option?}` | 移出这个选项；不给 `group` 时移出整个键组。不再属于键组的形态键回到列表，保留当前值 |
+| `key_group_set_key` | `{group, option, name, value}` | 改一个键在这个选项里的固定值 |
+
+`state.sculpt.key_groups[g] = {name, value, options[o] = {name, keys[k] = {name, label, value, mixed, missing}}}`，`state.sculpt.max_options = 8`；`state.sculpt.keys[i].in_group` 标出键组里的键。

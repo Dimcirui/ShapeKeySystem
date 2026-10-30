@@ -1,5 +1,6 @@
 -- ShapeKeySystem panel, basic page "捏脸": merged sculpt keys with sliders, search, per-part
 -- values, undo / redo, compare with the initial (mod default) values, save (and bind) a sculpt preset.
+-- The preset's key groups sit above the parts: an integer per group picks one set of keys.
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -221,6 +222,169 @@ local function key_row(ctx, k, x, y, w)
     return h
 end
 
+-- one key of option oi of group g: its fixed value there, 移出
+local function group_key_row(ctx, g, oi, k, x, y, w)
+    local call = ctx.call
+    local h = 30
+    if not visible(y, h) then return h end
+    local nw = max(150, w * 0.34)
+    D.rect(x + 16, y, 1, h, C.line)
+    local tw = D.text_mid(k.label or k.name, x + 26, y, h, k.missing and C.faint or C.text, W.small(), nw - 30)
+    if k.label then W.tooltip(L.f("形态键名：%s", k.name), x, y, nw, h) end
+    -- an expression key still moves with the expression on top of its fixed value
+    if k.mixed then W.chip("与表情冲突", x + 30 + tw, y + 5, C.warn, 20)
+    elseif k.missing then D.text_mid("身上的部件没有这个形态键", x + 34 + tw, y, h, C.faint, W.small()) end
+    local rw = D.measure(W.small(), "移出") + 22
+    local ch, v = W.slider("kg:" .. g.name .. ":" .. oi .. ":" .. k.name, x + nw, y + 2, w - nw - rw - 14, 26, k.value, 0, ctx.st.settings.sculpt_max or 1,
+        { step = 0.01, fmt = "%.2f" })
+    if ch then call("key_group_set_key", { group = g.name, option = oi, name = k.name, value = v }) end
+    if W.tbutton("移出", x + w - rw - 2, y + 4) then
+        call("key_group_unassign", { group = g.name, option = oi, name = k.name })
+    end
+    W.tooltip("移出这个选项；不在本组其他选项里的形态键回到下面的列表并保留当前值", x + w - rw - 2, y + 4, rw, 22)
+    return h
+end
+
+-- the key groups of the loaded preset, above the part groups: each switches between its options
+local function key_groups(ctx, x, y, w)
+    local st, call, s = ctx.st, ctx.call, ctx.state
+    local sc = st.sculpt
+    local list = sc.key_groups or {}
+    local cy = y
+    local open = not s.collapsed["\0key_groups"]
+    local clicked, hh = W.header("键组", x, cy, w, open, L.f("%d 组", #list))
+    if clicked then s.collapsed["\0key_groups"] = open end
+    cy = cy + hh + 2
+    if not open then return cy - y end
+    s.kg_edit = s.kg_edit or {}
+    s.kg_search, s.kg_items = s.kg_search or {}, s.kg_items or {}
+    -- key name -> the group holding it
+    local group_of_key = {}
+    for _, g in ipairs(list) do
+        for _, o in ipairs(g.options) do for _, k in ipairs(o.keys) do group_of_key[k.name] = g.name end end
+    end
+    local f = W.small()
+    local function ask_name(title, text, submit)
+        W.start_text(s, "kg_form", { title = title, text = text or "", on_submit = submit })
+    end
+    for gi, g in ipairs(list) do
+        local editing = s.kg_edit[g.name]
+        local nw = max(150, w * 0.34)
+        if visible(cy, 34) then
+            D.text_mid(g.name, x + 10, cy + 3, 28, C.text, W.body(), nw - 16)
+            local ew = D.measure(f, editing and "完成" or "编辑") + 22
+            if W.tbutton(editing and "完成" or "编辑", x + w - ew - 2, cy + 6, { pressed = editing }) then
+                s.kg_edit[g.name] = not editing
+            end
+            -- 关 + the option names; a dropdown when they do not fit
+            local labels = { L.tr("关") }
+            local need = D.measure(f, labels[1]) + 28
+            for i, o in ipairs(g.options) do
+                labels[i + 1] = L.f("%d %s", i, o.name)
+                need = need + D.measure(f, labels[i + 1]) + 28
+            end
+            local room = w - nw - ew - 12
+            if need <= room then
+                local bx = x + nw
+                for i, label in ipairs(labels) do
+                    local c, bw = W.tbutton(label, bx, cy + 6, { pressed = g.value == i - 1 })
+                    if c and g.value ~= i - 1 then call("key_group_set", { group = g.name, value = i - 1 }) end
+                    bx = bx + bw + 6
+                end
+            else
+                local c, i = W.select("kg_sel:" .. g.name, x + nw, cy + 3, min(room, 260), 28, labels, g.value + 1)
+                if c and i then call("key_group_set", { group = g.name, value = i - 1 }) end
+            end
+        end
+        cy = cy + 34
+        if editing then
+            local bx = x + 16
+            local full = #g.options >= (sc.max_options or 8)
+            local c1, b1 = W.tbutton("新增选项", bx, cy + 4, { disabled = full })
+            if c1 then
+                ask_name(L.f("键组「%s」的新选项", g.name), L.f("选项 %d", #g.options + 1), function(name)
+                    call("key_group_option_add", { group = g.name, name = name })
+                end)
+            end
+            if full then W.tooltip(L.f("一个键组最多 %d 个选项", sc.max_options or 8), bx, cy + 4, b1, 22) end
+            bx = bx + b1 + 6
+            local c2, b2 = W.tbutton("重命名", bx, cy + 4)
+            if c2 then
+                ask_name("重命名键组", g.name, function(name)
+                    if call("key_group_rename", { group = g.name, name = name }) then
+                        s.kg_edit[name], s.kg_edit[g.name] = true, nil
+                    end
+                end)
+            end
+            bx = bx + b2 + 6
+            local c3, b3 = W.tbutton("删除键组", bx, cy + 4, { kind = "danger" })
+            if c3 then call("key_group_delete", { group = g.name }) end
+            W.tooltip("删除这个键组，里面的形态键回到下面的列表并保留当前值", bx, cy + 4, b3, 22)
+            cy = cy + 30
+            for oi, o in ipairs(g.options) do
+                if visible(cy, 30) then
+                    D.rect(x + 16, cy, 1, 30, C.line)
+                    D.text_mid(L.f("%d %s", oi, o.name), x + 26, cy, 30, g.value == oi and C.brass or C.muted, W.body(),
+                        w * 0.3)
+                    local rx = x + w - 2
+                    local function rbtn(label, opt)
+                        local bw = D.measure(f, label) + 22
+                        rx = rx - bw
+                        local c = W.tbutton(label, rx, cy + 4, opt)
+                        rx = rx - 6
+                        return c, bw
+                    end
+                    if rbtn("删除", { kind = "danger" }) then call("key_group_option_delete", { group = g.name, option = oi }) end
+                    if rbtn("重命名") then
+                        ask_name("重命名选项", o.name, function(name)
+                            call("key_group_option_rename", { group = g.name, option = oi, name = name })
+                        end)
+                    end
+                    local ca, ba = rbtn("收入已修改的键")
+                    if ca then
+                        if call("key_group_assign", { group = g.name, option = oi, names = "modified" }) then ctx.toast("info", L.f("已收入选项「%s」", o.name)) end
+                    end
+                    W.tooltip("把下面列表里改过的形态键按当前值放进这个选项", rx + 6, cy + 4, ba, 22)
+                end
+                cy = cy + 30
+                if #o.keys == 0 then
+                    if visible(cy, 26) then
+                        D.text_mid("还没有形态键：先在下面调好，再点「收入已修改的键」，或用下面的搜索框添加",
+                            x + 26, cy, 26, C.faint, W.small(), w - 40)
+                    end
+                    cy = cy + 26
+                end
+                for _, k in ipairs(o.keys) do cy = cy + group_key_row(ctx, g, oi, k, x + 10, cy, w - 10) end
+                -- any key outside the other groups, including ones another option of this group uses
+                local items = {}
+                local here = {}
+                for _, k in ipairs(o.keys) do here[k.name] = true end
+                for _, item in ipairs(W.shape_key_items(sc, s.kg_items)) do
+                    local owner = group_of_key[item.value]
+                    if not here[item.value] and (owner == nil or owner == g.name) then items[#items + 1] = item end
+                end
+                local add, name, ah = W.search_select(s.kg_search, "kg_add:" .. g.name .. ":" .. oi, x + 36, cy + 2,
+                    min(320, w * 0.5), items, nil, { placeholder = "添加形态键…", empty = "没有可添加的形态键" })
+                if add and name then call("key_group_assign", { group = g.name, option = oi, names = { name } }) end
+                cy = cy + ah + 2
+            end
+            cy = cy + 4
+        end
+    end
+    if #list == 0 and visible(cy, 26) then
+        D.text_mid("键组用一个整数在几组形态键之间切换，比如几种发型。", x + 10, cy, 26, C.faint, W.small(), w - 140)
+    end
+    local nb = D.measure(f, "新建键组") + 22
+    if W.tbutton("新建键组", x + w - nb - 2, cy + 2) then
+        ask_name("新键组的名称", L.f("键组 %d", #list + 1), function(name)
+            if call("key_group_new", { name = name }) then s.kg_edit[name] = true end
+        end)
+    end
+    cy = cy + 30
+    cy = cy + W.text_form(s, "kg_form", "kg_name", x, cy, w)
+    return cy - y + 6
+end
+
 function Page.draw(ctx, x, y, w)
     local st, s = ctx.st, ctx.state
     s.expanded = s.expanded or {}
@@ -231,6 +395,7 @@ function Page.draw(ctx, x, y, w)
         D.text("点「扫描装备」读取身上部件的形态键。", x, cy, C.muted, W.body())
         return cy + 30 - y
     end
+    cy = cy + key_groups(ctx, x, cy, w)
     local filter = (s.filter or ""):lower()
     local shown = 0
     -- "hide non-preset keys" only means something when some key is named by a preset
@@ -243,7 +408,8 @@ function Page.draw(ctx, x, y, w)
             local k = sc.keys[i]
             local mod = abs(k.value - (k.default or 0)) > 1e-6
             -- expression keys: listed when asked for, or when they carry a sculpt value
-            local ok = (s.show_locked or not k.mixed or mod or k.value > 0)
+            -- keys a key group holds are listed under it
+            local ok = not k.in_group and (s.show_locked or not k.mixed or mod or k.value > 0)
                 and (not hide_np or k.in_preset or mod)
                 and (filter == "" or k.name:lower():find(filter, 1, true)
                     or (k.label and k.label:lower():find(filter, 1, true)))

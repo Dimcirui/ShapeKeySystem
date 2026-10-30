@@ -34,7 +34,10 @@ end
 -- value is the rest position the expression writer remaps the expression weight onto
 -- (API.drive, S.mix: final = s + (1 - s) * e).
 -- K.by_name: name -> key;  K.targets: per part { id, mesh, addr, items = {{key, idx}}, last, stable, dirty }
-local K = { keys = {}, by_name = {}, targets = {}, undo = {}, redo = {}, last_push = nil, last_frame = -100 }
+-- K.groups: key groups of the loaded preset (see "key groups" below); K.member: key name ->
+-- { group, option } for every key a group holds
+local K = { keys = {}, by_name = {}, targets = {}, undo = {}, redo = {}, last_push = nil, last_frame = -100,
+            groups = {}, member = {} }
 S.frame = 0          -- set by the caller every tick (drag detection)
 local DRAG_GAP = 5   -- changes of one key at most this many frames apart are one drag
 S.K = K
@@ -67,12 +70,14 @@ function S.rebuild(parts, owned, presets_of)
     local old = K.by_name
     local keys, by_name, targets = {}, {}, {}
     local seen_part = {}
+    local group_source
     local lo, hi = S.RANGE[1], S.RANGE[2]
     for _, part in ipairs(parts) do
         if not seen_part[part.id] then
             seen_part[part.id] = true
             local own = owned[part.mesh] or {}
             local active, mod, fill = presets_of(part.id)
+            group_source = group_source or active
             local items = {}
             local item_of = {}
             for i, cn in ipairs(part.names) do
@@ -173,6 +178,9 @@ function S.rebuild(parts, owned, presets_of)
         return a.name < b.name
     end)
     K.keys, K.by_name, K.targets = keys, by_name, targets
+    -- the binding's preset brings its key groups until they are edited or another preset is loaded
+    if not K.groups_touched then K.groups = U.copy(group_source and group_source.key_groups or {}) end
+    S.apply_groups()
     return keys
 end
 
@@ -183,6 +191,236 @@ function S.clear_targets()
     K.targets = {}
 end
 
+-- ---------------------------------------------------------------- key groups
+-- A key group switches between up to MAX_OPTIONS sets of keys, like an integer parameter: value n
+-- gives the keys of option n their fixed values, every other key of the group (all of them at 0)
+-- goes back to the mod default. Options of one group may share a key with different values (one
+-- key, several steps); a key belongs to one group only, so groups never fight each other or the
+-- key list. Groups belong to the loaded sculpt preset
+-- (key_groups) and are applied onto the key values; per-part values do not apply to their keys.
+-- K.groups = { { name, value = 0..#options, options = { { name, values = { key = value } } } } }
+S.MAX_OPTIONS = 8
+local GROUPS = {}   -- snapshot field (a table key: never a key name)
+
+-- K.member from K.groups. Keys saved as "#XXXXXXXX" (name unknown then) take their name once known.
+local function index_groups()
+    local label_of
+    K.member = {}
+    for _, g in ipairs(K.groups) do
+        for i, o in ipairs(g.options) do
+            local renamed = {}
+            for n in pairs(o.values) do
+                if not K.by_name[n] and n:sub(1, 1) == "#" then
+                    if not label_of then
+                        label_of = {}
+                        for _, k in ipairs(K.keys) do label_of[NameHash.label(NameHash.hash(k.name))] = k.name end
+                    end
+                    local real = label_of[n]
+                    if real and o.values[real] == nil then renamed[n] = real end
+                end
+            end
+            for n, real in pairs(renamed) do o.values[real], o.values[n] = o.values[n], nil end
+            for n in pairs(o.values) do
+                local m = K.member[n]
+                if not m or m.group ~= g then m = { group = g, options = {} }; K.member[n] = m end
+                m.options[i] = true
+            end
+        end
+    end
+end
+
+-- writes the groups onto the key values; a key only changes (and counts as edited) when its value does
+function S.apply_groups()
+    index_groups()
+    local lo, hi = S.RANGE[1], S.RANGE[2]
+    local changed = false
+    for n, m in pairs(K.member) do
+        local k = K.by_name[n]
+        if k then
+            local on = m.options[m.group.value]
+            local v = on and U.clamp(tonumber(m.group.options[m.group.value].values[n]) or 0, lo, hi) or k.default
+            if abs(v - k.value) > 1e-9 or next(k.overrides) ~= nil then
+                k.value, k.overrides, k.touched, changed = v, {}, true, true
+            end
+        end
+    end
+    if changed then S.mark_dirty() end
+end
+
+function S.group_of(name)
+    local m = K.member[name]
+    if m then return m.group end
+end
+
+local function find_group(ref)
+    if math.type(ref) == "integer" then return K.groups[ref], ref end
+    for i, g in ipairs(K.groups) do if g.name == ref then return g, i end end
+end
+
+local function group_edit(tag)
+    S.push_undo(tag)
+    K.groups_touched = true
+end
+
+local function bad_group(ref) return false, "E_NOT_FOUND", "unknown key group: " .. tostring(ref) end
+
+function S.group_new(name)
+    if find_group(name) then return false, "E_EXISTS", "key group exists: " .. name end
+    group_edit(nil)
+    K.groups[#K.groups + 1] = { name = name, value = 0, options = {} }
+    return true
+end
+
+function S.group_rename(ref, name)
+    local g = find_group(ref)
+    if not g then return bad_group(ref) end
+    local other = find_group(name)
+    if other and other ~= g then return false, "E_EXISTS", "key group exists: " .. name end
+    group_edit(nil)
+    g.name = name
+    return true
+end
+
+-- its keys stay at their current values and return to the key list
+function S.group_delete(ref)
+    local g, gi = find_group(ref)
+    if not g then return bad_group(ref) end
+    group_edit(nil)
+    table.remove(K.groups, gi)
+    index_groups()
+    S.mark_dirty()
+    return true
+end
+
+-- value: 0 (every key of the group at its default) .. #options. The switch other code turns
+-- (conditions, drivers) goes through here too.
+function S.group_set(ref, value)
+    local g = find_group(ref)
+    if not g then return bad_group(ref) end
+    if math.type(value) ~= "integer" or value < 0 or value > #g.options then
+        return false, "E_BAD_ARGS", string.format("value must be an integer 0..%d", #g.options)
+    end
+    if g.value == value then return true end
+    group_edit("group:" .. g.name)
+    g.value = value
+    S.apply_groups()
+    return true
+end
+
+function S.option_add(ref, name)
+    local g = find_group(ref)
+    if not g then return bad_group(ref) end
+    if #g.options >= S.MAX_OPTIONS then return false, "E_LIMIT", string.format("at most %d options", S.MAX_OPTIONS) end
+    group_edit(nil)
+    g.options[#g.options + 1] = { name = name, values = {} }
+    return true, #g.options
+end
+
+local function find_option(ref, i)
+    local g = find_group(ref)
+    if not g then return nil, bad_group(ref) end
+    if math.type(i) ~= "integer" or not g.options[i] then
+        return nil, false, "E_NOT_FOUND", "unknown option " .. tostring(i) .. " of " .. g.name
+    end
+    return g, g.options[i]
+end
+
+function S.option_rename(ref, i, name)
+    local g, o, code, msg = find_option(ref, i)
+    if not g then return o, code, msg end
+    group_edit(nil)
+    o.name = name
+    return true
+end
+
+-- its keys return to the key list; the options after it move down by one
+function S.option_delete(ref, i)
+    local g, o, code, msg = find_option(ref, i)
+    if not g then return o, code, msg end
+    group_edit(nil)
+    table.remove(g.options, i)
+    if g.value == i then g.value = 0 elseif g.value > i then g.value = g.value - 1 end
+    S.apply_groups()
+    return true
+end
+
+-- names: keys to put into option i with their fixed value (values[name], else the key's current
+-- value when it differs from the default, else 1). A key another group holds is refused:
+-- returns false, "E_CONFLICT", name, group name.
+function S.option_assign(ref, i, names, values)
+    local g, o, code, msg = find_option(ref, i)
+    if not g then return o, code, msg end
+    for _, n in ipairs(names) do
+        if not K.by_name[n] then return false, "E_NOT_FOUND", "unknown sculpt key: " .. tostring(n) end
+        local m = K.member[n]
+        if m and m.group ~= g then return false, "E_CONFLICT", n, m.group.name end
+    end
+    group_edit(nil)
+    local lo, hi = S.RANGE[1], S.RANGE[2]
+    for _, n in ipairs(names) do
+        local k = K.by_name[n]
+        local v = values and tonumber(values[n])
+        if not v then v = abs(k.value - k.default) > 1e-6 and k.value or 1.0 end
+        o.values[n] = U.clamp(v, lo, hi) + 0.0
+    end
+    S.apply_groups()
+    return true
+end
+
+-- the keys leave option i of group ref (ref nil: every option of their group). A key that leaves
+-- its group keeps its current value and returns to the key list.
+function S.unassign(names, ref, i)
+    local g, o, code, msg
+    if ref ~= nil then
+        g, o, code, msg = find_option(ref, i)
+        if not g then return o, code, msg end
+    end
+    for _, n in ipairs(names) do
+        if not K.member[n] or (o and o.values[n] == nil) then
+            return false, "E_NOT_FOUND", "key is not in that key group: " .. tostring(n)
+        end
+    end
+    group_edit(nil)
+    for _, n in ipairs(names) do
+        if o then o.values[n] = nil
+        else for _, opt in ipairs(K.member[n].group.options) do opt.values[n] = nil end end
+    end
+    S.apply_groups()
+    return true
+end
+
+-- the fixed value a key has in option i of group ref
+function S.option_set_value(ref, i, name, value)
+    local g, o, code, msg = find_option(ref, i)
+    if not g then return o, code, msg end
+    if o.values[name] == nil then return false, "E_NOT_FOUND", "key is not in that option: " .. tostring(name) end
+    group_edit("gv:" .. g.name .. ":" .. i .. ":" .. name)
+    o.values[name] = U.clamp(value, S.RANGE[1], S.RANGE[2]) + 0.0
+    S.apply_groups()
+    return true
+end
+
+-- what a preset file stores (nil without groups)
+function S.export_groups()
+    if #K.groups == 0 then return nil end
+    return U.copy(K.groups)
+end
+
+local function groups_sig(groups)
+    local out = {}
+    for _, g in ipairs(groups) do
+        out[#out + 1] = g.name .. "=" .. g.value
+        for _, o in ipairs(g.options) do
+            local names = {}
+            for n in pairs(o.values) do names[#names + 1] = n end
+            table.sort(names)
+            out[#out + 1] = ">" .. o.name
+            for _, n in ipairs(names) do out[#out + 1] = string.format("%s:%.4f", n, o.values[n]) end
+        end
+    end
+    return table.concat(out, "\n")
+end
+
 -- ---------------------------------------------------------------- values
 local function snapshot()
     local s = {}
@@ -191,6 +429,7 @@ local function snapshot()
         for p, v in pairs(k.overrides) do o[p] = v end
         s[k.name] = { value = k.value, overrides = o, touched = k.touched }
     end
+    s[GROUPS] = { groups = U.copy(K.groups), touched = K.groups_touched }
     return s
 end
 
@@ -203,6 +442,8 @@ local function restore(s)
             for p, v in pairs(e.overrides) do k.overrides[p] = v end
         end
     end
+    local g = s[GROUPS]
+    if g then K.groups, K.groups_touched = U.copy(g.groups), g.touched; index_groups() end
     S.mark_dirty()
 end
 
@@ -274,6 +515,7 @@ end
 function S.check_editable(name)
     local k = K.by_name[name]
     if not k then return "E_NOT_FOUND", "unknown sculpt key: " .. tostring(name) end
+    if K.member[name] then return "E_IN_GROUP", "key is held by a key group: " .. tostring(name) end
     return nil
 end
 
@@ -305,6 +547,7 @@ end
 function S.set_override(name, part, value)
     local k = K.by_name[name]
     if not k then return false, "E_NOT_FOUND", "unknown sculpt key: " .. tostring(name) end
+    if K.member[name] then return false, "E_IN_GROUP", "key is held by a key group: " .. tostring(name) end
     local found = false
     for _, p in ipairs(k.parts) do if p == part then found = true end end
     if not found then return false, "E_NOT_FOUND", tostring(name) .. " is not on part " .. tostring(part) end
@@ -331,21 +574,25 @@ function S.clear_all()
     for _, k in ipairs(K.keys) do
         if k.value ~= 0 or next(k.overrides) ~= nil then changed = true end
     end
+    for _, g in ipairs(K.groups) do if g.value ~= 0 then changed = true end end
     if not changed then return false end
     S.push_undo(nil)
+    for _, g in ipairs(K.groups) do if g.value ~= 0 then g.value, K.groups_touched = 0, true end end
     for _, k in ipairs(K.keys) do k.value, k.overrides, k.touched = 0.0, {}, true end
     S.mark_dirty()
     return true
 end
 
--- every key back to the mod default (one undo step); false when nothing differed
+-- every key back to the mod default and every key group off (one undo step); false when nothing differed
 function S.reset_all()
     local changed = false
     for _, k in ipairs(K.keys) do
         if abs(k.value - k.default) > 1e-9 or next(k.overrides) ~= nil or next(k.preset_overrides) ~= nil then changed = true end
     end
+    for _, g in ipairs(K.groups) do if g.value ~= 0 then changed = true end end
     if not changed then return false end
     S.push_undo(nil)
+    for _, g in ipairs(K.groups) do if g.value ~= 0 then g.value, K.groups_touched = 0, true end end
     for _, k in ipairs(K.keys) do
         k.value, k.overrides, k.touched = k.default, {}, true
         for p, v in pairs(k.preset_overrides) do k.overrides[p] = v end
@@ -355,9 +602,11 @@ function S.reset_all()
 end
 
 -- load a sculpt preset (one undo step): its values for the keys it names, the mod default for
--- the rest (expression keys included: their value is the rest position under the expression)
+-- the rest (expression keys included: their value is the rest position under the expression),
+-- and its key groups in place of the current ones
 function S.apply_preset(preset)
     S.push_undo(nil)
+    K.groups, K.groups_touched = U.copy(preset.key_groups or {}), true
     local lo, hi = S.RANGE[1], S.RANGE[2]
     for _, k in ipairs(K.keys) do
         do
@@ -372,6 +621,7 @@ function S.apply_preset(preset)
             k.touched = true
         end
     end
+    S.apply_groups()
     S.mark_dirty()
 end
 
@@ -392,6 +642,11 @@ end
 
 -- unsaved = differs from the last save, or (never saved) from what the presets give
 function S.is_dirty()
+    if K.saved then
+        if groups_sig(K.groups) ~= groups_sig(K.saved[GROUPS].groups) then return true end
+    elseif K.groups_touched then
+        return true
+    end
     for _, k in ipairs(K.keys) do
         if K.saved then
             local s = K.saved[k.name]

@@ -122,6 +122,50 @@ function P.validate_binding(d)
     return true
 end
 
+-- key groups of a sculpt preset (Sculpt.lua "key groups"); empty tables come back from REFramework's
+-- json as null. Options of one group may share a key; a key belongs to one group only.
+P.MAX_KEY_OPTIONS = 8
+local function check_key_groups(groups)
+    if groups == nil then return true end
+    if type(groups) ~= "table" then return false, "key_groups must be a list" end
+    local names, owner = {}, {}
+    for gi, g in ipairs(groups) do
+        if type(g) ~= "table" or type(g.name) ~= "string" or g.name == "" then return false, "key_groups[" .. gi .. "] needs a name" end
+        if names[g.name] then return false, "key group named twice: " .. g.name end
+        names[g.name] = true
+        local options = g.options or {}
+        if type(options) ~= "table" or #options > P.MAX_KEY_OPTIONS then
+            return false, string.format("key group %s: options must be a list of at most %d", g.name, P.MAX_KEY_OPTIONS)
+        end
+        local v = math.tointeger(g.value or 0)
+        if not v or v < 0 or v > #options then return false, "key group " .. g.name .. ": value out of range" end
+        for oi, o in ipairs(options) do
+            if type(o) ~= "table" or type(o.name) ~= "string" then return false, "key group " .. g.name .. ": option " .. oi .. " needs a name" end
+            local ok, msg = check_values(o.values, "key group " .. g.name .. "." .. o.name); if not ok then return false, msg end
+            for key in pairs(o.values or {}) do
+                if owner[key] and owner[key] ~= g.name then return false, "key " .. tostring(key) .. " is in two key groups" end
+                owner[key] = g.name
+            end
+        end
+    end
+    return true
+end
+
+-- the groups as Sculpt keeps them: every list and value present, value an integer
+local function normal_key_groups(groups)
+    local out = {}
+    for _, g in ipairs(groups or {}) do
+        local options = {}
+        for i, o in ipairs(g.options or {}) do
+            local values = {}
+            for key, v in pairs(o.values or {}) do values[key] = v + 0.0 end
+            options[i] = { name = o.name, values = values }
+        end
+        out[#out + 1] = { name = g.name, value = math.tointeger(g.value or 0), options = options }
+    end
+    return out
+end
+
 function P.validate_sculpt(d)
     if type(d) ~= "table" then return false, "not an object" end
     if d.schema ~= nil and d.schema ~= P.SCULPT_SCHEMA then return false, "unsupported schema " .. tostring(d.schema) end
@@ -134,6 +178,7 @@ function P.validate_sculpt(d)
         end
     end
     if d.target ~= nil and type(d.target) ~= "table" then return false, "target must be an object" end
+    ok, msg = check_key_groups(d.key_groups); if not ok then return false, msg end
     return true
 end
 
@@ -297,6 +342,7 @@ function P.load_sculpt()
                     id = base, name = data.name or base, source = source, folder = f.folder, path = f.path,
                     target_part = target.part, channel_hash = target.channel_hash,
                     values = data.values or {}, overrides = data.overrides or {},
+                    key_groups = normal_key_groups(data.key_groups),
                 }
             end
         end
