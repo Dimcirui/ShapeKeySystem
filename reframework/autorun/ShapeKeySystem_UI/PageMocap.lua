@@ -117,8 +117,8 @@ local function face_card(ctx, x, y, w)
     ry = ry + 36
     ry = ry + scheme_box(ctx, m, sc, rx, ry, rw) + 12
 
-    D.text(L.f("%s · 淡入 %d%% · 当前部件能接住 %d / 52 个 ARKit 通道", L.tr(m.status),
-        math.floor(m.fade * 100 + 0.5), m.resolved), rx, ry, m.live and C.signal or C.muted, W.small(), rw)
+    D.text(L.f("%s · 淡入 %d%% · ARKit 通道 %d / 52 · 经游戏信号驱动 %d 个", L.tr(m.status),
+        math.floor(m.fade * 100 + 0.5), m.resolved, m.signals or 0), rx, ry, m.live and C.signal or C.muted, W.small(), rw)
     ry = ry + 28
 
     ry = ry + slider_row("mocap_gain", "整体强度", c.gain, 0, 3, { step = 0.01, fmt = "×%.2f" }, rx, ry, rw,

@@ -6,7 +6,8 @@
 -- values go in as External leases (owner "mocap"), so they override expression and sculpt for
 -- those keys and pass the same warm-up / cutscene / rebuild guards as every other write. While
 -- the stream fades in or out the lease value is mixed with the pure expression weight, so the
--- face hands back without a jump.
+-- face hands back without a jump. The same values also replace the game's facial signals on the
+-- primary rig (MocapSignals), which is how a profile without ARKit channels follows the phone.
 --
 -- Constraints:
 -- - The head turn is the only engine access here. It runs after UpdateMotion and only when the
@@ -20,6 +21,7 @@ local I18n  = require("ShapeKeySystem_Core.I18n")
 local Names = require("ShapeKeySystem_Core.Names")
 local Ext   = require("ShapeKeySystem_Core.External")
 local Derived = require("ShapeKeySystem_Core.MocapDerived")
+local Signals = require("ShapeKeySystem_Core.MocapSignals")
 
 local M = {}
 M.OWNER = "mocap"
@@ -85,7 +87,8 @@ local view = {
     -- pre = out before the gains: what the profile's ref nodes read (MocapDerived)
     names = ARKIT, raw = {}, out = {}, pre = {}, head_raw = { 0, 0, 0 },
     head_out = { pitch = 0, yaw = 0, roll = 0 },
-    live = false, age = nil, rx_hz = 0, fade = 0, held = 0, derived = 0, resolved = 0,
+    -- signals = game facial signals the profile reads that mocap writes (MocapSignals)
+    live = false, age = nil, rx_hz = 0, fade = 0, held = 0, derived = 0, resolved = 0, signals = 0,
     status = "未开启", head_status = "-", read_ms = 0,
     test = { on = false, pitch = 0, yaw = 0, roll = 0 },
     schemes = M.SCHEMES,
@@ -245,7 +248,8 @@ local function compute(dt)
 end
 
 -- expression slot per ARKit channel (false = not an expression channel), recounted when the
--- profile or the scan changes; view.resolved = channels that reach a mesh key.
+-- profile or the scan changes; view.resolved = channels that reach a mesh key, view.signals =
+-- mapped game signals the profile reads.
 local function slots_for(ctx)
     local key = tostring(ctx.prog) .. ":" .. tostring(ctx.gen)
     if st.slots_for ~= key then
@@ -257,6 +261,7 @@ local function slots_for(ctx)
             if ctx.reaches(ARKIT[i], s) then n = n + 1 end
         end
         view.resolved = n
+        view.signals = Signals.count(ctx.prog)
     end
     return st.slots
 end
@@ -323,6 +328,18 @@ function M.tick(dt, ctx)
     view.held = held + view.derived + xn
     st.holding = true
     return true
+end
+
+-- Primary rig, right after Expression.read: the mocap values replace the game's facial signals
+-- and eye angles (MocapSignals), so a profile without ARKit channels follows the phone too.
+function M.drive_signals(rig, P, fy, fp)
+    if view.fade > 0 then
+        Signals.apply(rig, P, view.out, view.fade, fy, fp)
+        st.signals_on = true
+    elseif st.signals_on then
+        Signals.release(rig, P)
+        st.signals_on = false
+    end
 end
 
 -- ---------------------------------------------------------------- calibration / commands

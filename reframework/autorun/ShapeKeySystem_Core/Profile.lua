@@ -38,6 +38,9 @@ P.adapter = {}   -- set by SKS.init
 P.registry = {}   -- id -> { id, name, source, path, data }
 P.list = {}       -- sorted list of registry entries (for the UI)
 
+-- P key a signal the game lacks is read from (0 unless face mocap writes it)
+function P.no_signal_key(name) return "nosig." .. name end
+
 -- data: a dictionary table (tests); default builtin/<adapter id>/signals.json, empty without an id
 function P.load_signals(data)
     local id = P.adapter.id
@@ -168,9 +171,12 @@ local function compile_node(node, env, depth)
         if not sig then error("unknown signal: " .. tostring(node.s)) end
         if sig.guessed then env.guessed = true end
         local proc = Pr.SIGNALS[sig.name] ~= nil
+        env.sig_names[sig.name] = true
         if sig.no_signal then
             env.no_signal = not proc
-            fn = function() return 0 end
+            -- nothing in the game writes this key; face mocap does (MocapSignals)
+            local p = P.no_signal_key(sig.name)
+            fn = function(ctx) return ctx.P[p] or 0 end
             text = L.f(proc and "%s（自动表情）" or "%s（本游戏没有这个信号）", sig.name)
         else
             local p, a, b = sig.key, sig.a, sig.b
@@ -288,13 +294,13 @@ end
 --   prog.channels[slot] = { slot, name, group, gaze_set, extension, note, has_signal, guessed,
 --                           no_signal, source_text, fn, node, params (own raw keys), deps (ref slots), is_eye }
 --   prog.order = slot evaluation order (refs first), prog.params = sorted raw key list,
---   prog.has_eye, prog.n, prog.slot_of, prog.names
+--   prog.has_eye, prog.n, prog.slot_of, prog.names, prog.sig_names (signal names read -> true)
 function P.compile(resolved, edits)
     edits = edits or {}
     local prog = { id = resolved.id, name = resolved.name, source = resolved.source,
                    extends = resolved.extends, aliases = resolved.aliases,
                    channels = {}, order = {}, params = {}, has_eye = false,
-                   n = 0, slot_of = {}, names = {} }
+                   n = 0, slot_of = {}, names = {}, sig_names = {} }
     for i, ch in ipairs(resolved.channels) do
         prog.n = i; prog.slot_of[ch.name] = i; prog.names[i] = ch.name
     end
@@ -308,6 +314,7 @@ function P.compile(resolved, edits)
                     source_text = "—", fn = nil, node = node, edited = edits[entry.name] ~= nil }
         if has_node(node) then
             local env = { signals = P.signals, slot_of = prog.slot_of, params = {}, deps = {},
+                          sig_names = prog.sig_names,
                           guessed = false, eye = false, no_signal = false }
             local ok, fn, text = pcall(compile_node, node, env, 0)
             if not ok then

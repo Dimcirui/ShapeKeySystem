@@ -50,7 +50,7 @@
   "%s · %d 项": "%s · %d keys",
   "%s · %s · %s · 已统计 %d 帧": "%s · %s · %s · %d frames counted",
   "%s · 内置": "%s · built-in",
-  "%s · 淡入 %d%% · 当前部件能接住 %d / 52 个 ARKit 通道": "%s · fade %d%% · current parts take %d / 52 ARKit channels",
+  "%s · 淡入 %d%% · ARKit 通道 %d / 52 · 经游戏信号驱动 %d 个": "%s · fade %d%% · ARKit channels %d / 52 · %d driven through game signals",
   "%s · 游戏内接收，UDP %d%s": "%s · in-game receiver, UDP %d%s",
   "%s · 用户": "%s · user",
   "%s · 读取 %.2f 毫秒/帧": "%s · read %.2f ms/frame",
