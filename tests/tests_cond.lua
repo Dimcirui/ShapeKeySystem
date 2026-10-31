@@ -144,7 +144,8 @@ local Panel = require("ShapeKeySystem_UI.Panel")
 local function frame() CB.tick(); CB.frame(); DRAWS, DRAWN_IMAGES, CMDS = {}, {}, {}; CB.d2d_draw() end
 local function find(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then return d end end end
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
-Panel.ui.page = "cond"; frame(); frame()
+Panel.ui.page = "cond"; Panel.ui.page_state.cond = Panel.ui.page_state.cond or {}
+Panel.ui.page_state.cond.tab = "states"; frame(); frame()
 check(find("页面出错") == nil and find("靠上的状态优先生效，同一个状态的规则满足一种即生效") ~= nil, "条件规则 page draws")
 check(find("＋ 添加条件") == nil and find("（回差 5）") ~= nil and find(" 或 ") ~= nil,
     "states start collapsed and show their conditions on the header line")
@@ -168,6 +169,13 @@ check(st1 ~= nil, "state 1 header drawn")
 if st1 then MOUSE.x, MOUSE.y = st1.x - 8, st1.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end
 check(Panel.ui.page_state.cond.closed[1] == true, "15: a state collapses")
 Panel.ui.page_state.cond.closed = { true, true }; frame()
+-- tabs 条件状态 | 形态键配置组合; the live conditions are on both
+check(Panel.ui.page_state.cond.tab == "states" and find("实时条件") ~= nil and find("新建组合") == nil,
+    "条件状态 tab: states and live conditions, no combinations")
+local clips_tab = exact("形态键配置组合")
+if clips_tab then click(clips_tab) end
+check(Panel.ui.page_state.cond.tab == "clips" and find("实时条件") ~= nil and find("靠上的状态优先生效") == nil,
+    "形态键配置组合 tab: combinations and live conditions, no states")
 -- 9: 页面内新建组合，选字 Enter 不提交；明确点击确定才创建。
 local nb = find("新建组合")
 check(nb ~= nil, "new combination button drawn")

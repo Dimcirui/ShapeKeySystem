@@ -95,7 +95,10 @@ sculpt_names()
 SKS.call("set_setting", { key = "advanced", value = true })
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 for _, page in ipairs({ "basic", "sculpt", "expr", "cond", "debug" }) do
-    Panel.ui.page = page; frame(); frame()
+    -- "expr": the 映射配置 tab of the 表情 page
+    Panel.ui.page = page == "expr" and "basic" or page
+    if page == "basic" or page == "expr" then Panel.ui.page_state.basic = { tab = page == "expr" and "mapping" or nil } end
+    frame(); frame()
     check(not find("页面出错"), "page draws: " .. page)
     if page == "basic" or page == "expr" then
         check(st.expression.no_signals == true and find("本游戏目前暂不支持表情"), "no raw channels: " .. page .. " says expressions are unsupported")

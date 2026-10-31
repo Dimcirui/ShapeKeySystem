@@ -132,6 +132,24 @@ function W.button(label, x, y, w, h, opt)
     return clicked, w
 end
 
+-- tab row: tabs = { { key, label }, ... }, the shown key kept in state.tab. A key no longer in
+-- the list (an advanced tab after 进阶 is turned off) falls back to the first tab; a single tab
+-- draws no row. Returns the shown key and the height used.
+function W.tabs(state, x, y, w, tabs)
+    local cur = tabs[1] and tabs[1][1]
+    for _, t in ipairs(tabs) do if t[1] == state.tab then cur = t[1] end end
+    state.tab = cur
+    if #tabs < 2 then return cur, 0 end
+    local bx, by = x, y
+    for _, t in ipairs(tabs) do
+        local bw = D.measure(body(), t[2]) + 22
+        if bx > x and bx + bw > x + w then bx, by = x, by + 36 end
+        if W.button(t[2], bx, by, bw, 28, { kind = cur == t[1] and "primary" or nil }) then state.tab = t[1] end
+        bx = bx + bw + 8
+    end
+    return cur, by - y + 40
+end
+
 -- square button with a drawn ✕
 function W.close_button(x, y, s)
     local hover = I.hit(x, y, s, s) and not I.active

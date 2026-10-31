@@ -114,9 +114,9 @@ local function find(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 Panel.ui.page = "sculpt"; frame()
 check(find("由 TestMod 控制") ~= nil, "sculpt page marks the held key")
--- the settings cards push the external control card down: a tall window keeps it in view
+-- 调试 tab: a tall window keeps the external control card in view
 local win_h = Panel.ui.win.h
-Panel.ui.page = "debug"; Panel.ui.win.h = 1060; frame()
+Panel.ui.page = "debug"; Panel.ui.page_state.debug = { tab = "debug" }; Panel.ui.win.h = 1060; frame()
 local b = find("全部收回")
 check(b ~= nil and find("TestMod") ~= nil, "debug page lists external control")
 if b then MOUSE.x, MOUSE.y = b.x + 4, b.y + 6; MOUSE.down = true; frame(); MOUSE.down = false; frame() end

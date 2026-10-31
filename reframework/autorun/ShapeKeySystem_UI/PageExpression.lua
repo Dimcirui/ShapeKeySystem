@@ -1,4 +1,4 @@
--- 绘制表情详情与实时权重。
+-- 绘制表情页的「映射配置」标签：表情配置、各通道的映射与实时权重、视线设置。
 --
 -- 映射草稿归 `MappingEditor` 管理；两种后端共用页面，绘制只提交命令，不写引擎。
 
@@ -6,10 +6,8 @@ local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Eyes = require("ShapeKeySystem_UI.PageEyes")   -- gaze settings, drawn as a section here
-local Procedural = require("ShapeKeySystem_UI.PageProcedural")
 local Mapping = require("ShapeKeySystem_UI.MappingEditor")
 local I = require("ShapeKeySystem_UI.Input")
-local PlaybackPanel = require("ShapeKeySystem_UI.PlaybackPanel")
 local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
@@ -69,7 +67,7 @@ local function top_bars(ctx, x, y, w)
                     s.pick_profile, s.mapping_draft, s.name_form, s.confirm_restore = nil, nil, nil, nil
                     s.filter, s.only_active, s.collapsed, s.collapsed_initialized = "", false, {}, false
                     call("preview_profile", {})
-                    W.reset_scroll("page:expr")
+                    W.reset_scroll(ctx.scroll_id)
                 end
             end })
         end
@@ -274,17 +272,7 @@ function Page.draw(ctx, x, y, w)
     if clicked then s.gaze_open = not gopen end
     cy = cy + hh + 6
     if gopen then cy = cy + Eyes.draw(ctx, x, cy, w) end
-    cy = cy + 10
-    local popen = s.procedural_open == true
-    local pclicked, ph = W.header("自动表情", x, cy, w, popen, (st.procedural and st.procedural.enabled) and "已开启" or "已关闭")
-    if pclicked then s.procedural_open = not popen end
-    cy = cy + ph + 6
-    if popen then cy = cy + Procedural.draw(ctx, x, cy, w) + 6 end
-    cy = cy + 10
-    cy = cy + PlaybackPanel.draw(ctx, x, cy, w)
     return cy - y
 end
-
-Page.want_signals = true
 
 return Page

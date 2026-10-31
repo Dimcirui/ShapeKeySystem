@@ -146,8 +146,8 @@ check(st.expression.profile.id == "shinano", "applied shinano by hand: still shi
 -- panel: choosing only pre-selects, 应用 switches
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 SKS.call("set_setting", { key = "advanced", value = true })
-Panel.ui.page = "expr"; frame()
-local Pg = Panel.ui.page_state.expr
+Panel.ui.page = "basic"; Panel.ui.page_state.basic.tab = "mapping"; frame()
+local Pg = Panel.ui.page_state.basic
 local list = st.presets.expression
 local other
 for i, p in ipairs(list) do if p.id ~= st.expression.profile.id then other = i end end
@@ -169,14 +169,14 @@ for _, k in ipairs(st.sculpt.keys) do if k.value ~= 0 then allzero = false end e
 check(okz and rz.done and allzero and WEIGHTS[si] == 0, "zero_sculpt_all -> every key 0")
 SKS.call("sculpt_undo"); ticks(1)
 check(math.abs(key(self_key).value - 0.4) < 1e-6, "undo after 归零 brings the values back")
--- gaze settings inside the expression page
+-- gaze settings on the 映射配置 tab
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
-Panel.ui.page = "expr"; Panel.ui.page_state.expr.gaze_open = true; Panel.ui.win.h = 1060
+Panel.ui.page = "basic"; Panel.ui.page_state.basic.tab = "mapping"; Panel.ui.page_state.basic.gaze_open = true; Panel.ui.win.h = 1060
 local col = {}
 for _, g in ipairs(st.expression.groups) do col[g.key] = true end
-Panel.ui.page_state.expr.collapsed = col
+Panel.ui.page_state.basic.collapsed = col
 frame(); frame()
 local function has(t) for _, dd in ipairs(DRAWS) do if dd.s:find(t, 1, true) then return true end end end
-check(has("视线设置") and has("满权重水平角") and not has("页面出错"), "表情详情 has the gaze settings section")
+check(has("视线设置") and has("满权重水平角") and not has("页面出错"), "映射配置 has the gaze settings section")
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 print("TOUCH FAILS:", tf)

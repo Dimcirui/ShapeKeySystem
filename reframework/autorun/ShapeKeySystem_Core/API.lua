@@ -474,7 +474,7 @@ local function build_expression_state()
     if C.preview_profile then build_preview_state() end
 end
 
--- read-only view of a profile that is not in effect (表情详情: choosing in the list shows it
+-- read-only view of a profile that is not in effect (表情 → 映射配置: choosing in the list shows it
 -- before 应用). Channels matched against the worn parts' mesh names like apply_profile does.
 function build_preview_state()
     local ex = state.expression
