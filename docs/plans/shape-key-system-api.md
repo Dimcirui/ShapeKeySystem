@@ -321,6 +321,7 @@ reframework/data/ShapeKeySystem/
   user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
             recordings/*.json                             （用户面部动画录制）
             mocap.json                                    （面捕设置，见「面捕」一节）
+            face_mirror.json                              （表情镜设置，见「表情镜」一节；只有荒野）
   mocap/    live.json                                     （没有 ShapeKeySystem_Mocap.dll 时由桥接脚本写入的最新一帧；脚本在 builtin/mocap/）
 ```
 
@@ -760,6 +761,17 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 | `mocap_calibrate` | `{what}` | `face`：把手机当前各通道值记为放松时的基准（之后按 `(v − 基准) / (1 − 基准)` 换算）；`head`：把当前头部角度记为正前方；`clear`：清除面部基准 | `user/mocap.json` |
 
 `state.mocap`：`native = {available, running, error, sender, packets, rejected, port, ips}`（游戏内接收的状态）、`schemes`（`{id, name, bridge, head}` 列表；`head = false` 表示该方案没有头部数据）、`names`（52 个 ARKit 名）、`raw` / `out`（手机原始值 / 换算后的值，按 `names` 顺序）、`head_raw`、`head_out = {pitch, yaw, roll}`、`live`、`age`（距上次新数据的秒数，没收到过为 nil）、`rx_hz`、`fade`、`held`、`resolved`（能落到当前部件网格键上的通道数）、`signals`（当前表情配置读到的、面捕会写入的游戏信号数）、`status`、`head_status`、`read_ms`、`test`、`cfg`（当前设置，只读）。
+
+## 表情镜
+
+只有荒野（适配器字段 `face_mirror`，`ShapeKeySystem_Games/Wilds/FaceMirror.lua`）。第二台相机把猎人的脸渲染进 `GUI/ui_texture/tex_render/rtt_facemirror_00.rtex`（随插件发布在 `natives/` 下），屏幕上由 SKS 自己的 GUI 里的一个贴图元素显示。界面在「面捕」页最下面。原理和踩过的坑见 `face-mirror.md`。
+
+| 命令 | 参数 | 作用 | 写入 |
+|---|---|---|---|
+| `face_mirror` | `{patch}` | 修改表情镜设置：`enabled`、`bind`（相机挂在哪块骨骼：`Head`、`Spine_2`、`COG`）、`size`（100–800）、`x`（−200–2120）、`y`（−200–1280；窗口中心在 1920×1080 画面中的位置，原点左上，Y 向下）、`fov`（5–60）、`ev`（−4–4，加在主相机曝光上，越小越亮）、`follow_meter`（true：固定曝光，取主相机测光值；false：镜子自己测光）、`clip_front`（0.05–1）、`clip_back`（0.05–2；对准点前后保留的范围，其余透明）、`rigs = {<骨骼> = {dist 0.2–2.5, aim = {x, y, z} −1–1, rot = {x, y, z} −180–180}}`（每块骨骼各存一份：相机到对准点的距离、对准点在骨骼坐标系里的位置、相机角度，按 Y、X、Z 的顺序转）。数值截到范围内；类型不对、未知骨骼、`aim` / `rot` 里不是 x/y/z 的键返回 `E_BAD_ARGS`，什么都不改 | `user/face_mirror.json`（约 0.5 秒后写） |
+| `face_mirror_reset` | `{what}` | `aim`：下一帧把当前骨骼的对准点移到脸前（需要当前姿势，只在显示时生效）；`rig`：当前骨骼的距离、对准点、角度恢复默认；`all`：除 `enabled` 外全部恢复默认 | `user/face_mirror.json` |
+
+`state.face_mirror`（只有带 `face_mirror` 的游戏才有）：`available`、`binds`（`{id, name}` 列表）、`status`（显示在开关旁边）、`cfg`（当前设置，只读）。
 
 ## 驱动
 

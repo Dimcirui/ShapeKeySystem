@@ -33,6 +33,8 @@ class PackageTest(unittest.TestCase):
         self.put("reframework/data/ShapeKeySystem/builtin/arkit.json", b"{}")
         self.put("reframework/data/ShapeKeySystem/faces/default.json", b"{}")
         self.put("reframework/images/ShapeKeySystem/faces/a.png", b"png")
+        self.put("natives/STM/GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6", b"RTEX")
+        self.put("natives/STM/other_mod.tex", b"not ours")
         for player in ("settings.json", "user/presets/p.json", "mods/m.json", "trail.log"):
             self.put("reframework/data/ShapeKeySystem/" + player, b"player data")
         self.put("reframework/autorun/other_mod.lua", b"-- not ours")
@@ -75,6 +77,7 @@ class PackageTest(unittest.TestCase):
                 "ShapeKeySystem/reframework/data/ShapeKeySystem/builtin/arkit.json",
                 "ShapeKeySystem/reframework/data/ShapeKeySystem/faces/default.json",
                 "ShapeKeySystem/reframework/images/ShapeKeySystem/faces/a.png",
+                "ShapeKeySystem/natives/STM/GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6",
                 "REF-IME/modinfo.ini",
                 "REF-IME/reframework/plugins/REF-IME.dll",
             })

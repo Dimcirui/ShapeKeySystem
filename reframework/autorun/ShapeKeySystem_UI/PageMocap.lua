@@ -217,6 +217,79 @@ local function channels(ctx, x, y, w)
     return cy - y
 end
 
+-- face mirror (state.face_mirror, only on games whose adapter has one): a second camera on the
+-- player's face, shown in a window on screen
+local function mirror_patch(call, p) call("face_mirror", { patch = p }) end
+
+-- label | three sliders for x / y / z of one table in the current joint's rig
+local function xyz_row(call, id, label, bind, key, value, lo, hi, opt, rx, ry, rw)
+    D.text_mid(label, rx, ry, 28, C.text, W.small(), LW - 8)
+    local sx = rx + LW
+    local sw = (min(rw, LW + 480) - LW - 16) / 3
+    for k, ax in ipairs({ "x", "y", "z" }) do
+        local o = { step = opt.step, fmt = ax:upper() .. " " .. opt.fmt, value_w = 64 }
+        local cs, sv = W.slider(id .. ax, sx + (k - 1) * (sw + 8), ry, sw, 28, value[ax], lo, hi, o)
+        if cs then mirror_patch(call, { rigs = { [bind] = { [key] = { [ax] = sv } } } }) end
+    end
+    return 32
+end
+
+local function mirror_card(ctx, x, y, w)
+    local fm, call = ctx.st.face_mirror, ctx.call
+    local c = fm.cfg
+    local rig = c.rigs[c.bind]
+    local h = 10 + 32 + 36 + 36 + 10 * 32 + 36 + 36 + 4
+    W.panel_box(x, y, w, h, true)
+    local rx, rw = x + 12, w - 24
+    local ry = y + 10
+    W.h2("表情镜", rx, ry); ry = ry + 32
+
+    local ch, v = W.toggle("启用", rx, ry, c.enabled)
+    if ch then mirror_patch(call, { enabled = v }) end
+    D.text_mid(fm.status or "-", rx + 120, ry, 28, C.muted, W.small(), rw - 120)
+    ry = ry + 36
+
+    D.text_mid("挂在骨骼", rx, ry, 28, C.text, W.small(), LW - 8)
+    local labels, cur = {}, 1
+    for i, b in ipairs(fm.binds) do
+        labels[i] = b.name
+        if b.id == c.bind then cur = i end
+    end
+    local cs, si = W.select("mirror_bind", rx + LW, ry, min(240, rw - LW), 28, labels, cur)
+    if cs and fm.binds[si] then mirror_patch(call, { bind = fm.binds[si].id }) end
+    ry = ry + 36
+
+    local function row(id, label, value, lo, hi, opt, key)
+        ry = ry + slider_row(id, label, value, lo, hi, opt, rx, ry, rw, function(nv) mirror_patch(call, { [key] = nv }) end)
+    end
+    row("mirror_size", "窗口大小", c.size, 100, 800, { step = 1, fmt = "%.0f" }, "size")
+    row("mirror_x", "窗口位置 X", c.x, -200, 2120, { step = 1, fmt = "%.0f" }, "x")
+    row("mirror_y", "窗口位置 Y", c.y, -200, 1280, { step = 1, fmt = "%.0f" }, "y")
+    ry = ry + slider_row("mirror_dist", "镜头距离", rig.dist, 0.2, 2.5, { step = 0.01, fmt = "%.2f m" }, rx, ry, rw,
+        function(nv) mirror_patch(call, { rigs = { [c.bind] = { dist = nv } } }) end)
+    row("mirror_fov", "视野", c.fov, 5, 60, { step = 0.5, fmt = "%.1f°" }, "fov")
+    ry = ry + xyz_row(call, "mirror_aim_", "对准点", c.bind, "aim", rig.aim, -1, 1, { step = 0.005, fmt = "%.3f" }, rx, ry, rw)
+    ry = ry + xyz_row(call, "mirror_rot_", "镜头角度", c.bind, "rot", rig.rot, -180, 180, { step = 1, fmt = "%.0f°" }, rx, ry, rw)
+    row("mirror_ev", "曝光补偿（越小越亮）", c.ev, -4, 4, { step = 0.05, fmt = "%.2f EV" }, "ev")
+    row("mirror_clip_front", "保留范围·前", c.clip_front, 0.05, 1, { step = 0.01, fmt = "%.2f m" }, "clip_front")
+    row("mirror_clip_back", "保留范围·后", c.clip_back, 0.05, 2, { step = 0.01, fmt = "%.2f m" }, "clip_back")
+
+    ch, v = W.toggle("曝光跟随主画面测光", rx, ry, c.follow_meter)
+    if ch then mirror_patch(call, { follow_meter = v }) end
+    ry = ry + 36
+
+    local bx = rx
+    local clicked, bw = W.button("对准脸部", bx, ry, nil, 28, { disabled = not c.enabled })
+    if clicked then call("face_mirror_reset", { what = "aim" }) end
+    bx = bx + bw + 8
+    clicked, bw = W.button("恢复此骨骼的默认镜头", bx, ry, nil, 28)
+    if clicked then call("face_mirror_reset", { what = "rig" }) end
+    bx = bx + bw + 8
+    clicked = W.button("全部恢复默认", bx, ry, nil, 28)
+    if clicked then call("face_mirror_reset", { what = "all" }) end
+    return h
+end
+
 function Page.draw(ctx, x, y, w)
     if not ctx.st.mocap then return 0 end
     local cy = y
@@ -228,6 +301,7 @@ function Page.draw(ctx, x, y, w)
     if clicked then ctx.state.channels_open = not open end
     cy = cy + hh + 6
     if open then cy = cy + channels(ctx, x, cy, w) + 12 end
+    if ctx.st.face_mirror then cy = cy + mirror_card(ctx, x, cy, w) + 12 end
     return cy - y
 end
 

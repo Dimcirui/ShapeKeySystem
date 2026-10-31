@@ -1,7 +1,7 @@
 ﻿<#
 按 Fluffy Mod Manager 的格式生成发布 zip：dist/ShapeKeySystem-<版本>.zip
 
-  ShapeKeySystem/   modinfo.ini、screenshot.jpg（有预览图时）、reframework/（文件清单见 sks-files.ps1）
+  ShapeKeySystem/   modinfo.ini、screenshot.jpg（有预览图时）、reframework/ 与 natives/（文件清单见 sks-files.ps1）
   REF-IME/          modinfo.ini（AddonFor=ShapeKeySystem）、reframework/plugins/REF-IME.dll
 
   package.ps1                                         从 REF-IME 最新 Release 下载并校验 SHA256
@@ -88,6 +88,11 @@ try {
         foreach ($k in $found.Keys) { $files[$k] = $found[$k].FullName }
     }
     if ($files.Count -eq 0) { throw "no SKS files found under $repo" }
+    $nativeFiles = @{}
+    foreach ($rel in $ownedNatives) {
+        $found = Get-Files (Split-Path -Parent $repo) $rel
+        foreach ($k in $found.Keys) { $nativeFiles[$k] = $found[$k].FullName }
+    }
 
     New-Item -ItemType Directory -Force $OutDir | Out-Null
     $out = Join-Path (Resolve-Path -LiteralPath $OutDir).Path "ShapeKeySystem-$version.zip"
@@ -118,6 +123,7 @@ try {
         if (-not $KeepComments -and $k -like "*.lua") { Add-Bytes $name (Remove-LuaComments $files[$k]) }
         else { Add-File $name $files[$k] }
     }
+    foreach ($k in ($nativeFiles.Keys | Sort-Object)) { Add-File ("ShapeKeySystem/" + ($k -replace '\\', '/')) $nativeFiles[$k] }
 
     $info = [ordered]@{
         name = "REF-IME"

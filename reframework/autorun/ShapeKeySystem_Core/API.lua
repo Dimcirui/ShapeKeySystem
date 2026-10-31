@@ -287,6 +287,7 @@ local function drop_rigs(reason, rescan_after)
     Cnd.reset()
     Scene.no_targets = {}
     Mocap.drop_refs()
+    if SKS.adapter and SKS.adapter.face_mirror then SKS.adapter.face_mirror.drop_refs() end
     FaceHold.release()
     C.driven_frame, C.held_frame = nil, nil
     Guard.release_refs()
@@ -1864,6 +1865,28 @@ function cmds.mocap_calibrate(a)
     return true
 end
 
+-- face mirror (adapter.face_mirror, MH Wilds only): settings patch; user/face_mirror.json is written
+-- shortly after
+function cmds.face_mirror(a)
+    local F = SKS.adapter.face_mirror
+    if not F then return false, "E_BAD_ARGS", "this game has no face mirror" end
+    local ok, err, msg = F.patch(a.patch)
+    if not ok then return ok, err, msg end
+    F.save_soon()
+    return true
+end
+
+-- what = "aim" (aim point to the face on the next frame) / "rig" (current joint's defaults) / "all"
+function cmds.face_mirror_reset(a)
+    local F = SKS.adapter.face_mirror
+    if not F then return false, "E_BAD_ARGS", "this game has no face mirror" end
+    if a.what == "aim" then F.request_aim(); return true end
+    local ok, err, msg = F.reset(a.what)
+    if not ok then return ok, err, msg end
+    F.save_soon()
+    return true
+end
+
 -- character to edit (Actors.lua): id from state.actors.list. Refused while sculpt, mapping or
 -- tuning edits are unsaved: they belong to the character being edited now.
 function cmds.select_actor(a)
@@ -2583,6 +2606,11 @@ function SKS.init(adapter)
     Labels.load()
     Mocap.load()
     Drivers.load()
+    if adapter.face_mirror then
+        state.face_mirror = adapter.face_mirror.view
+        adapter.face_mirror.attach({ stable = function() return C.last_gate == "stable" end,
+                                     root = adapter.primary_root, log = log })
+    end
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
     for _, s in ipairs(sig.list) do
@@ -2692,6 +2720,7 @@ function SKS.shutdown()
     if C.save_at then save_now() end
     Mocap.flush()
     Drivers.flush()
+    if SKS.adapter.face_mirror then SKS.adapter.face_mirror.shutdown() end
 end
 
 -- Optional pre-animation/render preparation uses the current scan only; it keeps no second

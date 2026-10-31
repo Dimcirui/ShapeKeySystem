@@ -240,6 +240,26 @@ local h_before = Panel.ui.win.h
 Panel.ui.win.h = 2000
 DRAWS, CMDS = {}, {}; CB.d2d_draw()
 check(drawn("各通道强度") and drawn("browDownLeft") and not drawn("页面出错"), "channel list drawn")
+-- the face mirror card sits below the fold: draw the page itself, tall enough to hold it
+do
+    local PageMocap = package.loaded["ShapeKeySystem_UI.PageMocap"]
+    DRAWS = {}
+    local ok, err = pcall(PageMocap.draw, { st = SKS.state, call = SKS.call, state = {} }, 0, 0, 900)
+    check(ok and drawn("表情镜") and drawn("挂在骨骼") and drawn("对准脸部"), "face mirror card drawn" .. (ok and "" or (" " .. tostring(err))))
+end
+-- face mirror settings: values are clamped, unknown joints refused, the current joint's rig reset
+do
+    local fm = SKS.state.face_mirror
+    check(SKS.call("face_mirror", { patch = { size = 5000, rigs = { COG = { dist = 1.2, aim = { y = 0.5 } } } } })
+        and fm.cfg.size == 800 and fm.cfg.rigs.COG.dist == 1.2 and fm.cfg.rigs.COG.aim.y == 0.5, "face mirror patch clamps and nests")
+    check(not SKS.call("face_mirror", { patch = { bind = "Hip" } }) and fm.cfg.bind == "Head", "face mirror refuses an unknown joint")
+    check(not SKS.call("face_mirror", { patch = { size = 300, rigs = { COG = { rot = { w = 1 } } } } }) and fm.cfg.size == 800,
+        "face mirror patch writes nothing when one value is bad")
+    SKS.call("face_mirror", { patch = { bind = "COG" } })
+    check(SKS.call("face_mirror_reset", { what = "rig" }) and fm.cfg.rigs.COG.dist == 0.6 and fm.cfg.rigs.COG.aim.y == 0.45,
+        "face mirror reset restores the current joint's camera")
+    check(SKS.call("face_mirror_reset", { what = "all" }) and fm.cfg.size == 260 and fm.cfg.bind == "Head", "face mirror reset all")
+end
 SNAP("面捕", function() DRAWS, CMDS = {}, {}; CB.d2d_draw() end)
 Panel.ui.page_state.mocap.channels_open = nil
 Panel.ui.win.h = h_before
