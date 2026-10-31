@@ -165,10 +165,10 @@ do
     reframework.get_branch = function() return "master" end
     reframework.get_commit_count = function() return 2131 end
     frame()
-    local old = find("REFramework 版本过旧") ~= nil and find("v1.5.9.1 +373") ~= nil
+    local old = find("REFramework 版本过旧") ~= nil
     reframework.get_commit_count = function() return 2272 end
     frame()
-    local new = find("REFramework 版本过旧") == nil
+    local new = find("REFramework 版本过旧") == nil and find("REFramework", true) == nil
     reframework.get_branch = function() return "dev" end
     reframework.get_commit_count = function() return 100 end
     frame()

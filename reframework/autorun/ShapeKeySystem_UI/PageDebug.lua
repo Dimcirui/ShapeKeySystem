@@ -367,24 +367,20 @@ local function rf(m)
     return nil
 end
 
--- returns the text shown and whether this build is the old one or older
-local function reframework_version()
-    local tag, past, count, date = rf("get_tag"), rf("get_commits_past_tag"), tonumber(rf("get_commit_count")), rf("get_build_date")
-    local text = tag and (past and string.format("%s +%s", tag, past) or tostring(tag)) or L.tr("未知")
-    if count then text = text .. string.format(" (%d%s)", count, date and (", " .. tostring(date)) or "") end
-    local old = count ~= nil and rf("get_branch") == "master" and count <= OLD_REFRAMEWORK_COMMITS
-    return text, old
+-- true when this build is the old Nexus one or older
+local function reframework_outdated()
+    local count = tonumber(rf("get_commit_count"))
+    return count ~= nil and rf("get_branch") == "master" and count <= OLD_REFRAMEWORK_COMMITS
 end
 
--- what SKS found around it: the game, REFramework, reframework-d2d, the mocap receiver; one line
--- each, the value dimmed when something is missing
+-- what SKS found around it: the game, reframework-d2d, the mocap receiver; one line each, the value
+-- dimmed when something is missing. REFramework itself only shows up when it is outdated.
 local function env_card(ctx, x, y, w)
     local st = ctx.st
     local nv = st.mocap and st.mocap.native
-    local rf_text, rf_old = reframework_version()
+    local rf_old = reframework_outdated()
     local rows = {
         { "游戏", st.runtime.game or L.tr("未知"), true },
-        { "REFramework", rf_text, true },
         { "reframework-d2d", D.has_d2d() and L.tr("已安装") or L.tr("未安装（用 ImGui 绘制）"), D.has_d2d() },
     }
     if nv then
