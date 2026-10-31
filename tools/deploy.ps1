@@ -6,8 +6,9 @@ Sync ShapeKeySystem between this repo and the game's reframework folder.
   deploy.ps1 -Pull      game -> repo (take edits that were made in the game folder)
   deploy.ps1 -Force     deploy even over newer game files
 
-Only SKS-owned paths are touched. Player data in data/ShapeKeySystem (settings.json, user/, mods/,
-trail.log, hash_probe.txt) is never read or written. Set SKS_GAME_REFRAMEWORK to use another install.
+Only SKS-owned paths are touched: reframework/ and the listed natives/ files beside it. Player data
+in data/ShapeKeySystem (settings.json, user/, mods/, trail.log, hash_probe.txt) is never read or
+written. Set SKS_GAME_REFRAMEWORK to use another install.
 #>
 param([switch]$Check, [switch]$Pull, [switch]$Force)
 $ErrorActionPreference = "Stop"
@@ -24,18 +25,23 @@ if (-not (Test-Path $game)) { throw "game reframework folder not found: $game" }
 $src = if ($Pull) { $game } else { $repo }
 $dst = if ($Pull) { $repo } else { $game }
 $copy = @(); $remove = @(); $newer = @()
-foreach ($rel in $owned) {
-    $a = Get-Files $src $rel
-    $b = Get-Files $dst $rel
-    foreach ($k in $a.Keys) {
-        $f = $a[$k]; $g = $b[$k]
-        if (-not $g) { $copy += $k; continue }
-        if ($f.Length -ne $g.Length -or (Get-FileHash $f.FullName).Hash -ne (Get-FileHash $g.FullName).Hash) {
-            $copy += $k
-            if ($g.LastWriteTime -gt $f.LastWriteTime) { $newer += $k }
+# natives\ 在 reframework\ 旁边（仓库根目录、游戏根目录）；其文件以 ..\ 开头，Join-Path 后落在根目录
+$sets = @(@{ src = $src; dst = $dst; rels = $owned; prefix = "" },
+          @{ src = (Split-Path -Parent $src); dst = (Split-Path -Parent $dst); rels = $ownedNatives; prefix = "..\" })
+foreach ($set in $sets) {
+    foreach ($rel in $set.rels) {
+        $a = Get-Files $set.src $rel
+        $b = Get-Files $set.dst $rel
+        foreach ($k in $a.Keys) {
+            $f = $a[$k]; $g = $b[$k]; $name = $set.prefix + $k
+            if (-not $g) { $copy += $name; continue }
+            if ($f.Length -ne $g.Length -or (Get-FileHash $f.FullName).Hash -ne (Get-FileHash $g.FullName).Hash) {
+                $copy += $name
+                if ($g.LastWriteTime -gt $f.LastWriteTime) { $newer += $name }
+            }
         }
+        foreach ($k in $b.Keys) { if (-not $a[$k]) { $remove += $set.prefix + $k } }
     }
-    foreach ($k in $b.Keys) { if (-not $a[$k]) { $remove += $k } }
 }
 if (-not $Pull) {
     foreach ($rel in $retired) {

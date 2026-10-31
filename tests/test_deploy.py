@@ -40,6 +40,10 @@ class RecordingDeploymentTest(unittest.TestCase):
                 put(target, "data/ShapeKeySystem/games/mhwilds/" + suffix, b"old shipped data")
             for relative, content in preserved.items():
                 put(target, relative, content)
+            # natives 在游戏根目录（reframework 的上一级）：只部署清单里的文件，其他 mod 的不动
+            rtex = "natives/STM/GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6"
+            put(source, rtex, b"RTEX")
+            put(root, "natives/STM/other_mod.tex", b"other mod")
             environment = dict(os.environ, SKS_GAME_REFRAMEWORK=str(target))
 
             def run(*arguments):
@@ -56,6 +60,8 @@ class RecordingDeploymentTest(unittest.TestCase):
                 self.assertFalse((target / "data/ShapeKeySystem/games/mhwilds" / suffix).exists())
             for relative, content in preserved.items():
                 self.assertEqual((target / relative).read_bytes(), content)
+            self.assertEqual((root / rtex).read_bytes(), b"RTEX")
+            self.assertEqual((root / "natives/STM/other_mod.tex").read_bytes(), b"other mod")
 
             # Pull 不把已退出发布的旧目录重新引入源码，也不删除游戏中的旧文件。
             for suffix in official:
