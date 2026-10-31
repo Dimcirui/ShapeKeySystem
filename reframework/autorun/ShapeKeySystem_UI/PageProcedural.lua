@@ -1,4 +1,4 @@
--- ShapeKeySystem panel, "自动表情" section of the expression details page: the procedural layer's
+-- ShapeKeySystem panel, "自动表情" tab of the 表情 page: the procedural layer's
 -- switch and merge mode, then blink, gaze micro-saccades and the idle mouth opening. Drawing only
 -- submits `set_procedural`.
 

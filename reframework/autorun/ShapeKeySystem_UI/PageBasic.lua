@@ -1,4 +1,6 @@
--- ShapeKeySystem panel, basic page "表情": face navigator and the overall expression / gaze strength.
+-- ShapeKeySystem panel, basic page "表情". Tab 总览: face navigator and the overall expression / gaze
+-- strength. With 进阶 on, the tabs 映射配置 (PageExpression), 自动表情 (PageProcedural) and
+-- 面部动画测试 (PlaybackPanel) follow; they share this page's ctx.state.
 -- The face image is for interactions only (2026-10-10): tap the forehead / a cheek / an eye to play
 -- that zone's reaction, drag the mouth to pull it, press and drag inside an eye to aim the gaze
 -- (backend Touch.lua / gaze_hold). The region whose strength is edited is picked with the pills on
@@ -11,6 +13,9 @@ local D = require("ShapeKeySystem_UI.Draw")
 local I = require("ShapeKeySystem_UI.Input")
 local W = require("ShapeKeySystem_UI.Widgets")
 local Faces = require("ShapeKeySystem_UI.Faces")
+local Expression = require("ShapeKeySystem_UI.PageExpression")
+local Procedural = require("ShapeKeySystem_UI.PageProcedural")
+local PlaybackPanel = require("ShapeKeySystem_UI.PlaybackPanel")
 local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
@@ -204,10 +209,10 @@ local function draw_controls(ctx, x, y, w)
         local tw = W.h2(r.name, x + 14, cy + 12)
         W.chip(L.f("实时 %.2f", live.region_activity[i] or 0), x + 26 + tw, cy + 11, C.signal)
         if st.runtime.advanced then
-            local label = L.f("在表情详情中查看 %d 个通道", #r.channel_slots)
+            local label = L.f("在映射配置中查看 %d 个通道", #r.channel_slots)
             local bw = D.measure(W.small(), label) + 22
             if W.button(label, x + w - bw - 12, cy + 8, bw, 24, { kind = "ghost", font = W.small() }) then
-                ctx.goto_page("expr")
+                ctx.state.tab = "mapping"
             end
         end
         local c2, v = big_slider(ctx, "rg_" .. key, "强度", x + 14, cy + 44, w - 28, r.gain, 0, 2)
@@ -263,7 +268,7 @@ local function draw_controls(ctx, x, y, w)
     return cy - y
 end
 
-function Page.draw(ctx, x, y, w)
+local function draw_overview(ctx, x, y, w)
     ctx.state.zone = ctx.state.zone or "mouth"
     -- the face art is decoration (the zone pills select regions too): left out without images (ImGui)
     if not D.images() then return draw_controls(ctx, x, y, w) end
@@ -278,6 +283,24 @@ function Page.draw(ctx, x, y, w)
     local h2 = draw_controls(ctx, x, y + h1 + 14, w)
     draw_face(ctx, x, y, min(w, 300))
     return h1 + 14 + h2
+end
+
+local OVERVIEW = { "overview", "总览" }
+
+function Page.draw(ctx, x, y, w)
+    local tabs = { OVERVIEW }
+    if ctx.st.runtime.advanced then
+        tabs[2], tabs[3] = { "mapping", "映射配置" }, { "procedural", "自动表情" }
+        if ctx.st.playback then tabs[4] = { "playback", "面部动画测试" } end
+    end
+    local tab, th = W.tabs(ctx.state, x, y, w, tabs)
+    -- live per-signal weights are computed only while a tab that shows them is open
+    Page.want_signals = tab ~= "overview"
+    local cy = y + th
+    if tab == "mapping" then return th + Expression.draw(ctx, x, cy, w) end
+    if tab == "procedural" then return th + Procedural.draw(ctx, x, cy, w) end
+    if tab == "playback" then return th + PlaybackPanel.draw(ctx, x, cy, w) end
+    return th + draw_overview(ctx, x, cy, w)
 end
 
 return Page

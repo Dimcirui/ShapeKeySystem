@@ -53,7 +53,7 @@ SKS.call("rescan"); ticks(5); frame(); frame()
 check(st.presets.binding.sculpt == "Other" and find("Other") and find("· 默认") ~= nil and exact("设为默认") == nil, "设为默认 binds it")
 -- expression page bind bar
 SKS.call("set_setting", { key = "advanced", value = true })
-Panel.ui.page = "expr"; frame()
+Panel.ui.page = "basic"; Panel.ui.page_state.basic = { tab = "mapping" }; frame()
 check(not find("页面出错"), "expression page draws")
 -- unsaved mapping edits are not thrown away by a binding that names another profile
 local cur = st.expression.profile.id
@@ -111,9 +111,9 @@ local values = Sculpt.export_values()
 check(values.C == 0.7, "saving puts that value into the character's preset")
 SKS.call("sculpt_scan"); ticks(5)
 
--- 总体绑定与配置: the binding lookup and the config files
-Panel.ui.page = "files"; Panel.ui.win.h = 1060; frame()
-check(not find("页面出错"), "总体绑定与配置 page draws")
+-- 总体绑定管理: the binding lookup and the config files
+Panel.ui.page = "files"; Panel.ui.page_state.files = { tab = "binding" }; Panel.ui.win.h = 1060; frame()
+check(not find("页面出错") and find("绑定（查找过程）") and not find("加载"), "总体绑定管理 opens on 总体绑定")
 st.presets.legacy = { { part = "ch03_012_0014", source = "user", path = "user/ch03_012_001/ch03_012_0014.json" } }
 frame()
 check(not find("页面出错") and find("用它替换整套绑定") and find("ch03_012_0014.json"), "old part bindings are listed with their actions")

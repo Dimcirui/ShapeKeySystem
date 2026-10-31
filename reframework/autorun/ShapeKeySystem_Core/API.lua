@@ -474,7 +474,7 @@ local function build_expression_state()
     if C.preview_profile then build_preview_state() end
 end
 
--- read-only view of a profile that is not in effect (表情详情: choosing in the list shows it
+-- read-only view of a profile that is not in effect (表情 → 映射配置: choosing in the list shows it
 -- before 应用). Channels matched against the worn parts' mesh names like apply_profile does.
 function build_preview_state()
     local ex = state.expression
@@ -1876,11 +1876,10 @@ function cmds.face_mirror(a)
     return true
 end
 
--- what = "aim" (aim point to the face on the next frame) / "rig" (current joint's defaults) / "all"
+-- what = "aim" (aim at the anchor joint itself) / "rig" (current joint's defaults) / "all"
 function cmds.face_mirror_reset(a)
     local F = SKS.adapter.face_mirror
     if not F then return false, "E_BAD_ARGS", "this game has no face mirror" end
-    if a.what == "aim" then F.request_aim(); return true end
     local ok, err, msg = F.reset(a.what)
     if not ok then return ok, err, msg end
     F.save_soon()
@@ -2581,6 +2580,7 @@ function SKS.init(adapter)
         if ok == false then return false, why end
     end
     SKS.adapter = adapter
+    state.runtime.game = adapter.name   -- shown under 运行环境
     Writer.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
     Proc.adapter = adapter

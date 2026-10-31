@@ -17,7 +17,8 @@ $owned = @(
 )
 # 游戏根目录 natives\ 下的文件，相对仓库根目录与游戏根目录；逐个列出，不镜像目录（natives 由许多 mod 共用）
 $ownedNatives = @(
-    "natives\STM\GUI\ui_texture\tex_render\rtt_facemirror_00.rtex.6"   # 表情镜的渲染贴图（荒野）
+    "natives\STM\GUI\ui_texture\tex_render\rtt_facemirror_00.rtex.6",   # 表情镜的渲染贴图（荒野）
+    "natives\STM\_Chainsaw\UI\FaceMirror\rtt_facemirror_00.rtex.5"     # 表情镜的渲染贴图（RE4R）
 )
 # 仅清理迁入 builtin 的三个旧内置文件，不镜像旧 games 目录，保留玩家另外放入的录制。
 $retired = @(

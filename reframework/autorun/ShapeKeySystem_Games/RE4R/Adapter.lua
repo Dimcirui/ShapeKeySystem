@@ -15,6 +15,7 @@ local BoneHold = require("ShapeKeySystem_Games.RE4R.BoneHold")
 local Conditions = require("ShapeKeySystem_Games.RE4R.Conditions")
 local Playback = require("ShapeKeySystem_Games.RE4R.Playback")
 local Cutscene = require("ShapeKeySystem_Games.RE4R.Cutscene")
+local FaceMirror = require("ShapeKeySystem_Games.FaceMirror")
 local L = require("ShapeKeySystem_Core.I18n")
 local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
     rewrite_active_weights = true, scene_search = false, scoped_bindings = true,
@@ -22,6 +23,30 @@ local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_nam
     instance_auto_profile = true,
     conditions = Conditions,
     playback = Playback,
+    -- the GUI is the system image plane (one Texture element); the head is its own GameObject, but the
+    -- body skeleton carries a Head joint, so all joints are on the body
+    face_mirror = FaceMirror.new({
+        rtex = "_Chainsaw/UI/FaceMirror/rtt_facemirror_00.rtex",
+        gui_asset = "systems/gui/imageplane_1920x1080.gui", gui_elem = "Image", gui_folder = "Gui",
+        main_camera = "MainCamera",
+        binds = { { id = "Head", name = "头部（Head）" }, { id = "Neck_0", name = "脖子（Neck_0）" }, { id = "Spine_2", name = "胸部（Spine_2）" },
+                  { id = "Hip", name = "臀部（Hip）" } },
+        rigs = {
+            Head = { dist = 0.6, aim = { x = 0, y = 0.07, z = 0.08 }, rot = { x = -6, y = 0, z = 0 } },
+            Neck_0 = { dist = 0.6, aim = { x = 0, y = 0.12, z = 0.08 }, rot = { x = -6, y = 0, z = 0 } },
+            Spine_2 = { dist = 0.6, aim = { x = 0, y = 0.35, z = 0.1 }, rot = { x = -6, y = 0, z = 0 } },
+            Hip = { dist = 0.6, aim = { x = 0, y = 0.5, z = 0.1 }, rot = { x = -6, y = 0, z = 0 } },
+        },
+        parts = { { id = "body", name = "躯干" }, { id = "weapon", name = "武器", hide = true } },
+        -- character meshes by slot (10 head, 20 hair, the rest body); weapons and their attachments
+        part = function(_, path)
+            if path:find("/character/wp/", 1, true) then return "weapon" end
+            local slot = path:match("/character/ch/.-/(%d%d)/[^/]+%.mesh$")
+            if slot then return (slot == "10" or slot == "20") and "head" or "body" end
+            return "other"
+        end,
+        isolate = true, clip = { 1, 2 },
+    }),
     input = require("ShapeKeySystem_Games.RE4R.Input"),
     terms = { primary = "主角色", part = "部件" }, raw = Signals.raw,
     read = Signals.read, channel_writable = Signals.writable, write_context = Signals.write_context }

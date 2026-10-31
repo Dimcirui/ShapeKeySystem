@@ -1,4 +1,5 @@
--- ShapeKeySystem panel, advanced page "面捕": face and head tracking from a phone (Mocap.lua).
+-- ShapeKeySystem panel, advanced page "面捕": face and head tracking from a phone (Mocap.lua), and,
+-- on games that have one, the face mirror in a second tab.
 -- Drawing only submits `mocap` / `mocap_calibrate`; the values shown come from state.mocap.
 
 local T = require("ShapeKeySystem_UI.Theme")
@@ -238,7 +239,9 @@ local function mirror_card(ctx, x, y, w)
     local fm, call = ctx.st.face_mirror, ctx.call
     local c = fm.cfg
     local rig = c.rigs[c.bind]
-    local h = 10 + 32 + 36 + 36 + 10 * 32 + 36 + 36 + 4
+    local per_row = 4
+    local part_rows = math.ceil(#fm.parts / per_row)
+    local h = 10 + 32 + 36 + 36 + 10 * 32 + 36 + 36 + part_rows * 36 + 4
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local ry = y + 10
@@ -249,7 +252,7 @@ local function mirror_card(ctx, x, y, w)
     D.text_mid(fm.status or "-", rx + 120, ry, 28, C.muted, W.small(), rw - 120)
     ry = ry + 36
 
-    D.text_mid("挂在骨骼", rx, ry, 28, C.text, W.small(), LW - 8)
+    D.text_mid("定位点", rx, ry, 28, C.text, W.small(), LW - 8)
     local labels, cur = {}, 1
     for i, b in ipairs(fm.binds) do
         labels[i] = b.name
@@ -277,9 +280,18 @@ local function mirror_card(ctx, x, y, w)
     ch, v = W.toggle("曝光跟随主画面测光", rx, ry, c.follow_meter)
     if ch then mirror_patch(call, { follow_meter = v }) end
     ry = ry + 36
+    -- parts the mirror leaves out (the head always shows); the game decides which parts there are
+    D.text_mid("隐藏部位", rx, ry, 28, C.text, W.small(), LW - 8)
+    local cw = math.floor((min(rw, LW + 480) - LW) / per_row)
+    for i, p in ipairs(fm.parts) do
+        local col, line = (i - 1) % per_row, (i - 1) // per_row
+        local cp, pv = W.toggle(p.name, rx + LW + col * cw, ry + line * 36, c.hide[p.id] == true)
+        if cp then mirror_patch(call, { hide = { [p.id] = pv } }) end
+    end
+    ry = ry + part_rows * 36
 
     local bx = rx
-    local clicked, bw = W.button("对准脸部", bx, ry, nil, 28, { disabled = not c.enabled })
+    local clicked, bw = W.button("对准定位点", bx, ry, nil, 28)
     if clicked then call("face_mirror_reset", { what = "aim" }) end
     bx = bx + bw + 8
     clicked, bw = W.button("恢复此骨骼的默认镜头", bx, ry, nil, 28)
@@ -290,9 +302,17 @@ local function mirror_card(ctx, x, y, w)
     return h
 end
 
+-- 面捕 | 表情镜 tabs, only on games with a face mirror
+local TABS = { { "mocap", "面捕" }, { "mirror", "表情镜" } }
+
 function Page.draw(ctx, x, y, w)
     if not ctx.st.mocap then return 0 end
     local cy = y
+    if ctx.st.face_mirror then
+        local tab, th = W.tabs(ctx.state, x, cy, w, TABS)
+        cy = cy + th
+        if tab == "mirror" then return cy - y + mirror_card(ctx, x, cy, w) + 12 end
+    end
     cy = cy + face_card(ctx, x, cy, w) + 12
     -- a scheme without head data has no head turn at all (Mocap.wants_head)
     if current_scheme(ctx.st.mocap).head ~= false then cy = cy + head_card(ctx, x, cy, w) + 12 end
@@ -301,7 +321,6 @@ function Page.draw(ctx, x, y, w)
     if clicked then ctx.state.channels_open = not open end
     cy = cy + hh + 6
     if open then cy = cy + channels(ctx, x, cy, w) + 12 end
-    if ctx.st.face_mirror then cy = cy + mirror_card(ctx, x, cy, w) + 12 end
     return cy - y
 end
 

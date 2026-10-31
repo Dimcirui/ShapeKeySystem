@@ -1,4 +1,4 @@
--- 绘制面部动画测试控件和播放分析。
+-- 绘制表情页的「面部动画测试」标签：播放控件和播放分析。
 --
 -- 页面拥有筛选和分页状态，播放数据归后端所有；两种后端共用控件，不持有引擎引用。
 local D = require("ShapeKeySystem_UI.Draw")
@@ -77,6 +77,7 @@ local function draw_analysis(ctx, x, y, w)
             D.text_mid(bound, x + 16, cy + 24, 24, C.warn, W.small(), action_x - x - 24)
             if W.button("添加映射", action_x, cy + 22, action_w, 24, { font = W.small() }) then
                 Mapping.open(ctx, nil, row.signal)
+                ctx.state.tab = "mapping"   -- the draft is edited on the 映射配置 tab
             end
             W.tooltip(L.f("新建形态键映射，并自动使用 %s 作为面部信号", row.signal or row.label), x + 16, cy + 24, action_x - x - 24, 24)
         end
@@ -93,13 +94,12 @@ function P.draw(ctx, x, y, w)
     if not r then return 0 end
     local preparing = r.status == "preparing"
     local active = r.status ~= "stopped"
-    local open = active or s.playback_open == true
-    local clicked, height = W.header("面部动画测试", x, y, w, open,
-        active and L.f("%s · %s · %s", L.tr(preparing and "准备中" or r.status == "paused" and "暂停" or "播放中"), r.file or "",
-            L.tr(r.signal_replay and "录制信号" or r.mode == "final" and "最终信号" or "原版输入")) or nil)
-    if clicked and not active then s.playback_open = not open end
-    local cy = y + height + 6
-    if not open then return cy - y end
+    local cy = y
+    if active then
+        D.text_mid(L.f("%s · %s · %s", L.tr(preparing and "准备中" or r.status == "paused" and "暂停" or "播放中"), r.file or "",
+            L.tr(r.signal_replay and "录制信号" or r.mode == "final" and "最终信号" or "原版输入")), x + 8, cy, 24, C.brass, W.small(), w - 16)
+        cy = cy + 30
+    end
     if not r.supported then
         D.text_mid(r.message, x + 8, cy, 28, C.warn, W.small(), w - 16)
         return cy - y + 36

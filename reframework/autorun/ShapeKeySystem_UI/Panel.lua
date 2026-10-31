@@ -21,11 +21,10 @@ local SKS
 local PAGES = {
     { key = "basic",   name = "表情",     mod = "ShapeKeySystem_UI.PageBasic" },
     { key = "sculpt",  name = "捏脸",     mod = "ShapeKeySystem_UI.PageSculpt" },
-    { key = "expr",    name = "表情详情", mod = "ShapeKeySystem_UI.PageExpression", adv = true },
     { key = "cond",    name = "条件规则", mod = "ShapeKeySystem_UI.PageConditions", adv = true },
     { key = "mocap",   name = "面捕",     mod = "ShapeKeySystem_UI.PageMocap",      adv = true },
     { key = "drivers", name = "驱动",     mod = "ShapeKeySystem_UI.PageDrivers",    adv = true },
-    { key = "files",   name = "总体绑定与配置", mod = "ShapeKeySystem_UI.PagePresets", adv = true },
+    { key = "files",   name = "总体绑定管理", mod = "ShapeKeySystem_UI.PagePresets", adv = true },
     { key = "debug",   name = "设置与调试", mod = "ShapeKeySystem_UI.PageDebug",    adv = true },
 }
 local page_impl = {}
@@ -344,10 +343,19 @@ local function draw()
     ui.want_signals = false
     local impl = get_page(ui.page)
     if impl then
-        local y0 = W.begin_scroll("page:" .. ui.page, cx - 4, cy, cw + 8, ch)
+        local scroll_id = "page:" .. ui.page
+        local y0 = W.begin_scroll(scroll_id, cx - 4, cy, cw + 8, ch)
         ctx.SKS, ctx.st, ctx.live, ctx.state = SKS, st, live, page_state(ui.page)
-        ctx.view_h = ch
+        ctx.view_h, ctx.scroll_id = ch, scroll_id
+        local tab = ctx.state.tab
         local ok, used = pcall(impl.draw, ctx, cx, y0 + 4, cw)
+        -- tabs of a page share its scroll area: another tab starts at the top, with no open
+        -- dropdown or text field left over from the previous one
+        if tab ~= nil and ctx.state.tab ~= tab then
+            W.reset_scroll(scroll_id)
+            W.open_select, W.open_search = nil, nil
+            TextInput.clear()
+        end
         if not ok then
             local e = tostring(used)
             used = 40

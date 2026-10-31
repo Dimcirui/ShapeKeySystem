@@ -1,4 +1,6 @@
--- ShapeKeySystem panel, advanced page "设置与调试": settings, per-stage timing, scan info, log.
+-- ShapeKeySystem panel, advanced page "设置与调试". Tabs: 基础设置 (interface and SKS settings, about),
+-- 调试 (per-stage timing, external control, scan info, log) and, on games with native signals,
+-- 动画录制 (native signal diagnosis and recording).
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -325,8 +327,7 @@ local function note_lines(notes)
     end
 end
 
--- author, version and the latest two release notes; h = the space it may use (fills the gap under
--- the performance card in the two-column layout), grown to fit every line
+-- author, version and the latest two release notes; h = the space it may use, grown to fit every line
 local function about_card(ctx, x, y, w, h)
     local shown = {}
     for i = 1, min(2, #Version.history) do shown[i] = note_lines(Version.history[i].notes) end
@@ -354,26 +355,86 @@ local function about_card(ctx, x, y, w, h)
     return h
 end
 
-function Page.draw(ctx, x, y, w)
-    local cy = y
-    local two = w >= 760
-    if two then
-        local lw = (w - 12) * 0.55
-        local h1 = settings_card(ctx, x, cy, lw)
-        local h2 = perf_card(ctx, x + lw + 12, cy, w - lw - 12)
-        local h3 = about_card(ctx, x + lw + 12, cy + h2 + 12, w - lw - 12, h1 - h2 - 12)
-        cy = cy + max(h1, h2 + 12 + h3) + 12
-    else
-        cy = cy + settings_card(ctx, x, cy, w) + 12
-        cy = cy + perf_card(ctx, x, cy, w) + 12
-        cy = cy + about_card(ctx, x, cy, w) + 12
+-- REFramework's own version, from whichever of its version getters this build has
+local function reframework_version()
+    for _, m in ipairs({ "get_tag_long", "get_tag", "get_commit_count" }) do
+        local ok, v = pcall(function() return reframework[m](reframework) end)
+        if ok and v ~= nil and v ~= "" then return tostring(v) end
     end
-    cy = cy + external_card(ctx, x, cy, w) + 12
+    return L.tr("未知")
+end
+
+-- what SKS found around it: the game, REFramework, the draw backend, the mocap receiver, the face
+-- mirror; one line each, the value dimmed when something is missing
+local function env_card(ctx, x, y, w)
+    local st = ctx.st
+    local nv = st.mocap and st.mocap.native
+    local fm = st.face_mirror
+    local rows = {
+        { "游戏", st.runtime.game or L.tr("未知"), true },
+        { "REFramework", reframework_version(), true },
+        { "reframework-d2d", D.has_d2d() and L.tr("已安装") or L.tr("未安装（用 ImGui 绘制）"), D.has_d2d() },
+        { "绘制方式", D.backend or L.tr("无"), D.backend ~= nil },
+    }
+    if nv then
+        local text = not nv.available and L.tr("未加载")
+            or nv.running and L.f("已加载 · UDP %d", nv.port)
+            or L.f("已加载 · 没有启动（错误 %d）", nv.error or 0)
+        rows[#rows + 1] = { "面捕接收插件", text, nv.available and (nv.running or true) }
+    end
+    rows[#rows + 1] = { "表情镜", fm and L.tr(fm.status or "-") or L.tr("本游戏不支持"), fm ~= nil }
+    local h = 10 + 30 + #rows * 24 + 8
+    W.panel_box(x, y, w, h, true)
+    local rx, rw = x + 12, w - 24
+    W.h2("运行环境", rx, y + 10)
+    local cy = y + 40
+    for _, r in ipairs(rows) do
+        D.text(r[1], rx, cy, C.muted, W.small(), 130)
+        D.text(r[2], rx + 130, cy, r[3] and C.text or C.faint, W.small(), rw - 130)
+        cy = cy + 24
+    end
+    return h
+end
+
+local function settings_tab(ctx, x, y, w)
+    if w < 760 then
+        local h1 = settings_card(ctx, x, y, w)
+        local h2 = about_card(ctx, x, y + h1 + 12, w)
+        return h1 + 12 + h2 + 12 + env_card(ctx, x, y + h1 + 12 + h2 + 12, w)
+    end
+    local lw = (w - 12) * 0.55
+    local rx, rw = x + lw + 12, w - lw - 12
+    local h1 = settings_card(ctx, x, y, lw)
+    local h2 = about_card(ctx, rx, y, rw)
+    local h3 = env_card(ctx, rx, y + h2 + 12, rw)
+    return max(h1, h2 + 12 + h3)
+end
+
+local function debug_tab(ctx, x, y, w)
+    local cy = y
+    if w >= 760 then
+        local lw = (w - 12) * 0.55
+        local h1 = perf_card(ctx, x, cy, lw)
+        local h2 = external_card(ctx, x + lw + 12, cy, w - lw - 12)
+        cy = cy + max(h1, h2) + 12
+    else
+        cy = cy + perf_card(ctx, x, cy, w) + 12
+        cy = cy + external_card(ctx, x, cy, w) + 12
+    end
     cy = cy + scene_card(ctx, x, cy, w) + 12
-    local nh = native_card(ctx, x, cy, w)
-    if nh > 0 then cy = cy + nh + 12 end
     cy = cy + log_card(ctx, x, cy, w)
     return cy - y
+end
+
+function Page.draw(ctx, x, y, w)
+    local tabs = { { "settings", "基础设置" }, { "debug", "调试" } }
+    local ns = ctx.st.native_signals
+    if ns and ns.available then tabs[3] = { "record", "动画录制" } end
+    local tab, th = W.tabs(ctx.state, x, y, w, tabs)
+    local cy = y + th
+    if tab == "debug" then return th + debug_tab(ctx, x, cy, w) end
+    if tab == "record" then return th + native_card(ctx, x, cy, w) end
+    return th + settings_tab(ctx, x, cy, w)
 end
 
 return Page

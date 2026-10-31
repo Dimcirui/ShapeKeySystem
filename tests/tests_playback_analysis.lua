@@ -43,7 +43,7 @@ check(a.by_param[1].label == "blink.L · fcParam_001" and a.by_param[1].signal =
     and a.by_param[1].purpose ~= "词典尚未标注用途", "alias, raw label and purpose survive schema /2")
 check(a.by_param[7].label == "fcParam_007", "generic aliases do not repeat the raw name")
 check(a.state.rows[1].param == 1 and a.state.rows[2].param == 7, "equal hits sort by parameter")
-local ctx = { state = {}, st = { mapping = { signals = sig.list, entries = {}, profile_id = "analysis" } } }
+local ctx = { state = {}, scroll_id = "page:basic", st = { mapping = { signals = sig.list, entries = {}, profile_id = "analysis" } } }
 Mapping.open(ctx, nil, a.by_param[1].signal)
 local draft = ctx.state.mapping_draft
 check(draft and draft.entry.s == "blink.L" and draft.entry.group == "eye",

@@ -17,6 +17,31 @@ check(Games.pick("unsupported_test_game") == nil and Games.pick(nil) == nil, "an
 local Onimusha = Games.pick("onimusha_wots")
 check(Onimusha and Onimusha.raw and Onimusha.bind and Onimusha.read,
     "onimusha_wots picks the bsControl adapter")
+-- face mirror: Wilds and RE4R each build their own, with their own joints; the others have none
+local RE4 = Games.pick("re4")
+check(Wilds.face_mirror and RE4 and RE4.face_mirror and Wilds.face_mirror ~= RE4.face_mirror
+    and Wilds.face_mirror.view.binds[4].id == "COG" and RE4.face_mirror.view.binds[4].id == "Hip"
+    and Wilds.face_mirror.view.binds[2].id == "Neck_0" and RE4.face_mirror.cfg.rigs.Neck_0
+    and RE4.face_mirror.cfg.rigs.Hip and not RE4.face_mirror.cfg.rigs.COG and Onimusha.face_mirror == nil,
+    "face mirror per game: Wilds COG, RE4R Hip, none on Onimusha")
+local rp, wp = RE4.face_mirror.part, Wilds.face_mirror.part
+check(rp("head", "_chainsaw/character/ch/cha0/cha000/10/cha000_10.mesh") == "head"
+    and rp("hair", "_chainsaw/character/ch/cha0/cha000/20/cha000_20.mesh") == "head"
+    and rp("body", "_chainsaw/character/ch/cha0/cha000/00/cha000_00.mesh") == "body"
+    and rp("wp4001", "_chainsaw/character/wp/wp40/wp4000/21/wp4000_21.mesh") == "weapon"
+    and rp("wp5401", "_chainsaw/ui/ui2000/mesh/throwtarget_mesh.mesh") == "other",
+    "RE4R face mirror parts: head / hair, body, weapon, other")
+check(wp("Player_Face", "") == "head" and wp("ch03_012_0013", "") == "helm" and wp("ch03_012_0012", "") == "body"
+    and wp("ch03_012_0011", "") == "arm" and wp("ch03_012_0014", "") == "legs" and wp("ch03_012_0015", "") == "waist"
+    and wp("ch03_057_0016", "") == "body" and wp("Acc000_010", "") == "acc" and wp("Wp_Parent", "") == "weapon"
+    and wp("WpSub_ReserveParent", "") == "weapon" and wp("HunterKnifeBase_R", "") == "weapon"
+    and wp("SlingerRope", "") == "weapon" and wp("HeadToHip", "") == "other",
+    "Wilds face mirror parts: face, armour by slot, accessories, weapons, other")
+check(Wilds.face_mirror.cfg.hide.weapon == true and Wilds.face_mirror.cfg.hide.legs == false
+    and RE4.face_mirror.cfg.hide.weapon == true and RE4.face_mirror.cfg.hide.body == false and RE4.face_mirror.cfg.hide.legs == nil,
+    "face mirror hide defaults per game: weapons hidden")
+check(RE4.face_mirror.cfg.clip_front == 1 and Wilds.face_mirror.cfg.clip_front == 0.2,
+    "face mirror clip range: wide in RE4R (isolated), narrow in Wilds")
 
 -- the entry script run again; returns what it registered, hooked, wrote and showed
 local function run_entry(game)
