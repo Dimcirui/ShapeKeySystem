@@ -302,23 +302,14 @@ local function mirror_card(ctx, x, y, w)
     return h
 end
 
--- 面捕 | 表情镜 tabs; returns the tab shown and the height used
+-- 面捕 | 表情镜 tabs, only on games with a face mirror
 local TABS = { { "mocap", "面捕" }, { "mirror", "表情镜" } }
-local function tabs(ctx, x, y)
-    local cur, bx = ctx.state.tab or "mocap", x
-    for _, t in ipairs(TABS) do
-        local clicked, bw = W.button(t[2], bx, y, nil, 28, { kind = cur == t[1] and "primary" or nil })
-        if clicked then ctx.state.tab = t[1] end
-        bx = bx + bw + 8
-    end
-    return cur, 40
-end
 
 function Page.draw(ctx, x, y, w)
     if not ctx.st.mocap then return 0 end
     local cy = y
     if ctx.st.face_mirror then
-        local tab, th = tabs(ctx, x, cy)
+        local tab, th = W.tabs(ctx.state, x, cy, w, TABS)
         cy = cy + th
         if tab == "mirror" then return cy - y + mirror_card(ctx, x, cy, w) + 12 end
     end
