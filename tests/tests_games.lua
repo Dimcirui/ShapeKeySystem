@@ -100,6 +100,75 @@ for _, f in ipairs(lua_files("ShapeKeySystem_Games")) do
 end
 sdk = real_sdk
 
+-- Onimusha conditions: HP, PlayerManager queries, oni gauges, action state bits, battle, lock-on and
+-- speech of the controlling player; a new player context gives no HP for one sample (Core then
+-- drops the baseline)
+do
+    local OC = Onimusha.conditions
+    local function obj(addr, methods, fields)
+        return { get_address = function() return addr end,
+            get_field = function(_, n) return fields and fields[n] end,
+            call = function(_, m) local v = methods[m]; if type(v) == "function" then return v() end; return v end }
+    end
+    local addr = 1
+    local ENUM = { IDLE = 1, STAND = 2, ATTACK = 4, GUARD_WAIT = 8, DAMAGE = 16 }
+    local health = obj(10, { get_Health = 605, get_MaxHealth = 1210 })
+    local player = obj(11, { get_IsOniModeOn = true, get_OniEnergy = 1000, get_OniEnergyMax = 1250,
+        get_OniChangeEnergy = 0, get_OniChangeEnergyMax = 1000, isOniUltimateAttackEnergyMax = false })
+    local character = obj(12, { get_IsEventStart = false, getActionState = ENUM.STAND | ENUM.ATTACK })
+    local context = function()
+        return obj(addr, { get_Chara = obj(4, { get_HealthManager = health }), get_Player = player })
+    end
+    local manager = obj(2, { isPlayerDead = false, isPlayerDying = true, isUseItemAction = false,
+        isWallRunAction = false, isReviveAction = false, isDeadHeatAction = false, isOniGateAbsorption = false,
+        getInternalLockOnTarget = obj(13, {}),
+        getControllingPlayer = function()
+            return obj(3, { get_Context = context, get_Character = character, get_CharacterEntity = obj(14, {
+                get_SubWeapon = obj(15, { isSubWeaponActionBowTwoHand = true, isSubWeaponActionBowQuickShot = false }),
+                get_AutoWeaponOnOffSupporter = obj(16, { isWeaponOn = true }) }) })
+        end })
+    local work = obj(20, { get_Finished = false, get_Param = function()
+        return obj(21, { get_ContextHolder = obj(1, {}) })
+    end })
+    local singletons = {
+        ["app.PlayerManager"] = manager,
+        ["app.EnemyManager"] = obj(30, { isCheckBattleMode = true, isCheckBossBattleMode = false }),
+        ["app.SpeakManager"] = obj(31, { isWorking = true }, { _SingleWorkManager = obj(32, { get_Work = work }) }),
+        ["app.PauseManager"] = obj(33, { get_IsMenuPause = false }),
+    }
+    local enum = { get_field = function(_, n)
+        return { get_data = function() if ENUM[n] then return ENUM[n] end; return 0 end }
+    end }
+    local keep_sdk = sdk
+    sdk = { get_managed_singleton = function(n) return singletons[n] end,
+        find_type_definition = function(n) return n == "app.CharacterDef.ACTION_STATE_BIT" and enum or nil end }
+    OC.reset()
+    local V = {}
+    local sampled = OC.sample(V)
+    check(sampled and V.hp == 605 and V.hp_max == 1210 and V.dying == true and V.dead == false
+        and V.oni_mode == true and V.oni_energy_pct == 80 and V.oni_change_pct == 0
+        and V.oni_ultimate_ready == false, "Onimusha conditions read HP, player queries and oni gauges")
+    check(V.act_stand == true and V.act_attack == true and V.act_idle == false and V.act_damage == false
+        and V.act_parry == nil, "Onimusha conditions: action state bits, unknown bits unread")
+    check(V.in_battle == true and V.boss_battle == false and V.lock_on == true and V.menu_pause == false
+        and V.event_start == false, "Onimusha conditions: battle, boss, lock-on, pause and event")
+    check(V.anyone_speaking == true and V.player_speaking == true, "Onimusha conditions: the player speaks")
+    check(V.bow_aim == true and V.bow_quick_shot == false and V.weapon_on == true,
+        "Onimusha conditions: bow aim, quick shot and drawn weapon")
+    addr = 5
+    V = {}
+    OC.sample(V)
+    check(V.hp == nil and V.dying == true, "Onimusha conditions: a new player context skips one HP sample")
+    check(V.anyone_speaking == true and V.player_speaking == false, "Onimusha conditions: someone else speaks")
+    sdk = { get_managed_singleton = function() return nil end }
+    check(OC.sample({}) == false, "Onimusha conditions: no player manager samples nothing")
+    sdk = keep_sdk
+    local ids = {}
+    for _, d in ipairs(OC.defs) do ids[d.id] = true end
+    check(ids.hp_pct and ids.dead and ids.oni_mode and ids.oni_energy_pct and ids.use_item and ids.act_guard_wait
+        and ids.player_speaking, "Onimusha conditions define HP %, dead, oni, item use, guard and speech")
+end
+
 -- Core and UI name no game: no app.* / snow.* types, fcParam joints or ch02 / ch03 parts outside comments
 local TOKENS = { "app.", "snow.", "fcParam_", "ch02", "ch03" }
 local hits = {}
@@ -136,6 +205,18 @@ for _, A in ipairs(Games.list) do
     end
     check((#sig.list > 0 or (sig.none and A.raw == nil)) and #bad == 0,
         A.id .. ": every builtin profile compiles " .. table.concat(bad, "; "))
+    if A.id == "onimusha_wots" then
+        -- bsControl signals fall back to the face bones the auto lip and talk motions move
+        local n, lost = 0, {}
+        for _, s in ipairs(sig.list) do
+            if s.fallback then
+                n = n + 1
+                if s.key == nil or s.key >= 1000 or #s.fallback ~= 1 or s.fallback[1] < 1000 then lost[#lost + 1] = s.name end
+            end
+        end
+        check(n == 25 and #lost == 0 and sig.by_name.jawOpen.fallback and sig.by_name["blink.L"].fallback,
+            "onimusha_wots: 25 bsControl signals fall back to one bone signal each (" .. n .. ") " .. table.concat(lost, ", "))
+    end
 end
 Profile.adapter = keep
 Profile.load_signals()
