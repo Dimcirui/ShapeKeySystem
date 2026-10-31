@@ -323,10 +323,9 @@ local function states_section(ctx, x, y, w)
         end
         cy = cy + h + 8
     end
-    if #clip_ids == 0 then
-        D.text("先在下面新建一个形态键配置组合，再添加状态。", x, cy, C.muted, W.small()); cy = cy + 24
-    elseif W.button("＋ 添加状态", x, cy, nil, 28) then
-        edit(ctx, function(d) table.insert(d.states, { clip = clip_ids[1], rules = {} }) end)
+    -- without a combination the state starts unbound ("-"): its rules can be written first
+    if W.button("＋ 添加状态", x, cy, nil, 28) then
+        edit(ctx, function(d) table.insert(d.states, { clip = clip_ids[1] or "", rules = {} }) end)
         s.closed[#data.states + 1] = false
     end
     return cy + 36 - y
@@ -409,18 +408,30 @@ local function clips_section(ctx, x, y, w)
                 else
                     D.text_mid("先在「捏脸」页扫描装备，才能选择形态键", x + 20, oy + 4, 28, C.faint, W.small())
                 end
-                -- copy a sculpt preset's non-zero values into this combination
+                -- copy a sculpt preset's non-zero values, or one option of its key groups, into this combination
                 local pr = st.presets.sculpt or {}
                 if #pr > 0 then
-                    local labels = {}
-                    for i, e in ipairs(pr) do labels[i] = e.name .. (e.folder and "" or L.tr("（通用）")) end
-                    local ix = x + 30 + min(320, w * 0.5)
-                    local iw = min(220, x + w - ix - 10)
-                    local c5, i5 = W.select("import_" .. id, ix, oy + 4, iw, 28, labels, nil, { placeholder = "从捏脸配置导入…" })
-                    if c5 and pr[i5] then
-                        ctx.call("cond_import_sculpt", { clip = id, name = pr[i5].name, folder = pr[i5].folder })
+                    local labels, picks = {}, {}
+                    for _, e in ipairs(pr) do
+                        local base = e.name .. (e.folder and "" or L.tr("（通用）"))
+                        labels[#labels + 1] = base
+                        picks[#picks + 1] = { name = e.name, folder = e.folder }
+                        for _, g in ipairs(e.key_groups or {}) do
+                            for oi, o in ipairs(g.options) do
+                                labels[#labels + 1] = base .. " · " .. g.name .. " / " .. o
+                                picks[#picks + 1] = { name = e.name, folder = e.folder, group = g.name, option = oi }
+                            end
+                        end
                     end
-                    W.tooltip("把该捏脸配置里所有不为 0 的形态键值原样加入这个组合；组合里已有的同名键会被覆盖", ix, oy + 4, iw, 28)
+                    local ix = x + 30 + min(320, w * 0.5)
+                    local iw = min(260, x + w - ix - 10)
+                    local c5, i5 = W.select("import_" .. id, ix, oy + 4, iw, 28, labels, nil, { placeholder = "从捏脸配置导入…" })
+                    local p = c5 and picks[i5]
+                    if p then
+                        ctx.call("cond_import_sculpt", { clip = id, name = p.name, folder = p.folder, group = p.group, option = p.option })
+                    end
+                    W.tooltip("把该捏脸配置里所有不为 0 的形态键值，或它某个键组选项里的值，原样加入这个组合；组合里已有的同名键会被覆盖",
+                        ix, oy + 4, iw, 28)
                 end
             end
         end

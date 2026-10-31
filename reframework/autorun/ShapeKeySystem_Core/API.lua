@@ -550,7 +550,14 @@ local function build_mapping_state()
 end
 
 local function sculpt_entry_state(e)
-    return { id = e.id, name = e.name, source = e.source, folder = e.folder, target_part = e.target_part }
+    local groups = {}
+    for i, g in ipairs(e.key_groups or {}) do
+        local options = {}
+        for j, o in ipairs(g.options) do options[j] = o.name end
+        groups[i] = { name = g.name, options = options }
+    end
+    return { id = e.id, name = e.name, source = e.source, folder = e.folder, target_part = e.target_part,
+        key_groups = groups }
 end
 
 -- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β") from builtin/<adapter id>/<A.model_names>
@@ -2842,14 +2849,27 @@ function cmds.cond_import_sculpt(a)
     if type(a.clip) ~= "string" or type(a.name) ~= "string" then return false, "E_BAD_ARGS", "clip, name" end
     local e = Presets.find_sculpt(a.name, a.folder or current_folder(), nil, true)
     if not e then return false, "E_NOT_FOUND", "sculpt preset not found: " .. tostring(a.name) end
-    local ok, code, msg, n = CondExpr.import_values(a.clip, e.values)
+    -- group / option: one option of a key group (name or 1-based index) instead of the whole preset
+    local values, g, o = e.values, nil, nil
+    if a.group ~= nil then
+        for i, x in ipairs(e.key_groups or {}) do if x.name == a.group or i == a.group then g = x end end
+        if not g then return false, "E_NOT_FOUND", "key group not found: " .. tostring(a.group) end
+        for i, x in ipairs(g.options) do if x.name == a.option or i == a.option then o = x end end
+        if not o then return false, "E_NOT_FOUND", "key group option not found: " .. tostring(a.option) end
+        values = o.values
+    end
+    local ok, code, msg, n = CondExpr.import_values(a.clip, values)
     if not ok then return false, code, msg end
     if n > 0 then
         C.update_touch_map()
         Sculpt.mark_dirty()
     end
     C.build_cond_state()
-    notice("info", I18n.f("已从捏脸配置「%s」导入 %d 个形态键", e.name, n))
+    if o then
+        notice("info", I18n.f("已从捏脸配置「%s」的键组「%s」选项「%s」导入 %d 个形态键", e.name, g.name, o.name, n))
+    else
+        notice("info", I18n.f("已从捏脸配置「%s」导入 %d 个形态键", e.name, n))
+    end
     return true, nil, nil, { count = n }
 end
 

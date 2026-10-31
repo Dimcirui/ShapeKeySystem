@@ -115,7 +115,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 
 `Signal`：`{ slot = 3, name = "smile.L", label = "fcParam_033", no_signal = false, guessed = false, note = "颧大肌" }`。
 `label` 是适配器给出的原始通道名；`no_signal` 为 true 时本游戏没有这个信号，实时值恒为 0。实时值在 `live.signal[slot]`，
-已按信号自己的 `lo` / `hi` 归一化。`p` 节点的显示名用 `SKS.raw_label(v)` 取得。
+已按信号自己的 `lo` / `hi` 归一化。字典项可以带 `fallback`（一个或一组原始通道，不经 `lo` / `hi`），信号取主通道和这些通道里最大的值，`label` 用 ` / ` 连起各通道名；只有 `fallback` 的项也算有信号。鬼武者的 25 个 bsControl 信号各带一个同类动作的面部骨骼信号（`builtin/onimusha_wots/face.json`），bsControl 不动时（比如说话时的自动嘴型只动骨骼）由骨骼接管。`p` 节点的显示名用 `SKS.raw_label(v)` 取得。
 
 ### 3.6 `state.sculpt`
 | 字段 | 类型 | 说明 |
@@ -150,7 +150,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `rev` | int | |
 | `binding` | 见下 | 当前父预设的解析结果 |
 | `expression` | list of `{name, source, extends?}` | 可选的表情配置 |
-| `sculpt` | list of `{name, source, target_part?}` | 可选的捏脸配置；同一文件夹里和用户配置同名的 mod 配置不列出（加载的总是用户那份） |
+| `sculpt` | list of `{name, source, folder?, target_part?, key_groups}` | 可选的捏脸配置；同一文件夹里和用户配置同名的 mod 配置不列出（加载的总是用户那份）。`key_groups` 为 `[{name, options = {选项名…}}]`，供条件页按键组选项导入 |
 | `pending_delete` | `{kind, name}?` | 等待确认的删除操作 |
 
 `binding`：
@@ -537,7 +537,7 @@ end)
 - **作用范围**：只作用于游戏中的主角色。菜单、加载、过场、公会卡里不判断条件，片段会重置。
 - **规则**（沿用用户 RE4 变体管理器的设计）：状态列表从上到下排优先级，第一个命中的状态播放它的片段。每个状态可以有多条规则，任意一条命中即算命中。规则内的条件统一用"且"或"或"连接，空规则永远不命中。条件读不到值时算不满足。`hold` 表示条件结束后再保持多少秒。数值条件的 `band` 是回差，命中后要越过阈值这么多才算结束。状态的 `clip` 为空字符串时（面板里选「-」）该状态停用：跳过判断，也不压住下面的状态；删除片段时引用它的状态改为空字符串，规则保留。`auto = false` 时暂停所有规则。面板的「预览」可以强制播放某个片段。面板把片段称为「形态键配置组合」。
 - **文件**：`user/conditions/<id>.json` 或 `mods/conditions/<id>.json`，schema 为 `sks.conditions/1`，格式见 `CondExpr.lua` 文件头。父预设用 `"conditions": "<id>"` 引用；没有父预设引用时，使用 `settings.conditions`。
-- **命令**：`cond_select {name}`、`cond_new {name}`、`cond_edit {data}`（整份替换工作副本）、`cond_save {as_name?}`、`cond_revert`、`cond_preview {clip?}`、`cond_import_sculpt {clip, name, folder?}`（把捏脸配置合并值里不为 0 的键原样写进工作副本的这个片段，同名键覆盖、其他键保留，不读按部件的覆盖；`folder` 的查找同 `load_sculpt`；结果 `{count}`）；删除走 `request_delete {kind = "conditions"}`。`write_binding` 增加 `conditions` 参数；不传这个参数时，保留同一部件原有的引用。
+- **命令**：`cond_select {name}`、`cond_new {name}`、`cond_edit {data}`（整份替换工作副本）、`cond_save {as_name?}`、`cond_revert`、`cond_preview {clip?}`、`cond_import_sculpt {clip, name, folder?, group?, option?}`（把捏脸配置合并值里不为 0 的键原样写进工作副本的这个片段，同名键覆盖、其他键保留，不读按部件的覆盖；带 `group` 时只写这个键组第 `option` 个选项里的值，`group` / `option` 为名字或从 1 开始的序号，找不到返回 `E_NOT_FOUND`。片段的值只会把形态键从捏脸值往 1 推，不能把同组其他选项的键压回默认值，所以导入一个选项是叠加，不是切换；`folder` 的查找同 `load_sculpt`；结果 `{count}`）；删除走 `request_delete {kind = "conditions"}`。`write_binding` 增加 `conditions` 参数；不传这个参数时，保留同一部件原有的引用。
 - **状态**：`state.conditions = {rev, sets, current = {id, name, source, dirty, data}, defs, binding_name, binding_part, global_name}`。实时值在 `live.cond = {values, status, playing, alpha, sampled}`，只在面板打开时更新。
 - **第一版的条件**（2026-10-10 用 REE MCP 实测过路径）：
   - 布尔：拔刀、被怪物察觉、战斗中、大型怪物战斗中、怪物愤怒中、半战斗、骑乘、攀爬、帐篷、营地、生活区域、炎热 / 寒冷区域、群袭、倒地。

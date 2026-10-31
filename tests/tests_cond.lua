@@ -254,5 +254,67 @@ do
     SKS.call("cond_preview", { clip = "imp" }); ticks(3)
     check(math.abs(WEIGHTS[si] - (0.6 + 0.4 * 0.6)) < 1e-6, string.format("import: the imported value plays like any clip value (got %.4f)", WEIGHTS[si]))
     SKS.call("cond_preview", {}); ticks(3)
+
+    -- one option of a key group: only that option's values, by name or index
+    SKS.call("zero_sculpt_all")
+    SKS.call("key_group_new", { name = "Look" })
+    SKS.call("key_group_option_add", { group = "Look", name = "A" })
+    SKS.call("key_group_option_add", { group = "Look", name = "B" })
+    SKS.call("key_group_assign", { group = "Look", option = 1, names = { self_key }, values = { [self_key] = 0.4 } })
+    SKS.call("key_group_assign", { group = "Look", option = 2, names = { expr_key }, values = { [expr_key] = 0.7 } })
+    check(SKS.call("save_sculpt", { name = "Cond Groups" }), "import: sculpt preset with a key group saved")
+    local listed
+    for _, e in ipairs(st.presets.sculpt or {}) do
+        if e.name == "Cond Groups" then listed = e.key_groups end
+    end
+    check(listed and listed[1] and listed[1].name == "Look" and listed[1].options[2] == "B",
+        "import: the preset list names its key groups and options")
+    rd = { auto = false, clips = { opt = { values = { keep_me = 0.3 }, fade_in = 0, fade_out = 0 } }, states = {} }
+    SKS.call("cond_edit", { data = rd })
+    okc, _, _, ri = SKS.call("cond_import_sculpt", { clip = "opt", name = "Cond Groups", group = "Look", option = 2 })
+    v = st.conditions.current.data.clips.opt.values
+    check(okc and ri.count == 1 and v[expr_key] == 0.7 and v[self_key] == nil and v.keep_me == 0.3,
+        "import: an option copies only its own values")
+    okc = SKS.call("cond_import_sculpt", { clip = "opt", name = "Cond Groups", group = 1, option = "A" })
+    v = st.conditions.current.data.clips.opt.values
+    check(okc and v[self_key] == 0.4, "import: group by index, option by name")
+    check(not SKS.call("cond_import_sculpt", { clip = "opt", name = "Cond Groups", group = "Nope", option = 1 }),
+        "import: unknown key group refused")
+    check(not SKS.call("cond_import_sculpt", { clip = "opt", name = "Cond Groups", group = "Look", option = 3 }),
+        "import: unknown option refused")
+    SKS.call("key_group_delete", { group = "Look" })
+end
+
+-- a set without combinations still takes states: they start unbound ("-") with their rules editable
+do
+    SKS.call("cond_new", { name = "No Clips" })
+    local page = Panel.ui.page
+    Panel.ui.page = "cond"; Panel.ui.page_state.cond.tab = "states"; frame(); frame()
+    local reopened = #DRAWS == 0
+    if reopened then KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame(); frame() end   -- reopen the panel
+    local add_state = find("＋ 添加状态")
+    check(add_state ~= nil, "add-state button drawn without combinations")
+    if add_state then click(add_state) end
+    local s1 = st.conditions.current.data.states[1]
+    check(s1 ~= nil and s1.clip == "" and #st.conditions.current.data.states == 1,
+        "a state added without combinations is unbound")
+    -- info notices leave the panel 10 s after it first shows them; warnings stay
+    local keep_clock, now = os.clock, os.clock()
+    Panel.ui.toasts = {}
+    os.clock = function() return now end
+    SKS.call("cond_save", {})
+    local rt = st.runtime.notices
+    rt[#rt + 1] = { id = 99999, level = "warn", text = "test warning", time = os.time() }
+    frame(); frame()
+    check(find("已保存条件规则") ~= nil, "notices: info shown")
+    now = now + 9; frame()
+    check(find("已保存条件规则") ~= nil, "notices: info still shown after 9 s")
+    now = now + 2; frame(); frame()
+    local warn_kept = false
+    for _, n in ipairs(rt) do if n.id == 99999 then warn_kept = true end end
+    check(find("已保存条件规则") == nil and warn_kept, "notices: info gone after 10 s, warning stays")
+    os.clock = keep_clock
+    if reopened then KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame() end   -- leave it closed, as found
+    Panel.ui.page = page
 end
 print("COND FAILS:", cf)
