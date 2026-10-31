@@ -20,6 +20,7 @@ local A = {
     name = "Onimusha: Way of the Sword",
     terms = { primary = "主角色", part = "部件" },
     input = require("ShapeKeySystem_Games.Onimusha.Input"),
+    conditions = require("ShapeKeySystem_Games.Onimusha.Conditions"),
     -- the GUI is a one-texture library GUI (the system image plane never built a view here); every
     -- mesh in the scene carries every output bit, as in MH Wilds, so the background is cut by the
     -- clip range alone; the mirror meters on its own
