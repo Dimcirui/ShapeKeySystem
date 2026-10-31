@@ -1,5 +1,6 @@
--- ShapeKeySystem panel, advanced page "总体绑定与配置": the parent preset (binding) in effect and its
--- lookup chain, where the gains come from, sculpt presets (load / delete) and expression profiles.
+-- ShapeKeySystem panel, advanced page "总体绑定管理". Tabs: 总体绑定 (the parent preset in effect,
+-- its lookup chain and where the gains come from), 捏脸配置 (load / delete) and 表情配置 (use /
+-- delete). The delete confirmation is shown on every tab.
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -8,7 +9,7 @@ local L = require("ShapeKeySystem_Core.I18n")
 
 local Page = {}
 local C = T.c
-local max, min = math.max, math.min
+local max = math.max
 
 local SOURCE = { builtin = "内置", mod = "mod 自带", mods = "mod 自带", user = "用户" }
 
@@ -130,18 +131,10 @@ local function list_box(ctx, title, x, y, w, items, row)
     return h
 end
 
-function Page.draw(ctx, x, y, w)
+local function sculpt_list(ctx, x, y, w)
     local st, call = ctx.st, ctx.call
-    local pr = st.presets
-    local cy = y
-    cy = cy + confirm_bar(ctx, x, cy, w)
-    cy = cy + binding_card(ctx, x, cy, w) + 10
-    cy = cy + tuning_line(ctx, x, cy, w)
-
-    local two = w >= 640
-    local lw = two and (w - 12) / 2 or w
     local cur_sculpt = st.sculpt.preset
-    local h1 = list_box(ctx, "捏脸配置", x, cy, lw, pr.sculpt or {}, function(e, rx, ry, rw)
+    return list_box(ctx, "捏脸配置", x, y, w, st.presets.sculpt or {}, function(e, rx, ry, rw)
         local cur = cur_sculpt and cur_sculpt.name == e.name and cur_sculpt.folder == e.folder
         D.text_mid(e.name, rx, ry, 32, cur and C.brass or C.text, W.body(), rw * 0.45)
         local meta = L.tr(SOURCE[e.source] or e.source) .. " · " .. (e.folder or L.tr("通用"))
@@ -155,9 +148,12 @@ function Page.draw(ctx, x, y, w)
         end
         if W.tbutton("加载", bx, ry + 5) then call("load_sculpt", { name = e.name, folder = e.folder }) end
     end)
+end
+
+local function profile_list(ctx, x, y, w)
+    local st, call = ctx.st, ctx.call
     local ex = st.expression
-    local lx, ly = x + (two and lw + 12 or 0), two and cy or (cy + h1 + 12)
-    local h2 = list_box(ctx, "表情配置", lx, ly, lw, pr.expression or {}, function(e, rx, ry, rw)
+    return list_box(ctx, "表情配置", x, y, w, st.presets.expression or {}, function(e, rx, ry, rw)
         local cur = ex.profile and ex.profile.id == e.id
         D.text_mid(e.name, rx, ry, 32, cur and C.brass or C.text, W.body(), rw * 0.5)
         D.text_mid(L.tr(SOURCE[e.source] or e.source) .. (e.extends and L.f(" · 继承 %s", e.extends) or ""), rx + rw * 0.5, ry, 32,
@@ -169,9 +165,23 @@ function Page.draw(ctx, x, y, w)
         end
         if not cur and W.tbutton("使用", bx, ry + 5) then call("set_profile", { id = e.id }) end
     end)
-    if two then cy = cy + max(h1, h2) else cy = ly + h2 end
-    cy = cy + 10
-    return cy + 22 - y
+end
+
+local TABS = { { "binding", "总体绑定" }, { "sculpt", "捏脸配置" }, { "profile", "表情配置" } }
+
+function Page.draw(ctx, x, y, w)
+    local tab, th = W.tabs(ctx.state, x, y, w, TABS)
+    local cy = y + th
+    cy = cy + confirm_bar(ctx, x, cy, w)
+    if tab == "sculpt" then
+        cy = cy + sculpt_list(ctx, x, cy, w)
+    elseif tab == "profile" then
+        cy = cy + profile_list(ctx, x, cy, w)
+    else
+        cy = cy + binding_card(ctx, x, cy, w) + 10
+        cy = cy + tuning_line(ctx, x, cy, w)
+    end
+    return cy + 10 - y
 end
 
 return Page

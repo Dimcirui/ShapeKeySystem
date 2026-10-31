@@ -1,8 +1,9 @@
 -- ShapeKeySystem panel, advanced page "条件规则" (formerly 条件表情; rules can drive sculpt keys
 -- too). Only the UI was renamed: the backend keeps "conditions" (cond_* commands, conditions/*.json,
--- binding field) so existing player files still load. Pages: condition sets (pick / new / save / delete),
--- states in priority order with their rules, expression clips (keys, fades, preview) and the
--- live value of every condition. Edits go through cond_edit with a full copy of the set.
+-- binding field) so existing player files still load. Condition sets (pick / new / save / delete) on
+-- top, then the tab 条件状态 (states in priority order with their rules) or 形态键配置组合
+-- (expression clips: keys, fades, preview); the live value of every condition is shown on both.
+-- Edits go through cond_edit with a full copy of the set.
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -212,15 +213,9 @@ local function rules_text(st, rules)
     return #parts == 0 and L.tr("没有规则") or table.concat(parts, L.tr("  或者  "))
 end
 
--- section title that folds its section; click_w leaves room for buttons drawn on the right
-local function section_head(s, key, title, stat, x, y, click_w)
-    s.fold = s.fold or {}
-    local open = not s.fold[key]
-    D.icon_tri(x + 6, y + 10, 4, open, C.brass)
-    local tw = W.h2(title, x + 18, y)
-    if stat then D.text(stat, x + 28 + tw, y + 2, C.muted, W.small()) end
-    if I.click(x, y - 2, click_w, 26) then s.fold[key] = open end
-    return open
+local function section_head(title, stat, x, y)
+    local tw = W.h2(title, x, y)
+    if stat then D.text(stat, x + 10 + tw, y + 2, C.muted, W.small()) end
 end
 
 -- ---------------------------------------------------------------- states
@@ -228,9 +223,8 @@ local function states_section(ctx, x, y, w)
     local st, live, s = ctx.st, ctx.live, ctx.state
     local data = st.conditions.current.data
     local cy = y
-    local open = section_head(s, "states", "状态", L.f("%d 个", #data.states), x, cy, w)
+    section_head("状态", L.f("%d 个", #data.states), x, cy)
     cy = cy + 28
-    if not open then return cy + 4 - y end
     D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效；组合选「-」可临时停用", x, cy, C.faint, W.small(), w); cy = cy + 24
     local clip_ids = {}
     for id in pairs(data.clips) do clip_ids[#clip_ids + 1] = id end
@@ -346,18 +340,16 @@ local function clips_section(ctx, x, y, w)
     local ids = {}
     for id in pairs(data.clips) do ids[#ids + 1] = id end
     table.sort(ids)
-    local open_all = section_head(s, "clips", "形态键配置组合", L.f("%d 个", #ids), x, cy, w - 120)
+    section_head("形态键配置组合", L.f("%d 个", #ids), x, cy)
     if W.button("＋ 新建组合", x + w - 110, cy - 2, 110, 26, { font = W.small() }) then
         W.start_text(s, "clip_form", { title = "新建形态键配置组合", on_submit = function(name)
             if name == "" then return end
             edit(ctx, function(d) if not d.clips[name] then d.clips[name] = { values = {}, fade_in = 0.15, fade_out = 0.3 } end end)
             s.open_clip = name
-            s.fold.clips = nil
         end })
     end
     cy = cy + 32
     cy = cy + W.text_form(s, "clip_form", "conditions_clip", x, cy, w)
-    if not open_all then return cy - y end
     local playing = live.cond and live.cond.playing
     -- keys a clip can use: every merged mesh key
     local key_items = W.shape_key_items(st.sculpt, s)
@@ -466,17 +458,21 @@ local function live_section(ctx, x, y, w)
     return h
 end
 
+local TABS = { { "states", "条件状态" }, { "clips", "形态键配置组合" } }
+
 function Page.draw(ctx, x, y, w)
     local st = ctx.st
-    local cy = y + top_bar(ctx, x, y, w) + 10
+    local tab, th = W.tabs(ctx.state, x, y, w, TABS)
+    local cy = y + th
+    cy = cy + top_bar(ctx, x, cy, w) + 10
     if not st.conditions.current then
         D.text("满足一定条件时应用指定表情。", x, cy, C.muted, W.small(), w)
         cy = cy + 30
         return cy + live_section(ctx, x, cy, w) - y
     end
+    local section = tab == "clips" and clips_section or states_section
     if w < 900 then
-        cy = cy + states_section(ctx, x, cy, w) + 6
-        cy = cy + clips_section(ctx, x, cy, w) + 10
+        cy = cy + section(ctx, x, cy, w) + 10
         cy = cy + live_section(ctx, x, cy, w)
         return cy - y
     end
@@ -484,8 +480,7 @@ function Page.draw(ctx, x, y, w)
     local rw = min(400, max(300, floor(w * 0.32)))
     local lw = w - rw - 12
     local top = cy
-    local ly = top + states_section(ctx, x, top, lw) + 6
-    ly = ly + clips_section(ctx, x, ly, lw)
+    local ly = top + section(ctx, x, top, lw)
     local lh = ly - top
     local rh = live_height(ctx, rw)
     local clip = D.get_clip()

@@ -313,7 +313,7 @@ function E.open(ctx, name, signal)
     ctx.state.name_form = nil
     ctx.state.mapping_draft = { entry = U.copy(entry), original_name = name,
         profile_id = ctx.st.mapping.profile_id, closed = {}, dirty = false, confirm_delete = false, selected = nil }
-    W.reset_scroll("page:expr")
+    W.reset_scroll(ctx.scroll_id)
 end
 
 local function names_text(list) return table.concat(list or {}, "; ") end
@@ -338,12 +338,12 @@ function E.draw_draft(ctx, x, y, w)
         if ctx.call("set_mapping", { entry = e, create = draft.original_name == nil }) then
             ctx.state.mapping_draft = nil
             ctx.toast("info", "映射已应用，保存配置后可保留")
-            W.reset_scroll("page:expr")
+            W.reset_scroll(ctx.scroll_id)
             return 72
         end
     end
     if W.button("取消编辑", x + 118, cy, 100, 28) then
-        ctx.state.mapping_draft = nil; W.reset_scroll("page:expr"); return 72
+        ctx.state.mapping_draft = nil; W.reset_scroll(ctx.scroll_id); return 72
     end
     if draft.original_name and W.button("删除映射", x + 226, cy, 100, 28, { kind = "danger" }) then draft.confirm_delete = true end
     if draft.dirty then D.text_mid("草稿未应用", x + 342, cy, 28, C.warn, W.small(), w - 352) end
@@ -352,7 +352,7 @@ function E.draw_draft(ctx, x, y, w)
         cy = line("删除此映射？仍被其他映射引用时无法删除。", x + 10, cy, w - 20, C.warn)
         if W.button("确认删除", x + 10, cy, 100, 28, { kind = "danger" }) then
             if ctx.call("remove_mapping", { name = draft.original_name }) then
-                ctx.state.mapping_draft = nil; W.reset_scroll("page:expr"); return cy - y + 36
+                ctx.state.mapping_draft = nil; W.reset_scroll(ctx.scroll_id); return cy - y + 36
             end
         end
         if W.button("保留映射", x + 118, cy, 100, 28) then draft.confirm_delete = false end

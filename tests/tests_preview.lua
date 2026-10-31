@@ -1,4 +1,4 @@
--- 表情详情: choosing a profile in the list shows it below (read-only) before 应用
+-- 表情 → 映射配置: choosing a profile in the list shows it below (read-only) before 应用
 local SKS = require("ShapeKeySystem_Core.API")
 local Panel = require("ShapeKeySystem_UI.Panel")
 local st = SKS.state
@@ -33,9 +33,10 @@ check(ex.preview and ex.preview.id == other, "preview survives a rescan")
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 local adv_was = st.runtime.advanced
 SKS.call("set_setting", { key = "advanced", value = true })
-Panel.ui.page = "expr"
-local ps = Panel.ui.page_state.expr or {}
-Panel.ui.page_state.expr = ps
+Panel.ui.page = "basic"
+local ps = Panel.ui.page_state.basic or {}
+Panel.ui.page_state.basic = ps
+ps.tab = "mapping"
 local plist = st.presets.expression
 for i, p in ipairs(plist) do if p.id == other then ps.pick_profile = i end end
 ps.collapsed, ps.filter, ps.only_active = {}, nil, false
@@ -43,7 +44,9 @@ frame(); frame()
 check(find("正在浏览：") ~= nil, "browse banner shown")
 PREVIEW_CMDS = CMDS
 check(find("应用") ~= nil and find("取消") ~= nil, "应用 / 取消 offered")
-check(find("测试") == nil, "read-only: no 测试 buttons while browsing")
+local test_button = false
+for _, d in ipairs(DRAWS) do if d.s == "测试" then test_button = true end end
+check(not test_button, "read-only: no 测试 buttons while browsing")
 local first = pv.channels[pv.groups[1].channel_slots[1]]
 check(find(first.label or first.name) ~= nil, "a channel of the browsed profile is listed: " .. (first.label or first.name))
 -- 取消 -> back to the active profile, preview cleared
@@ -59,9 +62,9 @@ check(ex.preview == nil, string.format("applying the browsed profile ends the pr
 SKS.call("set_profile", { id = active }); ticks(2)
 SKS.call("set_setting", { key = "advanced", value = adv_was == true })
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
--- 设置与调试 → 关于: version, author, latest release notes (Core/Version.lua)
+-- 设置与调试 → 基础设置 → 关于: version, author, latest release notes (Core/Version.lua)
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
-Panel.ui.page = "debug"; frame(); frame()
+Panel.ui.page = "debug"; Panel.ui.page_state.debug = { tab = "settings" }; frame(); frame()
 local Version = require("ShapeKeySystem_Core.Version")
 -- every "；"-separated item of the notes is a line of its own
 local notes_shown = true

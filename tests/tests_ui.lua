@@ -32,6 +32,14 @@ local function click_text(s, exact, dx)
     click_at(d.x + (dx or 4), d.y + 6)
     return true
 end
+-- rail entries and their tabs, in the order the panel shows them
+local PAGE_TABS = {
+    { "表情", { "总览", "映射配置", "自动表情", "面部动画测试" } },
+    { "捏脸" },
+    { "条件规则", { "条件状态", "形态键配置组合" } },
+    { "总体绑定管理", { "总体绑定", "捏脸配置", "表情配置" } },
+    { "设置与调试", { "基础设置", "调试" } },
+}
 local VK_END = 0x2E   -- Delete (default since 2026-10-10)
 local function hotkey()
     KEYS[VK_END] = true; frame(); KEYS[VK_END] = false; frame()
@@ -53,7 +61,7 @@ check(not SKS.call("set_setting", { key = "hotkey_mod", value = "Win" }), "hotke
 SKS.call("set_setting", { key = "hotkey_combo", value = false })
 check(find("SHAPEKEYSYSTEM", true) ~= nil, "title drawn")
 check(find("表情", true) and find("捏脸", true), "basic rail entries")
-check(not find("表情详情", true), "advanced entries hidden")
+check(not find("条件规则", true) and not find("映射配置", true), "advanced entries and tabs hidden")
 -- face styles come from Faces.lua (other session's work): only checked when a style is installed
 check(#DRAWN_IMAGES == 0 or has_image("face_lines.png"), "basic page: face line art drawn (when a face style exists)")
 check(st.runtime.ui_open == true, "backend told the panel is open")
@@ -90,7 +98,8 @@ SKS.call("set_setting", { key = "font_scale", value = 1.0 }); frame()
 click_text("进阶", true, -30)
 check(st.runtime.advanced == true, "进阶 toggle -> settings.advanced")
 frame()
-check(find("表情详情", true) ~= nil, "advanced rail entries shown")
+check(find("条件规则", true) ~= nil and find("总体绑定管理", true) ~= nil, "advanced rail entries shown")
+check(not find("表情详情", true) and not find("总体绑定与配置", true), "merged pages are not in the rail")
 
 -- master gain slider: drag from the left end to the right end
 local lbl = find("表情强度", true)
@@ -105,18 +114,21 @@ if lbl then
 end
 
 -- face zone click selects the region shown in the card
-click_text("在表情详情中查看", false)
-check(Panel.ui.page == "expr", "region card button jumps to 表情详情")
+check(find("总览", true) and find("映射配置", true) and find("自动表情", true) and find("面部动画测试", true),
+    "表情 page: 总览 | 映射配置 | 自动表情 | 面部动画测试 tabs")
+click_text("在映射配置中查看", false)
+check(Panel.ui.page == "basic" and Panel.ui.page_state.basic.tab == "mapping", "region card button opens the 映射配置 tab")
 frame()
-check(find("ARKit 覆盖", false) ~= nil or find("表情配置", true) ~= nil, "表情详情 page drawn")
--- 自动表情 section: closed by default, the switch submits set_procedural (a tall window shows the page's end)
+check(find("点击形态键名称展开映射配置", false) ~= nil and not find("表情强度", true), "映射配置 tab drawn, 总览 gone")
+-- 自动表情 tab: the switch submits set_procedural (a tall window shows the whole tab)
 local h_before = Panel.ui.win.h
 Panel.ui.win.h = 3000; frame()
-check(find("自动表情", true) ~= nil and not find("自动眨眼", true), "自动表情 header drawn, section closed")
-Panel.ui.page_state.expr.procedural_open = true; frame()
+check(not find("自动眨眼", true), "自动表情 rows are not on the 映射配置 tab")
+click_text("自动表情", true)
+check(Panel.ui.page_state.basic.tab == "procedural", "tab click: 自动表情")
 check(find("启用", true) and find("合成方式", true) and find("自动眨眼", true) and find("眨眼频率", true)
     and find("眨眼速度", true) and find("视线微动", true) and find("微动幅度", true) and find("微微张嘴", true)
-    and find("张嘴幅度", true), "自动表情 section: switch, mode, blink, gaze and mouth rows")
+    and find("张嘴幅度", true), "自动表情 tab: switch, mode, blink, gaze and mouth rows")
 check(find("秒眨一次", false) ~= nil and find("本游戏自带眨眼", false) ~= nil and find("本游戏有眼球角度", false) ~= nil,
     "interval line and the Wilds hints")
 SNAPS[#SNAPS + 1] = { name = "自动表情", cmds = CMDS }
@@ -128,13 +140,25 @@ local gaze_on = st.procedural.gaze.enabled
 click_text("视线微动", true, -20)
 check(st.procedural.gaze.enabled == not gaze_on, "the gaze switch toggles state.procedural.gaze.enabled")
 SKS.call("set_procedural", { patch = { gaze = { enabled = gaze_on } } })
-Panel.ui.page_state.expr.procedural_open = nil
+click_text("面部动画测试", true)
+check(Panel.ui.page_state.basic.tab == "playback" and find("播放录制", true) ~= nil, "面部动画测试 tab: open without a fold")
+-- 进阶 off: the advanced tabs go away and the page falls back to 总览
+SKS.call("set_setting", { key = "advanced", value = false }); frame(); frame()
+check(Panel.ui.page_state.basic.tab == "overview" and not find("总览", true) and find("表情强度", true) ~= nil,
+    "进阶 off: no tab row, 总览 shown")
+SKS.call("set_setting", { key = "advanced", value = true }); frame()
 Panel.ui.win.h = h_before; frame()
 
 -- debug page
 click_text("设置与调试", true)
 check(Panel.ui.page == "debug", "rail: 设置与调试")
-check(find("界面设置", true) and find("SKS 设置", true) and find("性能", true), "debug page cards drawn")
+check(find("基础设置", true) and find("调试", true) and find("界面设置", true) and find("SKS 设置", true)
+    and find("关于", true) and not find("性能", true), "设置与调试 opens on 基础设置: settings and about")
+local native = st.native_signals and st.native_signals.available
+check((find("动画录制", true) ~= nil) == (native == true), "动画录制 tab only where native signals exist")
+click_text("调试", true)
+check(Panel.ui.page_state.debug.tab == "debug" and find("性能", true) and find("场景", true) and find("日志", true)
+    and find("其他插件的控制", true) and not find("界面设置", true), "调试 tab: performance, external control, scene, log")
 check(Panel.ui.page_state.debug.perf_details ~= true, "performance details are collapsed by default")
 Panel.ui.page_state.debug.perf_details = true
 local previous_height = Panel.ui.win.h
@@ -263,19 +287,23 @@ MOUSE.x = MOUSE.x + 50; frame()
 MOUSE.down = false; frame(); CB.tick()
 check(st.settings.window.x == w0 + 50, "title drag moves the window and saves it")
 
--- every page draws without a page error
-for _, name in ipairs({ "表情", "捏脸", "表情详情", "条件规则", "设置与调试" }) do
-    click_text(name, true); MOUSE.x, MOUSE.y = 1500, 900; frame()
-    local e = find("页面出错", false)
-    if SHOT_LANG then
-        -- the screenshot in another language; the page is found and checked in Chinese
-        SKS.call("set_setting", { key = "language", value = SHOT_LANG }); frame()
-        SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
-        SKS.call("set_setting", { key = "language", value = "zh" }); frame()
-    else
-        SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
+-- every page and every tab draws without a page error
+for _, pt in ipairs(PAGE_TABS) do
+    click_text(pt[1], true); MOUSE.x, MOUSE.y = 1500, 900; frame()
+    for _, tab in ipairs(pt[2] or { false }) do
+        local name = tab and (pt[1] .. " · " .. tab) or pt[1]
+        if tab then click_text(tab, true); MOUSE.x, MOUSE.y = 1500, 900; frame() end
+        local e = find("页面出错", false)
+        if SHOT_LANG then
+            -- the screenshot in another language; the page is found and checked in Chinese
+            SKS.call("set_setting", { key = "language", value = SHOT_LANG }); frame()
+            SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
+            SKS.call("set_setting", { key = "language", value = "zh" }); frame()
+        else
+            SNAPS[#SNAPS + 1] = { name = name, cmds = CMDS }
+        end
+        check(e == nil, "page " .. name .. " draws" .. (e and (": " .. e.s) or ""))
     end
-    check(e == nil, "page " .. name .. " draws" .. (e and (": " .. e.s) or ""))
 end
 local logged = 0
 for _, l in ipairs(st.debug.log) do if l.text:find("panel", 1, true) then logged = logged + 1; print("  log:", l.text) end end
@@ -376,14 +404,19 @@ check(title ~= nil, "imgui: title drawn from re.on_frame")
 check(title and title.c == 0xFF4AA2D6, "imgui: colours converted ARGB -> ABGR")
 check(n_frame == #DRAWS, "imgui: the d2d callback draws nothing")
 check(#DRAWN_IMAGES == 0 and #IMGUI_ERR == 0, "imgui: no images; points are {x, y}, colours integers" .. (IMGUI_ERR[1] and (": " .. IMGUI_ERR[1]) or ""))
-for _, name in ipairs({ "表情", "捏脸", "表情详情", "条件规则", "设置与调试" }) do
-    iclick(name); MOUSE.x, MOUSE.y = 1500, 900; iframe()
-    local e = find("页面出错", false)
-    check(e == nil and #IMGUI_ERR == 0, "imgui: page " .. name .. " draws" .. (e and (": " .. e.s) or "") .. (IMGUI_ERR[1] and (": " .. IMGUI_ERR[1]) or ""))
-    if name == "表情" then
-        check(find("表情配置", true) ~= nil and #DRAWN_IMAGES == 0, "imgui: basic page draws its controls without the face art")
+for _, pt in ipairs(PAGE_TABS) do
+    iclick(pt[1]); MOUSE.x, MOUSE.y = 1500, 900; iframe()
+    for _, tab in ipairs(pt[2] or { false }) do
+        local name = tab and (pt[1] .. " · " .. tab) or pt[1]
+        if tab then iclick(tab); MOUSE.x, MOUSE.y = 1500, 900; iframe() end
+        local e = find("页面出错", false)
+        check(e == nil and #IMGUI_ERR == 0, "imgui: page " .. name .. " draws" .. (e and (": " .. e.s) or "") .. (IMGUI_ERR[1] and (": " .. IMGUI_ERR[1]) or ""))
+        if tab == "总览" then
+            check(find("表情配置", true) ~= nil and #DRAWN_IMAGES == 0, "imgui: basic page draws its controls without the face art")
+        end
     end
 end
+iclick("基础设置"); iframe()
 check(find("绘制方式", true) ~= nil and find("ImGui（REFramework", false) ~= nil, "imgui: settings show the backend")
 -- d2d not installed: auto draws with imgui; neither backend: the panel stays closed
 local saved_d2d = d2d

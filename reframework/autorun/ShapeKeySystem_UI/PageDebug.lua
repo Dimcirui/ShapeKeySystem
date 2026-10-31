@@ -1,4 +1,6 @@
--- ShapeKeySystem panel, advanced page "设置与调试": settings, per-stage timing, scan info, log.
+-- ShapeKeySystem panel, advanced page "设置与调试". Tabs: 基础设置 (interface and SKS settings, about),
+-- 调试 (per-stage timing, external control, scan info, log) and, on games with native signals,
+-- 动画录制 (native signal diagnosis and recording).
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -325,8 +327,7 @@ local function note_lines(notes)
     end
 end
 
--- author, version and the latest two release notes; h = the space it may use (fills the gap under
--- the performance card in the two-column layout), grown to fit every line
+-- author, version and the latest two release notes; h = the space it may use, grown to fit every line
 local function about_card(ctx, x, y, w, h)
     local shown = {}
     for i = 1, min(2, #Version.history) do shown[i] = note_lines(Version.history[i].notes) end
@@ -354,26 +355,42 @@ local function about_card(ctx, x, y, w, h)
     return h
 end
 
-function Page.draw(ctx, x, y, w)
-    local cy = y
-    local two = w >= 760
-    if two then
-        local lw = (w - 12) * 0.55
-        local h1 = settings_card(ctx, x, cy, lw)
-        local h2 = perf_card(ctx, x + lw + 12, cy, w - lw - 12)
-        local h3 = about_card(ctx, x + lw + 12, cy + h2 + 12, w - lw - 12, h1 - h2 - 12)
-        cy = cy + max(h1, h2 + 12 + h3) + 12
-    else
-        cy = cy + settings_card(ctx, x, cy, w) + 12
-        cy = cy + perf_card(ctx, x, cy, w) + 12
-        cy = cy + about_card(ctx, x, cy, w) + 12
+local function settings_tab(ctx, x, y, w)
+    if w < 760 then
+        local h1 = settings_card(ctx, x, y, w)
+        return h1 + 12 + about_card(ctx, x, y + h1 + 12, w)
     end
-    cy = cy + external_card(ctx, x, cy, w) + 12
+    local lw = (w - 12) * 0.55
+    local h1 = settings_card(ctx, x, y, lw)
+    local h2 = about_card(ctx, x + lw + 12, y, w - lw - 12)
+    return max(h1, h2)
+end
+
+local function debug_tab(ctx, x, y, w)
+    local cy = y
+    if w >= 760 then
+        local lw = (w - 12) * 0.55
+        local h1 = perf_card(ctx, x, cy, lw)
+        local h2 = external_card(ctx, x + lw + 12, cy, w - lw - 12)
+        cy = cy + max(h1, h2) + 12
+    else
+        cy = cy + perf_card(ctx, x, cy, w) + 12
+        cy = cy + external_card(ctx, x, cy, w) + 12
+    end
     cy = cy + scene_card(ctx, x, cy, w) + 12
-    local nh = native_card(ctx, x, cy, w)
-    if nh > 0 then cy = cy + nh + 12 end
     cy = cy + log_card(ctx, x, cy, w)
     return cy - y
+end
+
+function Page.draw(ctx, x, y, w)
+    local tabs = { { "settings", "基础设置" }, { "debug", "调试" } }
+    local ns = ctx.st.native_signals
+    if ns and ns.available then tabs[3] = { "record", "动画录制" } end
+    local tab, th = W.tabs(ctx.state, x, y, w, tabs)
+    local cy = y + th
+    if tab == "debug" then return th + debug_tab(ctx, x, cy, w) end
+    if tab == "record" then return th + native_card(ctx, x, cy, w) end
+    return th + settings_tab(ctx, x, cy, w)
 end
 
 return Page
