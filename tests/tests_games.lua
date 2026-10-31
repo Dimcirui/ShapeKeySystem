@@ -17,13 +17,14 @@ check(Games.pick("unsupported_test_game") == nil and Games.pick(nil) == nil, "an
 local Onimusha = Games.pick("onimusha_wots")
 check(Onimusha and Onimusha.raw and Onimusha.bind and Onimusha.read,
     "onimusha_wots picks the bsControl adapter")
--- face mirror: Wilds and RE4R each build their own, with their own joints; the others have none
+-- face mirror: Wilds, RE4R and Onimusha each build their own, with their own joints
 local RE4 = Games.pick("re4")
 check(Wilds.face_mirror and RE4 and RE4.face_mirror and Wilds.face_mirror ~= RE4.face_mirror
     and Wilds.face_mirror.view.binds[4].id == "COG" and RE4.face_mirror.view.binds[4].id == "Hip"
     and Wilds.face_mirror.view.binds[2].id == "Neck_0" and RE4.face_mirror.cfg.rigs.Neck_0
-    and RE4.face_mirror.cfg.rigs.Hip and not RE4.face_mirror.cfg.rigs.COG and Onimusha.face_mirror == nil,
-    "face mirror per game: Wilds COG, RE4R Hip, none on Onimusha")
+    and RE4.face_mirror.cfg.rigs.Hip and not RE4.face_mirror.cfg.rigs.COG and Onimusha.face_mirror
+    and Onimusha.face_mirror ~= Wilds.face_mirror and Onimusha.face_mirror.view.binds[4].id == "COG",
+    "face mirror per game: Wilds and Onimusha COG, RE4R Hip")
 local rp, wp = RE4.face_mirror.part, Wilds.face_mirror.part
 check(rp("head", "_chainsaw/character/ch/cha0/cha000/10/cha000_10.mesh") == "head"
     and rp("hair", "_chainsaw/character/ch/cha0/cha000/20/cha000_20.mesh") == "head"
@@ -37,11 +38,20 @@ check(wp("Player_Face", "") == "head" and wp("ch03_012_0013", "") == "helm" and 
     and wp("WpSub_ReserveParent", "") == "weapon" and wp("HunterKnifeBase_R", "") == "weapon"
     and wp("SlingerRope", "") == "weapon" and wp("HeadToHip", "") == "other",
     "Wilds face mirror parts: face, armour by slot, accessories, weapons, other")
+local op = Onimusha.face_mirror.part
+check(op("Head", "art/model/character/ch0/ch001_00/20/ch001_00_20.mesh") == "head" and op("OniHead", "") == "head"
+    and op("Body", "") == "body" and op("Gauntlet", "") == "body" and op("Amulet", "") == "body" and op("OniBody", "") == "body"
+    and op("Cloak", "") == "cloak" and op("Gm800_000_00", "art/model/item/it0/it000_0210/it000_0210_00.mesh") == "weapon"
+    and op("Body_Obstacle", "") == "other",
+    "Onimusha face mirror parts: head / hair, body, cloak, swords and items, other")
 check(Wilds.face_mirror.cfg.hide.weapon == true and Wilds.face_mirror.cfg.hide.legs == false
     and RE4.face_mirror.cfg.hide.weapon == true and RE4.face_mirror.cfg.hide.body == false and RE4.face_mirror.cfg.hide.legs == nil,
     "face mirror hide defaults per game: weapons hidden")
-check(RE4.face_mirror.cfg.clip_front == 1 and Wilds.face_mirror.cfg.clip_front == 0.2,
-    "face mirror clip range: wide in RE4R (isolated), narrow in Wilds")
+check(RE4.face_mirror.cfg.clip_front == 1 and Wilds.face_mirror.cfg.clip_front == 0.2
+    and Onimusha.face_mirror.cfg.clip_front == 0.2 and Onimusha.face_mirror.cfg.hide.weapon == true
+    and Wilds.face_mirror.cfg.follow_meter == true and Wilds.face_mirror.cfg.ev == -2
+    and Onimusha.face_mirror.cfg.follow_meter == false and Onimusha.face_mirror.cfg.ev == 0,
+    "face mirror per-game defaults: clip range (wide in RE4R, isolated), weapons hidden, Onimusha meters on its own")
 
 -- the entry script run again; returns what it registered, hooked, wrote and showed
 local function run_entry(game)
@@ -90,6 +100,75 @@ for _, f in ipairs(lua_files("ShapeKeySystem_Games")) do
 end
 sdk = real_sdk
 
+-- Onimusha conditions: HP, PlayerManager queries, oni gauges, action state bits, battle, lock-on and
+-- speech of the controlling player; a new player context gives no HP for one sample (Core then
+-- drops the baseline)
+do
+    local OC = Onimusha.conditions
+    local function obj(addr, methods, fields)
+        return { get_address = function() return addr end,
+            get_field = function(_, n) return fields and fields[n] end,
+            call = function(_, m) local v = methods[m]; if type(v) == "function" then return v() end; return v end }
+    end
+    local addr = 1
+    local ENUM = { IDLE = 1, STAND = 2, ATTACK = 4, GUARD_WAIT = 8, DAMAGE = 16 }
+    local health = obj(10, { get_Health = 605, get_MaxHealth = 1210 })
+    local player = obj(11, { get_IsOniModeOn = true, get_OniEnergy = 1000, get_OniEnergyMax = 1250,
+        get_OniChangeEnergy = 0, get_OniChangeEnergyMax = 1000, isOniUltimateAttackEnergyMax = false })
+    local character = obj(12, { get_IsEventStart = false, getActionState = ENUM.STAND | ENUM.ATTACK })
+    local context = function()
+        return obj(addr, { get_Chara = obj(4, { get_HealthManager = health }), get_Player = player })
+    end
+    local manager = obj(2, { isPlayerDead = false, isPlayerDying = true, isUseItemAction = false,
+        isWallRunAction = false, isReviveAction = false, isDeadHeatAction = false, isOniGateAbsorption = false,
+        getInternalLockOnTarget = obj(13, {}),
+        getControllingPlayer = function()
+            return obj(3, { get_Context = context, get_Character = character, get_CharacterEntity = obj(14, {
+                get_SubWeapon = obj(15, { isSubWeaponActionBowTwoHand = true, isSubWeaponActionBowQuickShot = false }),
+                get_AutoWeaponOnOffSupporter = obj(16, { isWeaponOn = true }) }) })
+        end })
+    local work = obj(20, { get_Finished = false, get_Param = function()
+        return obj(21, { get_ContextHolder = obj(1, {}) })
+    end })
+    local singletons = {
+        ["app.PlayerManager"] = manager,
+        ["app.EnemyManager"] = obj(30, { isCheckBattleMode = true, isCheckBossBattleMode = false }),
+        ["app.SpeakManager"] = obj(31, { isWorking = true }, { _SingleWorkManager = obj(32, { get_Work = work }) }),
+        ["app.PauseManager"] = obj(33, { get_IsMenuPause = false }),
+    }
+    local enum = { get_field = function(_, n)
+        return { get_data = function() if ENUM[n] then return ENUM[n] end; return 0 end }
+    end }
+    local keep_sdk = sdk
+    sdk = { get_managed_singleton = function(n) return singletons[n] end,
+        find_type_definition = function(n) return n == "app.CharacterDef.ACTION_STATE_BIT" and enum or nil end }
+    OC.reset()
+    local V = {}
+    local sampled = OC.sample(V)
+    check(sampled and V.hp == 605 and V.hp_max == 1210 and V.dying == true and V.dead == false
+        and V.oni_mode == true and V.oni_energy_pct == 80 and V.oni_change_pct == 0
+        and V.oni_ultimate_ready == false, "Onimusha conditions read HP, player queries and oni gauges")
+    check(V.act_stand == true and V.act_attack == true and V.act_idle == false and V.act_damage == false
+        and V.act_parry == nil, "Onimusha conditions: action state bits, unknown bits unread")
+    check(V.in_battle == true and V.boss_battle == false and V.lock_on == true and V.menu_pause == false
+        and V.event_start == false, "Onimusha conditions: battle, boss, lock-on, pause and event")
+    check(V.anyone_speaking == true and V.player_speaking == true, "Onimusha conditions: the player speaks")
+    check(V.bow_aim == true and V.bow_quick_shot == false and V.weapon_on == true,
+        "Onimusha conditions: bow aim, quick shot and drawn weapon")
+    addr = 5
+    V = {}
+    OC.sample(V)
+    check(V.hp == nil and V.dying == true, "Onimusha conditions: a new player context skips one HP sample")
+    check(V.anyone_speaking == true and V.player_speaking == false, "Onimusha conditions: someone else speaks")
+    sdk = { get_managed_singleton = function() return nil end }
+    check(OC.sample({}) == false, "Onimusha conditions: no player manager samples nothing")
+    sdk = keep_sdk
+    local ids = {}
+    for _, d in ipairs(OC.defs) do ids[d.id] = true end
+    check(ids.hp_pct and ids.dead and ids.oni_mode and ids.oni_energy_pct and ids.use_item and ids.act_guard_wait
+        and ids.player_speaking, "Onimusha conditions define HP %, dead, oni, item use, guard and speech")
+end
+
 -- Core and UI name no game: no app.* / snow.* types, fcParam joints or ch02 / ch03 parts outside comments
 local TOKENS = { "app.", "snow.", "fcParam_", "ch02", "ch03" }
 local hits = {}
@@ -126,6 +205,18 @@ for _, A in ipairs(Games.list) do
     end
     check((#sig.list > 0 or (sig.none and A.raw == nil)) and #bad == 0,
         A.id .. ": every builtin profile compiles " .. table.concat(bad, "; "))
+    if A.id == "onimusha_wots" then
+        -- bsControl signals fall back to the face bones the auto lip and talk motions move
+        local n, lost = 0, {}
+        for _, s in ipairs(sig.list) do
+            if s.fallback then
+                n = n + 1
+                if s.key == nil or s.key >= 1000 or #s.fallback ~= 1 or s.fallback[1] < 1000 then lost[#lost + 1] = s.name end
+            end
+        end
+        check(n == 25 and #lost == 0 and sig.by_name.jawOpen.fallback and sig.by_name["blink.L"].fallback,
+            "onimusha_wots: 25 bsControl signals fall back to one bone signal each (" .. n .. ") " .. table.concat(lost, ", "))
+    end
 end
 Profile.adapter = keep
 Profile.load_signals()

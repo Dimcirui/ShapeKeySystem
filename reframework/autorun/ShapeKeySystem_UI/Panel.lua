@@ -204,13 +204,25 @@ local function draw_statusbar(st, x, y, w)
 end
 
 -- notices from the backend + local toasts, newest last. Returns the height used.
+-- An info notice is dismissed NOTICE_SEC after the panel first shows it; warnings and errors stay
+-- until closed.
+local NOTICE_SEC = 10
 local function draw_notices(st, x, y, w)
     local items = {}
     local now_c = os.clock()
     for i = #ui.toasts, 1, -1 do
         if ui.toasts[i].until_t < now_c then table.remove(ui.toasts, i) end
     end
-    for _, n in ipairs(st.runtime.notices or {}) do items[#items + 1] = { backend = true, n = n } end
+    ui.notice_seen = ui.notice_seen or {}
+    for _, n in ipairs(st.runtime.notices or {}) do
+        local seen = ui.notice_seen[n.id] or now_c
+        ui.notice_seen[n.id] = seen
+        if n.level == "info" and now_c - seen >= NOTICE_SEC then
+            call("dismiss_notice", { id = n.id })
+        else
+            items[#items + 1] = { backend = true, n = n }
+        end
+    end
     for _, t in ipairs(ui.toasts) do items[#items + 1] = { n = t } end
     local first = max(1, #items - 2)
     local cy = y

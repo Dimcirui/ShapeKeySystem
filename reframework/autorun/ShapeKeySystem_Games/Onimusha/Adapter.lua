@@ -12,6 +12,7 @@
 -- turns; the drawn head is the face, and child_tag adds the draw state so the switch rescans.
 -- Every part of the player belongs to one model, "musashi": one binding for the whole character.
 local BoneReads = require("ShapeKeySystem_Core.BoneReads")
+local FaceMirror = require("ShapeKeySystem_Games.FaceMirror")
 local L = require("ShapeKeySystem_Core.I18n")
 
 local A = {
@@ -19,6 +20,36 @@ local A = {
     name = "Onimusha: Way of the Sword",
     terms = { primary = "主角色", part = "部件" },
     input = require("ShapeKeySystem_Games.Onimusha.Input"),
+    conditions = require("ShapeKeySystem_Games.Onimusha.Conditions"),
+    -- the GUI is a one-texture library GUI (the system image plane never built a view here); every
+    -- mesh in the scene carries every output bit, as in MH Wilds, so the background is cut by the
+    -- clip range alone; the mirror meters on its own
+    face_mirror = FaceMirror.new({
+        rtex = "GUI/ui_texture/tex_render/rtt_facemirror_oni_00.rtex",
+        gui_asset = "GUI/ui000000/ui000500/lib000500.gui", gui_elem = "tex_Logo", gui_folder = "HUD",
+        main_camera = "Main Camera",
+        binds = { { id = "Head", name = "头部（Head）" }, { id = "Neck_0", name = "脖子（Neck_0）" }, { id = "Spine_2", name = "胸部（Spine_2）" },
+                  { id = "COG", name = "重心（COG）" } },
+        rigs = {
+            Head = { dist = 0.6, aim = { x = 0, y = 0.07, z = 0.08 }, rot = { x = -6, y = 0, z = 0 } },
+            Neck_0 = { dist = 0.6, aim = { x = 0, y = 0.12, z = 0.08 }, rot = { x = -6, y = 0, z = 0 } },
+            Spine_2 = { dist = 0.6, aim = { x = 0, y = 0.2, z = 0.1 }, rot = { x = -6, y = 0, z = 0 } },
+            COG = { dist = 0.6, aim = { x = 0, y = 0.45, z = 0.1 }, rot = { x = -6, y = 0, z = 0 } },
+        },
+        parts = { { id = "body", name = "躯干" }, { id = "cloak", name = "披风" }, { id = "weapon", name = "武器", hide = true } },
+        -- the head with its hair (OniHead in the demon form); swords and items are the root's
+        -- Gm800_* children with meshes under item/
+        part = function(top, path)
+            if top == "Head" or top == "OniHead" then return "head" end
+            if top == "Cloak" then return "cloak" end
+            if top == "Body" or top == "OniBody" or top == "Gauntlet" or top == "Amulet" then return "body" end
+            if path:find("/model/item/", 1, true) then return "weapon" end
+            return "other"
+        end,
+        isolate = false, clip = { 0.2, 0.3 },
+        -- the main EV is the meter, not a compensation; the fixed exposure was far too bright here
+        exposure = { follow_meter = false, ev = 0, main_ev = "skip" },
+    }),
     -- the periodic rescan only compares the player and its parts; a full scan of a mod with
     -- hundreds of channels was a hitch every periodic_scan_sec
     inspect_before_scan = true,
