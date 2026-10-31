@@ -5,73 +5,87 @@
     {
       "name": "blink.L",
       "raw": "bsControl_003.z",
+      "fallback": "bone.eyeClose.L",
       "note": "eyeClosed_L"
     },
     {
       "name": "blink.R",
       "raw": "bsControl_004.x",
+      "fallback": "bone.eyeClose.R",
       "note": "eyeClosed_R"
     },
     {
       "name": "eyeWide.L",
       "raw": "bsControl_006.x",
+      "fallback": "bone.eyeWiden.L",
       "note": "eyeOpen_L"
     },
     {
       "name": "eyeWide.R",
       "raw": "bsControl_005.z",
+      "fallback": "bone.eyeWiden.R",
       "note": "eyeOpen_R"
     },
     {
       "name": "eyeSquint.L",
       "raw": "bsControl_010.z",
+      "fallback": "bone.lowerLidRaise.L",
       "note": "lidTightener_L"
     },
     {
       "name": "eyeSquint.R",
       "raw": "bsControl_010.y",
+      "fallback": "bone.lowerLidRaise.R",
       "note": "lidTightener_R"
     },
     {
       "name": "browBring.L",
       "raw": "bsControl_000.y",
+      "fallback": "bone.browInnerDown.L",
       "note": "browLowerer_L",
       "guessed": true
     },
     {
       "name": "browBring.R",
       "raw": "bsControl_000.x",
+      "fallback": "bone.browInnerDown.R",
       "note": "browLowerer_R",
       "guessed": true
     },
     {
       "name": "browDown.L",
       "raw": "bsControl_000.y",
+      "fallback": "bone.browLower.L",
       "note": "browLowerer_L"
     },
     {
       "name": "browDown.R",
       "raw": "bsControl_000.x",
+      "fallback": "bone.browLower.R",
       "note": "browLowerer_R"
     },
     {
       "name": "browInnerUp.L",
       "raw": "bsControl_008.x",
+      "fallback": "bone.browRaise.L",
       "note": "innerBrowRaiser_L"
     },
     {
       "name": "browInnerUp.R",
       "raw": "bsControl_007.z",
+      "fallback": "bone.browRaise.R",
       "note": "innerBrowRaiser_R"
     },
     {
       "name": "browOuterUp.L",
       "raw": "bsControl_021.z",
+      "fallback": "bone.browRaise.L",
       "note": "outerBrowRaiser_L"
     },
     {
       "name": "browOuterUp.R",
       "raw": "bsControl_021.y",
+      "fallback": "bone.browRaise.R",
       "note": "outerBrowRaiser_R"
     },
     {
@@ -105,11 +119,13 @@
     {
       "name": "smile.L",
       "raw": "bsControl_012.x",
+      "fallback": "bone.mouthCornerUp.L",
       "note": "lipCornerPuller_L"
     },
     {
       "name": "smile.R",
       "raw": "bsControl_011.z",
+      "fallback": "bone.mouthCornerUp.R",
       "note": "lipCornerPuller_R"
     },
     {
@@ -125,32 +141,38 @@
     {
       "name": "stretch.L",
       "raw": "bsControl_014.x",
+      "fallback": "bone.mouthCornerOut.L",
       "note": "lipStretcher_L"
     },
     {
       "name": "stretch.R",
       "raw": "bsControl_013.z",
+      "fallback": "bone.mouthCornerOut.R",
       "note": "lipStretcher_R"
     },
     {
       "name": "frown.L",
       "raw": "bsControl_011.y",
+      "fallback": "bone.mouthCornerDown.L",
       "note": "lipCornerDepressor_L"
     },
     {
       "name": "frown.R",
       "raw": "bsControl_011.x",
+      "fallback": "bone.mouthCornerDown.R",
       "note": "lipCornerDepressor_R"
     },
     {
       "name": "lowerLipDown.L",
       "raw": "bsControl_016.y",
-      "note": "lowerLipDepressor_L"
+      "fallback": "bone.lowerLipDrop",
+      "note": "lowerLipDepressor_L；bsControl 不动时由自动嘴型的下唇骨骼兜底"
     },
     {
       "name": "lowerLipDown.R",
       "raw": "bsControl_016.x",
-      "note": "lowerLipDepressor_R"
+      "fallback": "bone.lowerLipDrop",
+      "note": "lowerLipDepressor_R；bsControl 不动时由自动嘴型的下唇骨骼兜底"
     },
     {
       "name": "funnel.L",
@@ -200,7 +222,8 @@
     {
       "name": "jawOpen",
       "raw": "bsControl_009.x",
-      "note": "jawOpen"
+      "fallback": "bone.jawDrop",
+      "note": "jawOpen；bsControl 不动时由自动嘴型的下巴骨骼兜底（说话嘴型只动面部骨骼）"
     },
     {
       "name": "cheekShrink",
@@ -279,11 +302,13 @@
     {
       "name": "cheekSquint.L",
       "raw": "bsControl_001.z",
+      "fallback": "bone.cheekRaise.L",
       "note": "cheekRaiser_L"
     },
     {
       "name": "cheekSquint.R",
       "raw": "bsControl_001.y",
+      "fallback": "bone.cheekRaise.R",
       "note": "cheekRaiser_R"
     },
     {

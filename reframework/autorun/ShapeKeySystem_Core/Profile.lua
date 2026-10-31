@@ -15,7 +15,8 @@
 --
 -- Signal dictionary (sks.signals/2): every entry names a raw channel (`raw`, `param` in /1) or
 -- none (`raw` null or absent: the game lacks it, the node reads 0 and the channel is flagged
--- no_signal). `lo` / `hi` give the raw range mapped to 0..1, default 0..full. A name the
+-- no_signal). `lo` / `hi` give the raw range mapped to 0..1, default 0..full. `fallback` (one raw
+-- or a list) are raws read without lo / hi; the signal is the largest of them and the main raw. A name the
 -- dictionary does not list is a compile error, so typos are not mistaken for missing signals.
 -- A game with no dictionary at all (no builtin/<id>/signals.json) has no signals: every name
 -- compiles as no_signal.
@@ -52,6 +53,15 @@ function P.load_signals(data)
         if v == nil then v = e.param end
         local key
         if v ~= nil and raw then key = raw.parse(v) end
+        -- fallback raws are read as they are (no lo / hi); the larger of them and the main raw wins
+        local fallback, labels = {}, {}
+        if key ~= nil then labels[1] = raw.label(key) end
+        local fb = e.fallback
+        if fb ~= nil and type(fb) ~= "table" then fb = { fb } end
+        for _, f in ipairs(type(fb) == "table" and raw and fb or {}) do
+            local k = raw.parse(f)
+            if k ~= nil and k ~= key then fallback[#fallback + 1] = k; labels[#labels + 1] = raw.label(k) end
+        end
         -- a value the game cannot parse (an input this install has no source for) keeps the name with no
         -- signal, so every shared profile still compiles; a game without raw channels has no signal at all
         if type(e.name) == "string" then
@@ -59,8 +69,9 @@ function P.load_signals(data)
             local lo, hi = tonumber(e.lo) or 0, tonumber(e.hi) or s.full
             local a, b = 1, 0
             if hi > lo and (lo ~= 0 or hi ~= s.full) then a, b = s.full / (hi - lo), -lo / (hi - lo) end
-            local sig = { slot = i, name = e.name, key = key, no_signal = key == nil,
-                          label = key ~= nil and raw.label(key) or "无信号", a = a, b = b,
+            local sig = { slot = i, name = e.name, key = key, no_signal = key == nil and #fallback == 0,
+                          fallback = #fallback > 0 and fallback or nil,
+                          label = #labels > 0 and table.concat(labels, " / ") or "无信号", a = a, b = b,
                           guessed = e.guessed == true, note = e.note or "" }
             s.list[#s.list + 1] = sig
             s.by_name[e.name] = sig
@@ -68,6 +79,25 @@ function P.load_signals(data)
     end
     P.signals = s
     return s
+end
+
+-- a dictionary signal's value from normalised raws: the main raw through lo / hi, or the largest
+-- fallback raw when that is larger
+function P.signal_value(sig, raws)
+    local v = sig.key ~= nil and (raws[sig.key] or 0) * sig.a + sig.b or 0
+    for _, k in ipairs(sig.fallback or {}) do
+        local f = raws[k] or 0
+        if f > v then v = f end
+    end
+    return v
+end
+
+-- every raw key a signal reads
+function P.signal_keys(sig)
+    local keys = {}
+    if sig.key ~= nil then keys[1] = sig.key end
+    for _, k in ipairs(sig.fallback or {}) do keys[#keys + 1] = k end
+    return keys
 end
 
 -- Profile folders, later ones override earlier ones: shared builtin, this game's builtin, mods, user.
@@ -178,6 +208,11 @@ local function compile_node(node, env, depth)
             local p = P.no_signal_key(sig.name)
             fn = function(ctx) return ctx.P[p] or 0 end
             text = L.f(proc and "%s（自动表情）" or "%s（本游戏没有这个信号）", sig.name)
+        elseif sig.fallback then
+            for _, k in ipairs(P.signal_keys(sig)) do env.params[k] = true end
+            local value = P.signal_value
+            fn = function(ctx) return value(sig, ctx.P) end
+            text = sig.name
         else
             local p, a, b = sig.key, sig.a, sig.b
             env.params[p] = true

@@ -668,6 +668,9 @@
   "第二组扩展候选，尚待画面验收；面骨优先，缺失才读取 Motion": "Second extended candidate group, not yet checked on screen; face bones first, Motion only when missing",
   "本游戏尚未接入该信号": "This game does not provide this signal yet",
   "RE9 原生口型基形投影；不是音频音素识别": "Projection onto RE9's native mouth shape basis; not audio phoneme recognition",
-  "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD": "Bone projection of an RE9 native correction output; includes combined corrections, not stacked onto MMD automatically"
+  "RE9 原生修正输出的骨骼投影；含组合修正，不自动叠加到 MMD": "Bone projection of an RE9 native correction output; includes combined corrections, not stacked onto MMD automatically",
+  "lowerLipDepressor_L；bsControl 不动时由自动嘴型的下唇骨骼兜底": "lowerLipDepressor_L; the auto lip-sync lower lip bone fills in when bsControl does not move",
+  "lowerLipDepressor_R；bsControl 不动时由自动嘴型的下唇骨骼兜底": "lowerLipDepressor_R; the auto lip-sync lower lip bone fills in when bsControl does not move",
+  "jawOpen；bsControl 不动时由自动嘴型的下巴骨骼兜底（说话嘴型只动面部骨骼）": "jawOpen; the auto lip-sync jaw bone fills in when bsControl does not move (speech lip sync moves face bones only)"
  }
 }

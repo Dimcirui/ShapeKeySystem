@@ -627,6 +627,20 @@ local with_p = { id = "t", aliases = {}, channels = { { name = "R", sum = { { s 
 check(Profile.to_json(with_p, {}, "t", "t").game == "mhwilds", "a saved profile using p is tagged with the game")
 check(Profile.to_json({ id = "t", aliases = {}, channels = { { name = "A", s = "a" } } }, {}, "t", "t").game == nil,
     "a saved profile using only s stays game-neutral")
+-- fallback: the larger of the main raw (through lo / hi) and the fallback raws, read as they are
+local fsig = Profile.load_signals({ full = 0.01, signals = {
+    { name = "jaw", raw = 1, lo = 0, hi = 0.005, fallback = { 2, 3 } }, { name = "lip", raw = 4, fallback = 4 },
+    { name = "only", fallback = 5 } } })
+local fp = Profile.compile({ id = "t", name = "t", aliases = {}, channels = {
+    { name = "J", s = "jaw" }, { name = "L", s = "lip" }, { name = "O", s = "only" } } })
+local function fv(P, i) return fp and fp.channels[i].fn({ P = P, A = {}, V = {} }) end
+check(fp and fv({ [1] = 0.25, [2] = 0.3 }, 1) == 0.5 and fv({ [1] = 0.1, [3] = 0.8 }, 1) == 0.8
+    and #fp.channels[1].params == 3,
+    "fallback: the main raw wins while larger, a fallback raw takes over above it")
+check(fsig.by_name.lip.fallback == nil and fsig.by_name.only.key == nil and not fsig.by_name.only.no_signal
+    and fv({ [5] = 0.6 }, 3) == 0.6, "fallback: the main raw is not its own fallback; fallback alone is a signal")
+check(Profile.signal_value(fsig.by_name.jaw, { [2] = 0.4 }) == 0.4 and #Profile.signal_keys(fsig.by_name.only) == 1,
+    "fallback: live signal value and bound keys include the fallback raws")
 Profile.load_signals()
 for _, e in ipairs(Profile.list) do
     if e.source == "builtin" then

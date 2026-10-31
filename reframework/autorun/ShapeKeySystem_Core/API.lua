@@ -1343,7 +1343,7 @@ local function update_live()
         if C.want_signals then
             local sig = live.signal
             for i, sd in ipairs(Profile.signals.list) do
-                sig[i] = sd.key ~= nil and ((C.P[sd.key] or 0) * sd.a + sd.b) or 0
+                sig[i] = Profile.signal_value(sd, C.P)
             end
         end
     end
@@ -2614,7 +2614,7 @@ function SKS.init(adapter)
     local sig = Profile.load_signals()
     C.inv_full = 1 / sig.full
     for _, s in ipairs(sig.list) do
-        if s.key ~= nil then C.dict_params[#C.dict_params + 1] = s.key end
+        for _, k in ipairs(Profile.signal_keys(s)) do C.dict_params[#C.dict_params + 1] = k end
     end
     Profile.load_all()
     Presets.load_sculpt()
