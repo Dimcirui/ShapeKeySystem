@@ -1,5 +1,14 @@
-# ShapeKeySystem 1.14.1
+# 未发布
+
+<!-- 下一版的发布说明。写法见 docs/writing/release_guideline.md，流程见 docs/writing/version_guideline.md。
+     每条一行：- **对象**：一句话结论。定版时删掉空的小节，标题改为 # ShapeKeySystem X.Y.Z。 -->
+
+## ⚠️ 不兼容变更
+
+## 新增
+
+- **表情镜**：支持鬼武者 Way of the Sword；可按躯干、披风、武器隐藏，武器默认隐藏
 
 ## 变更
 
-- **运行环境**：REFramework 是 N 网的 Nightly 01240 或更早的版本时，红字提醒到 GitHub 更新 Nightly 版；不再重复显示绘制方式和表情镜状态
+## 修复

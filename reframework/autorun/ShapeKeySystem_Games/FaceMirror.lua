@@ -41,7 +41,9 @@ local sin, cos, rad, max = math.sin, math.cos, math.rad, math.max
 -- panel can hide; hide = the default), part = fn(top_name, mesh_path) -> "head" (always shown), a
 -- parts id, or "other" (never shown) (top_name: the player root's child the mesh hangs under;
 -- mesh_path lower case), isolate = clear the mirror's output bit on every other mesh in the scene, clip = { front,
--- back } default clip range }. Returns the face mirror of that game.
+-- back } default clip range, exposure = { follow_meter, ev, main_ev } defaults (optional: true, -2,
+-- "add"; main_ev "add" when the main camera's EV is a compensation to add, "skip" when it is the
+-- meter itself) }. Returns the face mirror of that game.
 function M.new(G)
     local F = {}
 
@@ -54,13 +56,15 @@ function M.new(G)
     local BIND_IDS = {}
     for _, b in ipairs(F.BINDS) do BIND_IDS[b.id] = true end
     local RIG_DEFAULTS = G.rigs
+    local EXPO = G.exposure or {}
+    local ADD_MAIN_EV = EXPO.main_ev ~= "skip"
 
     F.DEFAULTS = {
         enabled = false, bind = F.BINDS[1].id,
         size = 260, x = 200, y = 540,           -- window centre in the 1920 x 1080 view, origin top left, Y down
         fov = 30,
-        ev = -2,                                -- added to the main camera's exposure; lower is brighter
-        follow_meter = true,                    -- fixed exposure at the main camera's meter
+        ev = EXPO.ev or -2,                     -- added to the main camera's exposure; lower is brighter
+        follow_meter = EXPO.follow_meter ~= false,   -- fixed exposure at the main camera's meter
         hide = HIDE_DEFAULTS,                   -- parts id -> left out of the mirror (the head always shows)
         clip_front = G.clip[1], clip_back = G.clip[2],   -- slab kept around the aim point; the rest is transparent
         rigs = U.copy(RIG_DEFAULTS),
@@ -343,24 +347,50 @@ function M.new(G)
 
     -- ---------------------------------------------------------------- own GUI
     local gui_res
+    local function gui_holder()
+        if not gui_res then
+            local r = sdk.create_resource("via.gui.GUIResource", GUI_ASSET)
+            if not r then return nil end
+            gui_res = { res = r:add_ref() }
+            gui_res.holder = gui_res.res:create_holder("via.gui.GUIResourceHolder"):add_ref()
+        end
+        return gui_res.holder
+    end
+
     local function create_gui()
         local sc = scene()
         if not sc then return end
         local go = sc:call("findGameObject(System.String)", GUI_NAME)
-        if go then R.gui_go = go; return end
+        if go then
+            -- found again after a script reset: an earlier version may have left another GUI asset on it
+            local gui = component(go, "via.gui.GUI")
+            local cur = gui and gui:call("get_Asset")
+            local path = cur and cur:call("get_ResourcePath")
+            if gui and (type(path) ~= "string" or path:lower() ~= GUI_ASSET:lower()) then
+                local holder = gui_holder()
+                if holder then gui:call("set_Asset", holder); opts.log("face mirror: GUI asset replaced (was %s)", tostring(path)) end
+            end
+            R.gui_go = go
+            return
+        end
         local folder = sc:call("findFolder(System.String)", G.gui_folder)
         go = folder and M.go_create_in:call(nil, GUI_NAME, folder) or M.go_create:call(nil, GUI_NAME)
         if not go then return end
-        if not gui_res then
-            local r = sdk.create_resource("via.gui.GUIResource", GUI_ASSET)
-            if not r then return end
-            gui_res = { res = r:add_ref() }
-            gui_res.holder = gui_res.res:create_holder("via.gui.GUIResourceHolder"):add_ref()
-        end
+        local holder = gui_holder()
+        if not holder then return end
         local gui = go:call("createComponent(System.Type)", sdk.typeof("via.gui.GUI"))
-        if gui then gui:call("set_Asset", gui_res.holder) end
+        if gui then gui:call("set_Asset", holder) end
         R.gui_go = go
         opts.log("face mirror: GUI created")
+    end
+
+    -- a new holder of the same resource on the GUI that has no view yet
+    local function reasset_gui()
+        local gui = component(R.gui_go, "via.gui.GUI")
+        if not gui or gui:call("get_View") or not gui_holder() then return end
+        R.reassets = (R.reassets or 0) + 1
+        gui:call("set_Asset", gui_res.res:create_holder("via.gui.GUIResourceHolder"):add_ref())
+        opts.log("face mirror: GUI asset set again (%d)", R.reassets)
     end
 
     local function find_element(node, depth)
@@ -553,8 +583,10 @@ function M.new(G)
         end
         -- main EV = the per-scene compensation ace.DynamicExposure writes (0 in camp, ~1.5-2 outdoors).
         -- Fixed exposure at the main meter: the mirror's own auto exposure turned the hunter in the
-        -- main view white.
-        local comp = R.main_tm:call("get_EV") or 0
+        -- main view white. In Onimusha the main EV is the meter itself (EV = SnappedRealEV), the fixed
+        -- exposure stayed far brighter than the main view, and the mirror's own auto exposure with
+        -- `ev` as the compensation matched it (main_ev = "skip", follow_meter off).
+        local comp = ADD_MAIN_EV and (R.main_tm:call("get_EV") or 0) or 0
         if cfg.follow_meter then
             if R.auto_mode ~= 2 then R.tm:call("setAutoExposure", 2); R.auto_mode = 2 end
             local real = R.main_tm:call("get_SnappedRealEV")
@@ -589,7 +621,13 @@ function M.new(G)
         end
         if not R.el then
             if not R.gui_go then R.want_gui = true; view.status = "正在加载界面"; return end
-            if frame % 30 ~= 0 or not take_element() then view.status = "正在加载界面"; return end
+            if frame % 30 ~= 0 or not take_element() then
+                -- Onimusha: the GUI set when the GameObject was created or found again sometimes
+                -- never built a view; the same asset put on again a moment later did
+                if frame % 60 == 0 and (R.reassets or 0) < 3 then R.want_reasset = true end
+                view.status = "正在加载界面"
+                return
+            end
         end
         if frame % 30 == 0 then keep_element() end
         if frame % 60 == 0 or R.parts_key ~= hide_key() then
@@ -615,7 +653,8 @@ function M.new(G)
     -- the GUI GameObject is created here, outside rendering
     local function update_behavior()
         if R.want_gui and not R.gui_go then create_gui() end
-        R.want_gui = nil
+        if R.want_reasset and R.gui_go and not R.el then reasset_gui() end
+        R.want_gui, R.want_reasset = nil, nil
         F.tick_save()
     end
 

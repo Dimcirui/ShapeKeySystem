@@ -17,13 +17,14 @@ check(Games.pick("unsupported_test_game") == nil and Games.pick(nil) == nil, "an
 local Onimusha = Games.pick("onimusha_wots")
 check(Onimusha and Onimusha.raw and Onimusha.bind and Onimusha.read,
     "onimusha_wots picks the bsControl adapter")
--- face mirror: Wilds and RE4R each build their own, with their own joints; the others have none
+-- face mirror: Wilds, RE4R and Onimusha each build their own, with their own joints
 local RE4 = Games.pick("re4")
 check(Wilds.face_mirror and RE4 and RE4.face_mirror and Wilds.face_mirror ~= RE4.face_mirror
     and Wilds.face_mirror.view.binds[4].id == "COG" and RE4.face_mirror.view.binds[4].id == "Hip"
     and Wilds.face_mirror.view.binds[2].id == "Neck_0" and RE4.face_mirror.cfg.rigs.Neck_0
-    and RE4.face_mirror.cfg.rigs.Hip and not RE4.face_mirror.cfg.rigs.COG and Onimusha.face_mirror == nil,
-    "face mirror per game: Wilds COG, RE4R Hip, none on Onimusha")
+    and RE4.face_mirror.cfg.rigs.Hip and not RE4.face_mirror.cfg.rigs.COG and Onimusha.face_mirror
+    and Onimusha.face_mirror ~= Wilds.face_mirror and Onimusha.face_mirror.view.binds[4].id == "COG",
+    "face mirror per game: Wilds and Onimusha COG, RE4R Hip")
 local rp, wp = RE4.face_mirror.part, Wilds.face_mirror.part
 check(rp("head", "_chainsaw/character/ch/cha0/cha000/10/cha000_10.mesh") == "head"
     and rp("hair", "_chainsaw/character/ch/cha0/cha000/20/cha000_20.mesh") == "head"
@@ -37,11 +38,20 @@ check(wp("Player_Face", "") == "head" and wp("ch03_012_0013", "") == "helm" and 
     and wp("WpSub_ReserveParent", "") == "weapon" and wp("HunterKnifeBase_R", "") == "weapon"
     and wp("SlingerRope", "") == "weapon" and wp("HeadToHip", "") == "other",
     "Wilds face mirror parts: face, armour by slot, accessories, weapons, other")
+local op = Onimusha.face_mirror.part
+check(op("Head", "art/model/character/ch0/ch001_00/20/ch001_00_20.mesh") == "head" and op("OniHead", "") == "head"
+    and op("Body", "") == "body" and op("Gauntlet", "") == "body" and op("Amulet", "") == "body" and op("OniBody", "") == "body"
+    and op("Cloak", "") == "cloak" and op("Gm800_000_00", "art/model/item/it0/it000_0210/it000_0210_00.mesh") == "weapon"
+    and op("Body_Obstacle", "") == "other",
+    "Onimusha face mirror parts: head / hair, body, cloak, swords and items, other")
 check(Wilds.face_mirror.cfg.hide.weapon == true and Wilds.face_mirror.cfg.hide.legs == false
     and RE4.face_mirror.cfg.hide.weapon == true and RE4.face_mirror.cfg.hide.body == false and RE4.face_mirror.cfg.hide.legs == nil,
     "face mirror hide defaults per game: weapons hidden")
-check(RE4.face_mirror.cfg.clip_front == 1 and Wilds.face_mirror.cfg.clip_front == 0.2,
-    "face mirror clip range: wide in RE4R (isolated), narrow in Wilds")
+check(RE4.face_mirror.cfg.clip_front == 1 and Wilds.face_mirror.cfg.clip_front == 0.2
+    and Onimusha.face_mirror.cfg.clip_front == 0.2 and Onimusha.face_mirror.cfg.hide.weapon == true
+    and Wilds.face_mirror.cfg.follow_meter == true and Wilds.face_mirror.cfg.ev == -2
+    and Onimusha.face_mirror.cfg.follow_meter == false and Onimusha.face_mirror.cfg.ev == 0,
+    "face mirror per-game defaults: clip range (wide in RE4R, isolated), weapons hidden, Onimusha meters on its own")
 
 -- the entry script run again; returns what it registered, hooked, wrote and showed
 local function run_entry(game)
