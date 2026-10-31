@@ -155,6 +155,28 @@ check(Panel.ui.page == "debug", "rail: 设置与调试")
 check(find("基础设置", true) and find("调试", true) and find("界面设置", true) and find("SKS 设置", true)
     and find("关于", true) and find("运行环境", true) and find("面捕接收插件", true) and not find("性能", true),
     "设置与调试 opens on 基础设置: settings, about and environment")
+-- REFramework: the Nexus build (870709ed, commit 2131) and older master builds get a red warning;
+-- newer builds and other branches do not
+do
+    local saved = {}
+    for _, k in ipairs({ "get_commit_count", "get_branch", "get_tag", "get_commits_past_tag" }) do saved[k] = reframework[k] end
+    reframework.get_tag = function() return "v1.5.9.1" end
+    reframework.get_commits_past_tag = function() return 373 end
+    reframework.get_branch = function() return "master" end
+    reframework.get_commit_count = function() return 2131 end
+    frame()
+    local old = find("REFramework 版本过旧") ~= nil and find("v1.5.9.1 +373") ~= nil
+    reframework.get_commit_count = function() return 2272 end
+    frame()
+    local new = find("REFramework 版本过旧") == nil
+    reframework.get_branch = function() return "dev" end
+    reframework.get_commit_count = function() return 100 end
+    frame()
+    local other = find("REFramework 版本过旧") == nil
+    for k, f in pairs(saved) do reframework[k] = f end
+    frame()
+    check(old and new and other, "REFramework warning: Nexus build and older on master only")
+end
 local native = st.native_signals and st.native_signals.available
 check((find("动画录制", true) ~= nil) == (native == true), "动画录制 tab only where native signals exist")
 click_text("调试", true)

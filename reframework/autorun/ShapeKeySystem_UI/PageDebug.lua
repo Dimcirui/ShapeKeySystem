@@ -355,26 +355,37 @@ local function about_card(ctx, x, y, w, h)
     return h
 end
 
--- REFramework's own version, from whichever of its version getters this build has
-local function reframework_version()
-    for _, m in ipairs({ "get_tag_long", "get_tag", "get_commit_count" }) do
-        local ok, v = pcall(function() return reframework[m](reframework) end)
-        if ok and v ~= nil and v ~= "" then return tostring(v) end
-    end
-    return L.tr("未知")
+-- The Nexus build Nightly 01240 (870709ed, 2026-02-25) is often taken for the latest; it and every
+-- older master build are flagged. get_commit_count is the commit's number in the repository's
+-- history (it matched GitHub's count for d052e8fd: 2272). Other branches and builds without the
+-- getters are never flagged.
+local OLD_REFRAMEWORK_COMMITS = 2131
+
+local function rf(m)
+    local ok, v = pcall(function() return reframework[m](reframework) end)
+    if ok and v ~= nil and v ~= "" then return v end
+    return nil
 end
 
--- what SKS found around it: the game, REFramework, the draw backend, the mocap receiver, the face
--- mirror; one line each, the value dimmed when something is missing
+-- returns the text shown and whether this build is the old one or older
+local function reframework_version()
+    local tag, past, count, date = rf("get_tag"), rf("get_commits_past_tag"), tonumber(rf("get_commit_count")), rf("get_build_date")
+    local text = tag and (past and string.format("%s +%s", tag, past) or tostring(tag)) or L.tr("未知")
+    if count then text = text .. string.format(" (%d%s)", count, date and (", " .. tostring(date)) or "") end
+    local old = count ~= nil and rf("get_branch") == "master" and count <= OLD_REFRAMEWORK_COMMITS
+    return text, old
+end
+
+-- what SKS found around it: the game, REFramework, reframework-d2d, the mocap receiver; one line
+-- each, the value dimmed when something is missing
 local function env_card(ctx, x, y, w)
     local st = ctx.st
     local nv = st.mocap and st.mocap.native
-    local fm = st.face_mirror
+    local rf_text, rf_old = reframework_version()
     local rows = {
         { "游戏", st.runtime.game or L.tr("未知"), true },
-        { "REFramework", reframework_version(), true },
+        { "REFramework", rf_text, true },
         { "reframework-d2d", D.has_d2d() and L.tr("已安装") or L.tr("未安装（用 ImGui 绘制）"), D.has_d2d() },
-        { "绘制方式", D.backend or L.tr("无"), D.backend ~= nil },
     }
     if nv then
         local text = not nv.available and L.tr("未加载")
@@ -382,8 +393,8 @@ local function env_card(ctx, x, y, w)
             or L.f("已加载 · 没有启动（错误 %d）", nv.error or 0)
         rows[#rows + 1] = { "面捕接收插件", text, nv.available and (nv.running or true) }
     end
-    rows[#rows + 1] = { "表情镜", fm and L.tr(fm.status or "-") or L.tr("本游戏不支持"), fm ~= nil }
-    local h = 10 + 30 + #rows * 24 + 8
+    local warn = rf_old and L.tr("REFramework 版本过旧（N 网的 Nightly 01240 及更早），请到 GitHub 下载最新的 Nightly 版") or nil
+    local h = 10 + 30 + #rows * 24 + (warn and 44 or 0) + 8
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     W.h2("运行环境", rx, y + 10)
@@ -393,6 +404,7 @@ local function env_card(ctx, x, y, w)
         D.text(r[2], rx + 130, cy, r[3] and C.text or C.faint, W.small(), rw - 130)
         cy = cy + 24
     end
+    if warn then D.text(warn, rx, cy + 2, C.error, W.small(), rw) end
     return h
 end
 
