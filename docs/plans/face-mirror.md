@@ -1,10 +1,10 @@
 # 表情镜：原理与限制
 
-写给接手的人。代码在 `ShapeKeySystem_Games/FaceMirror.lua`（各游戏共用），游戏的资源和骨骼由适配器传给 `FaceMirror.new`（荒野、RE4R），命令和设置格式见 `shape-key-system-api.md`「表情镜」一节。本文记录引擎侧的做法和不能做的事，改动前先读完第 5 节。
+写给接手的人。代码在 `ShapeKeySystem_Games/FaceMirror.lua`（各游戏共用），游戏的资源和骨骼由适配器传给 `FaceMirror.new`（荒野、RE4R、鬼武者），命令和设置格式见 `shape-key-system-api.md`「表情镜」一节。本文记录引擎侧的做法和不能做的事，改动前先读完第 5 节。
 
 ## 1. 组成
 
-以下以荒野为例，RE4R 的差别见第 6 节。
+以下以荒野为例，RE4R 和鬼武者的差别见第 6 节。
 
 - **渲染目标**：`natives/STM/GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6`，由原版 `rtt080000_00.rtex.6`（装备预览用）复制，宽高改为 512×512。文件共 64 字节：`RTEX`、版本 6，0x0C 为格式（0x1D），0x10 / 0x14 为宽、高（u32）。打包与部署由 `tools/sks-files.ps1` 的 `$ownedNatives` 带上。
 - **相机**：GameObject `FaceMirrorRtexCam`，组件 `via.Camera`、`via.render.RenderOutput`、`via.render.ToneMapping`、`via.render.LDRPostProcess`。RenderOutput 先设 `RenderOutputID = Secondary`，再设 `RenderTarget` 为上面 rtex 的 `RenderTargetTextureResourceHolder`。
@@ -45,14 +45,21 @@
 
 ## 6. 各游戏的资源
 
-| | 荒野 | RE4R |
-|---|---|---|
-| rtex | `GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6`（由 `rtt080000_00` 改尺寸） | `_Chainsaw/UI/FaceMirror/rtt_facemirror_00.rtex.5`（由 `cs_ui_hud_capture` 改尺寸，格式同为 29） |
-| GUI | `GUI/ui000000/ui000200/lib000204.gui`，元素 `tex_saleMark` | `systems/gui/imageplane_1920x1080.gui`，元素 `Image` |
-| GUI 所在场景文件夹 | `GUIHud` | `Gui` |
-| 主相机名 | `Main Camera` | `MainCamera` |
-| 定位点 | `Head`、`Neck_0`、`Spine_2`、`COG` | `Head`、`Neck_0`、`Spine_2`、`Hip`（没有 COG） |
+| | 荒野 | RE4R | 鬼武者 |
+|---|---|---|---|
+| rtex | `GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6`（由 `rtt080000_00` 改尺寸） | `_Chainsaw/UI/FaceMirror/rtt_facemirror_00.rtex.5`（由 `cs_ui_hud_capture` 改尺寸，格式同为 29） | `GUI/ui_texture/tex_render/rtt_facemirror_oni_00.rtex.6`（由 `tempcapturertt` 改尺寸，格式 29） |
+| GUI | `GUI/ui000000/ui000200/lib000204.gui`，元素 `tex_saleMark` | `systems/gui/imageplane_1920x1080.gui`，元素 `Image` | `GUI/ui000000/ui000500/lib000500.gui`，元素 `tex_Logo` |
+| GUI 所在场景文件夹 | `GUIHud` | `Gui` | `HUD` |
+| 主相机名 | `Main Camera` | `MainCamera` | `Main Camera` |
+| 定位点 | `Head`、`Neck_0`、`Spine_2`、`COG` | `Head`、`Neck_0`、`Spine_2`、`Hip`（没有 COG） | 同荒野 |
+| 隔离 | 否 | 是 | 否（场景约 6000 个网格都带全部输出位，同荒野） |
 
 - RE4R 的 rtex 文件头与荒野相同：`RTEX`、版本 5、0x0C 格式、0x10 / 0x14 宽高。
 - RE4R 的头是单独的 GameObject，但身体骨架上也有 `Head`，相机挂在身体上（`primary_root` 即身体）。
-- 两个游戏的这些骨骼都是 +Z 朝前、+Y 朝上（动画中有扭转）。
+- 荒野和 RE4R 的这些骨骼都是 +Z 朝前、+Y 朝上（动画中有扭转）；鬼武者沿用同样的默认镜头，轴向未在游戏里核对。
+- 鬼武者里 `imageplane_1920x1080.gui` 挂上后始终不生成 View（换成原版 HUD 的资源就有），所以用库界面。
+- 鬼武者里 SKS 新建或找回 GUI 时挂上的资源有时也不生成 View，过一会儿用同一资源的新 holder 再挂一次就有（C# 探测里直接挂都能生成，原因未查明）。所以没有 View 时每秒重挂一次，最多 3 次。
+- 相机和 GUI 的 GameObject 在重置脚本后按名字找回，GUI 上的资源与适配器给的不同时（旧版本留下的）会换掉。
+- 鬼武者的主相机 `EV` 就是测光值（等于 `SnappedRealEV`），不是补偿。固定曝光在这里比主画面亮得多（设到比主相机高 6 档仍然发白），所以鬼武者默认关闭「跟随测光」，用镜子自己的自动曝光，`ev` 直接作补偿，不加主相机 EV（适配器 `exposure = { follow_meter = false, ev = 0, main_ev = "skip" }`）。主画面未见变亮。
+- 鬼武者的 rtex 不能与荒野同名：`tools/sks-files.ps1` 把所有游戏的 natives 文件部署到同一棵目录。
+- 鬼武者的武器和道具是玩家根节点下的 `Gm800_*`，网格在 `Art/Model/Item/` 下；鬼化时 `OniHead`、`OniBody` 显示，分别归入头部和躯干。

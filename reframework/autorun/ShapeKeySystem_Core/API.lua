@@ -1865,7 +1865,7 @@ function cmds.mocap_calibrate(a)
     return true
 end
 
--- face mirror (adapter.face_mirror, MH Wilds only): settings patch; user/face_mirror.json is written
+-- face mirror (adapter.face_mirror, on the games that have one): settings patch; user/face_mirror.json is written
 -- shortly after
 function cmds.face_mirror(a)
     local F = SKS.adapter.face_mirror
