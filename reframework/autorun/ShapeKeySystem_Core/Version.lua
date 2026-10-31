@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.13.0"
+V.number = "1.14.0"
 V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka"
 
 V.history = {
+    { version = "1.14.0", notes = "表情镜支持 RE4R、按部位隐藏；面板改为标签页" },
     { version = "1.13.0", notes = "荒野新增表情镜；面捕可驱动任意表情配置" },
     { version = "1.12.1", notes = "崛起减少定期扫描开销" },
     { version = "1.12.0", notes = "捏脸支持键组；鬼武者头发和装备菜单角色可驱动" },

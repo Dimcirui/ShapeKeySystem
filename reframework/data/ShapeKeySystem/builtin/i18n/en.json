@@ -1052,6 +1052,7 @@
   "一个角色只用一份绑定；修复鬼武者捏脸预设被改回": "One binding per character; fixed Onimusha sculpt presets reverting",
   "捏脸支持键组；鬼武者头发和装备菜单角色可驱动": "Sculpt key groups; Onimusha hair and equipment-menu character are driven",
   "崛起减少定期扫描开销": "Rise: less periodic scanning overhead",
+  "表情镜支持 RE4R、按部位隐藏；面板改为标签页": "Face mirror for RE4R, hide by part; tabbed panel",
   "荒野新增表情镜；面捕可驱动任意表情配置": "Wilds face mirror; face capture drives any expression config",
   "已从捏脸配置「%s」导入 %d 个形态键": "Sculpt config \"%s\": imported %d shape keys",
   "从捏脸配置导入…": "Import from sculpt config…",
