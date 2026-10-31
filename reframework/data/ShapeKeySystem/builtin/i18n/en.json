@@ -1127,7 +1127,17 @@
   "总体绑定": "Binding",
   "基础设置": "General",
   "调试": "Debug",
-  "动画录制": "Recording"
+  "动画录制": "Recording",
+  "运行环境": "Environment",
+  "游戏": "Game",
+  "未知": "Unknown",
+  "已安装": "Installed",
+  "未安装（用 ImGui 绘制）": "Not installed (drawing with ImGui)",
+  "未加载": "Not loaded",
+  "已加载 · UDP %d": "Loaded · UDP %d",
+  "已加载 · 没有启动（错误 %d）": "Loaded · not started (error %d)",
+  "面捕接收插件": "Face capture receiver",
+  "本游戏不支持": "Not supported in this game"
  },
  "untranslated": [
   "Ag国",

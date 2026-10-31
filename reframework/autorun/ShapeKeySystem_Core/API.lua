@@ -2580,6 +2580,7 @@ function SKS.init(adapter)
         if ok == false then return false, why end
     end
     SKS.adapter = adapter
+    state.runtime.game = adapter.name   -- shown under 运行环境
     Writer.adapter = adapter
     Scene.adapter, Guard.adapter, Presets.adapter, Profile.adapter, X.adapter = adapter, adapter, adapter, adapter, adapter
     Proc.adapter = adapter

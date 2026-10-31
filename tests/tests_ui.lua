@@ -153,7 +153,8 @@ Panel.ui.win.h = h_before; frame()
 click_text("设置与调试", true)
 check(Panel.ui.page == "debug", "rail: 设置与调试")
 check(find("基础设置", true) and find("调试", true) and find("界面设置", true) and find("SKS 设置", true)
-    and find("关于", true) and not find("性能", true), "设置与调试 opens on 基础设置: settings and about")
+    and find("关于", true) and find("运行环境", true) and find("面捕接收插件", true) and not find("性能", true),
+    "设置与调试 opens on 基础设置: settings, about and environment")
 local native = st.native_signals and st.native_signals.available
 check((find("动画录制", true) ~= nil) == (native == true), "动画录制 tab only where native signals exist")
 click_text("调试", true)
