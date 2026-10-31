@@ -1138,7 +1138,7 @@
   "已加载 · UDP %d": "Loaded · UDP %d",
   "已加载 · 没有启动（错误 %d）": "Loaded · not started (error %d)",
   "面捕接收插件": "Face capture receiver",
-  "本游戏不支持": "Not supported in this game"
+  "REFramework 版本过旧（N 网的 Nightly 01240 及更早），请到 GitHub 下载最新的 Nightly 版": "REFramework is outdated (Nexus Nightly 01240 or older); get the latest Nightly from GitHub"
  },
  "untranslated": [
   "Ag国",
