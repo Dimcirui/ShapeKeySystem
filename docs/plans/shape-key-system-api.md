@@ -321,7 +321,7 @@ reframework/data/ShapeKeySystem/
   user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
             recordings/*.json                             （用户面部动画录制）
             mocap.json                                    （面捕设置，见「面捕」一节）
-            face_mirror.json                              （表情镜设置，见「表情镜」一节；只有荒野）
+            face_mirror.json                              （表情镜设置，见「表情镜」一节；荒野和 RE4R）
   mocap/    live.json                                     （没有 ShapeKeySystem_Mocap.dll 时由桥接脚本写入的最新一帧；脚本在 builtin/mocap/）
 ```
 
@@ -764,12 +764,12 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 
 ## 表情镜
 
-只有荒野（适配器字段 `face_mirror`，`ShapeKeySystem_Games/Wilds/FaceMirror.lua`）。第二台相机把猎人的脸渲染进 `GUI/ui_texture/tex_render/rtt_facemirror_00.rtex`（随插件发布在 `natives/` 下），屏幕上由 SKS 自己的 GUI 里的一个贴图元素显示。界面在「面捕」页最下面。原理和踩过的坑见 `face-mirror.md`。
+荒野和 RE4R（适配器字段 `face_mirror`，由共用的 `ShapeKeySystem_Games/FaceMirror.lua` 按游戏生成）。第二台相机把玩家的脸渲染进随插件发布在 `natives/` 下的 rtex，屏幕上由 SKS 自己的 GUI 里的一个贴图元素显示。界面在「面捕」页最下面。原理和踩过的坑见 `face-mirror.md`。
 
 | 命令 | 参数 | 作用 | 写入 |
 |---|---|---|---|
-| `face_mirror` | `{patch}` | 修改表情镜设置：`enabled`、`bind`（相机挂在哪块骨骼：`Head`、`Spine_2`、`COG`）、`size`（100–800）、`x`（−200–2120）、`y`（−200–1280；窗口中心在 1920×1080 画面中的位置，原点左上，Y 向下）、`fov`（5–60）、`ev`（−4–4，加在主相机曝光上，越小越亮）、`follow_meter`（true：固定曝光，取主相机测光值；false：镜子自己测光）、`clip_front`（0.05–1）、`clip_back`（0.05–2；对准点前后保留的范围，其余透明）、`rigs = {<骨骼> = {dist 0.2–2.5, aim = {x, y, z} −1–1, rot = {x, y, z} −180–180}}`（每块骨骼各存一份：相机到对准点的距离、对准点在骨骼坐标系里的位置、相机角度，按 Y、X、Z 的顺序转）。数值截到范围内；类型不对、未知骨骼、`aim` / `rot` 里不是 x/y/z 的键返回 `E_BAD_ARGS`，什么都不改 | `user/face_mirror.json`（约 0.5 秒后写） |
-| `face_mirror_reset` | `{what}` | `aim`：下一帧把当前骨骼的对准点移到脸前（需要当前姿势，只在显示时生效）；`rig`：当前骨骼的距离、对准点、角度恢复默认；`all`：除 `enabled` 外全部恢复默认 | `user/face_mirror.json` |
+| `face_mirror` | `{patch}` | 修改表情镜设置：`enabled`、`bind`（定位点，相机挂在哪块骨骼：荒野 `Head`、`Neck_0`、`Spine_2`、`COG`；RE4R `Head`、`Neck_0`、`Spine_2`、`Hip`）、`size`（100–800）、`x`（−200–2120）、`y`（−200–1280；窗口中心在 1920×1080 画面中的位置，原点左上，Y 向下）、`fov`（5–60）、`ev`（−4–4，加在主相机曝光上，越小越亮）、`follow_meter`（true：固定曝光，取主相机测光值；false：镜子自己测光）、`clip_front`（0.05–1）、`clip_back`（0.05–2；对准点前后保留的范围，其余透明）、`rigs = {<骨骼> = {dist 0.2–2.5, aim = {x, y, z} −1–1, rot = {x, y, z} −180–180}}`（每块骨骼各存一份：相机到对准点的距离、对准点在骨骼坐标系里的位置、相机角度，按 Y、X、Z 的顺序转）。数值截到范围内；类型不对、未知骨骼、`aim` / `rot` 里不是 x/y/z 的键返回 `E_BAD_ARGS`，什么都不改 | `user/face_mirror.json`（约 0.5 秒后写） |
+| `face_mirror_reset` | `{what}` | `aim`：当前定位点的对准点设为 (0, 0, 0)，镜头对准定位点骨骼本身；`rig`：当前骨骼的距离、对准点、角度恢复默认；`all`：除 `enabled` 外全部恢复默认 | `user/face_mirror.json` |
 
 `state.face_mirror`（只有带 `face_mirror` 的游戏才有）：`available`、`binds`（`{id, name}` 列表）、`status`（显示在开关旁边）、`cfg`（当前设置，只读）。
 

@@ -12,7 +12,7 @@ local Input = require("ShapeKeySystem_Games.Wilds.Input")
 local Probe = require("ShapeKeySystem_Games.Wilds.Probe")
 
 local Playback = require("ShapeKeySystem_Games.Wilds.Playback")
-local FaceMirror = require("ShapeKeySystem_Games.Wilds.FaceMirror")
+local FaceMirror = require("ShapeKeySystem_Games.FaceMirror")
 local Recorder = require("ShapeKeySystem_Games.Wilds.Recorder")
 local B = require("ShapeKeySystem_Core.BoneSignals")
 local BoneReads = require("ShapeKeySystem_Core.BoneReads")
@@ -25,7 +25,38 @@ local A = {
     conditions = Cond,
     input = Input,
     playback = Playback,
-    face_mirror = FaceMirror,
+    -- the GUI is a one-texture library GUI nothing else in the scene uses; Hip sits on COG
+    face_mirror = FaceMirror.new({
+        rtex = "GUI/ui_texture/tex_render/rtt_facemirror_00.rtex",
+        gui_asset = "GUI/ui000000/ui000200/lib000204.gui", gui_elem = "tex_saleMark", gui_folder = "GUIHud",
+        main_camera = "Main Camera",
+        binds = { { id = "Head", name = "头部（Head）" }, { id = "Neck_0", name = "脖子（Neck_0）" }, { id = "Spine_2", name = "胸部（Spine_2）" },
+                  { id = "COG", name = "重心（COG）" } },
+        rigs = {
+            Head = { dist = 0.6, aim = { x = 0, y = 0.07, z = 0.08 }, rot = { x = -6, y = 0, z = 0 } },
+            Neck_0 = { dist = 0.6, aim = { x = 0, y = 0.12, z = 0.08 }, rot = { x = -6, y = 0, z = 0 } },
+            Spine_2 = { dist = 0.6, aim = { x = 0, y = 0.2, z = 0.1 }, rot = { x = -6, y = 0, z = 0 } },
+            COG = { dist = 0.6, aim = { x = 0, y = 0.45, z = 0.1 }, rot = { x = -6, y = 0, z = 0 } },
+        },
+        parts = { { id = "helm", name = "头盔" }, { id = "body", name = "躯干" }, { id = "arm", name = "腕部" },
+                  { id = "waist", name = "腰部" }, { id = "legs", name = "腿部" }, { id = "acc", name = "挂件" },
+                  { id = "weapon", name = "武器", hide = true } },
+        -- the face with its hair is the head; armour parts by the last digit of their id (slot 6 goes
+        -- with the body); accessories, weapons, the carving knife and the slinger
+        part = function(top)
+            if top:find("Player_Face", 1, true) == 1 then return "head" end
+            local slot = top:match("^ch0[23]_%d+_%d%d%d(%d)$")
+            if slot then
+                return ({ ["1"] = "arm", ["2"] = "body", ["3"] = "helm", ["4"] = "legs", ["5"] = "waist" })[slot] or "body"
+            end
+            if top:find("Acc", 1, true) == 1 then return "acc" end
+            if top:find("Wp", 1, true) == 1 or top:find("HunterKnife", 1, true) == 1 or top == "SlingerRope" then
+                return "weapon"
+            end
+            return "other"
+        end,
+        isolate = false, clip = { 0.2, 0.3 },
+    }),
     -- in-game recordings are saved straight into the face animation test format
     native_snapshot = Recorder.snapshot,
     native_sample = Recorder.sample,

@@ -1,8 +1,10 @@
-# 表情镜（荒野）：原理与限制
+# 表情镜：原理与限制
 
-写给接手的人。代码在 `ShapeKeySystem_Games/Wilds/FaceMirror.lua`，命令和设置格式见 `shape-key-system-api.md`「表情镜」一节。本文记录引擎侧的做法和不能做的事，改动前先读完第 5 节。
+写给接手的人。代码在 `ShapeKeySystem_Games/FaceMirror.lua`（各游戏共用），游戏的资源和骨骼由适配器传给 `FaceMirror.new`（荒野、RE4R），命令和设置格式见 `shape-key-system-api.md`「表情镜」一节。本文记录引擎侧的做法和不能做的事，改动前先读完第 5 节。
 
 ## 1. 组成
+
+以下以荒野为例，RE4R 的差别见第 6 节。
 
 - **渲染目标**：`natives/STM/GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6`，由原版 `rtt080000_00.rtex.6`（装备预览用）复制，宽高改为 512×512。文件共 64 字节：`RTEX`、版本 6，0x0C 为格式（0x1D），0x10 / 0x14 为宽、高（u32）。打包与部署由 `tools/sks-files.ps1` 的 `$ownedNatives` 带上。
 - **相机**：GameObject `FaceMirrorRtexCam`，组件 `via.Camera`、`via.render.RenderOutput`、`via.render.ToneMapping`、`via.render.LDRPostProcess`。RenderOutput 先设 `RenderOutputID = Secondary`，再设 `RenderTarget` 为上面 rtex 的 `RenderTargetTextureResourceHolder`。
@@ -13,8 +15,8 @@
 
 - 相机是玩家 Transform 的子物体，`set_ParentJoint` 指向所选骨骼，局部位姿固定，只在设置改变时写一次。引擎在更新骨骼时一并算出相机，相机与脸永远是同一时刻的姿势。
 - 不用每帧在世界坐标里写相机：即使在 `PrepareRendering` 之后写、CPU 侧每帧都对得上，急转弯时仍有个别帧渲染器用了另一时刻的相机，镜子里的头一帧跳开又回来。
-- 可选骨骼：`Head`（相机随头一起转，脸在画面里不动）、`Spine_2`、`COG`（`Hip` 与 `COG` 位置重合，不单列）。局部位姿 = 对准点 `aim` +（按 Y、X、Z 顺序转过 `rot` 后的）+Z 方向 × `dist`，相机的 −Z 朝向对准点。`Head` 与 `COG` 的局部轴在绑定姿势下与角色一致（+Z 前、+Y 上）；`Spine_2` 的轴未核对，靠「对准脸部」和角度调整。
-- 「对准脸部」把对准点设为 Head 坐标系里 (0, 0.04, 0.08) 那一点（脸前）在所选骨骼坐标系里的位置，取当前帧的姿势。
+- 定位点：`Head`（相机随头一起转，脸在画面里不动）、`Neck_0`、`Spine_2`、`COG`（`Hip` 与 `COG` 位置重合，不单列）。局部位姿 = 对准点 `aim` +（按 Y、X、Z 顺序转过 `rot` 后的）+Z 方向 × `dist`，相机的 −Z 朝向对准点。`Head` 与 `COG` 的局部轴在绑定姿势下与角色一致（+Z 前、+Y 上）；`Neck_0`、`Spine_2` 的轴未核对，靠对准点和角度调整。
+- 「对准定位点」把对准点设为 (0, 0, 0)，即镜头对准定位点骨骼本身。
 - 近、远裁剪面只保留对准点前后 `clip_front` / `clip_back` 的一段，其余像素透明，背景因此去掉。
 
 ## 3. 画面
@@ -40,3 +42,17 @@
 - 在 `PrepareRendering` 中对 HUD 控件调用 `via.gui.Control.duplicate`：返回成功后崩溃。改 GUI 树只在 `UpdateBehavior` 中做。
 - 借用原版 HUD 元素（时间图标）显示时，改它的 `AssetType` 会丢掉它的 UV 序列，直到重启都恢复不了；所以用自己的 GUI。
 - 在 `PrepareRendering` 之前取骨骼的世界位置：还是上一帧的，跑动时相机落后约 19 cm。
+
+## 6. 各游戏的资源
+
+| | 荒野 | RE4R |
+|---|---|---|
+| rtex | `GUI/ui_texture/tex_render/rtt_facemirror_00.rtex.6`（由 `rtt080000_00` 改尺寸） | `_Chainsaw/UI/FaceMirror/rtt_facemirror_00.rtex.5`（由 `cs_ui_hud_capture` 改尺寸，格式同为 29） |
+| GUI | `GUI/ui000000/ui000200/lib000204.gui`，元素 `tex_saleMark` | `systems/gui/imageplane_1920x1080.gui`，元素 `Image` |
+| GUI 所在场景文件夹 | `GUIHud` | `Gui` |
+| 主相机名 | `Main Camera` | `MainCamera` |
+| 定位点 | `Head`、`Neck_0`、`Spine_2`、`COG` | `Head`、`Neck_0`、`Spine_2`、`Hip`（没有 COG） |
+
+- RE4R 的 rtex 文件头与荒野相同：`RTEX`、版本 5、0x0C 格式、0x10 / 0x14 宽高。
+- RE4R 的头是单独的 GameObject，但身体骨架上也有 `Head`，相机挂在身体上（`primary_root` 即身体）。
+- 两个游戏的这些骨骼都是 +Z 朝前、+Y 朝上（动画中有扭转）。

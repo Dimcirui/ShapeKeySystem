@@ -1876,11 +1876,10 @@ function cmds.face_mirror(a)
     return true
 end
 
--- what = "aim" (aim point to the face on the next frame) / "rig" (current joint's defaults) / "all"
+-- what = "aim" (aim at the anchor joint itself) / "rig" (current joint's defaults) / "all"
 function cmds.face_mirror_reset(a)
     local F = SKS.adapter.face_mirror
     if not F then return false, "E_BAD_ARGS", "this game has no face mirror" end
-    if a.what == "aim" then F.request_aim(); return true end
     local ok, err, msg = F.reset(a.what)
     if not ok then return ok, err, msg end
     F.save_soon()

@@ -240,12 +240,15 @@ local h_before = Panel.ui.win.h
 Panel.ui.win.h = 2000
 DRAWS, CMDS = {}, {}; CB.d2d_draw()
 check(drawn("各通道强度") and drawn("browDownLeft") and not drawn("页面出错"), "channel list drawn")
--- the face mirror card sits below the fold: draw the page itself, tall enough to hold it
+-- the face mirror has its own tab on this page: draw the page with that tab picked
 do
     local PageMocap = package.loaded["ShapeKeySystem_UI.PageMocap"]
     DRAWS = {}
     local ok, err = pcall(PageMocap.draw, { st = SKS.state, call = SKS.call, state = {} }, 0, 0, 900)
-    check(ok and drawn("表情镜") and drawn("挂在骨骼") and drawn("对准脸部"), "face mirror card drawn" .. (ok and "" or (" " .. tostring(err))))
+    check(ok and drawn("面捕总配置") and not drawn("对准定位点"), "mocap page opens on the 面捕 tab")
+    DRAWS = {}
+    ok, err = pcall(PageMocap.draw, { st = SKS.state, call = SKS.call, state = { tab = "mirror" } }, 0, 0, 900)
+    check(ok and drawn("表情镜") and drawn("定位点") and drawn("对准定位点") and not drawn("面捕总配置"), "face mirror tab drawn" .. (ok and "" or (" " .. tostring(err))))
 end
 -- face mirror settings: values are clamped, unknown joints refused, the current joint's rig reset
 do
@@ -258,7 +261,13 @@ do
     SKS.call("face_mirror", { patch = { bind = "COG" } })
     check(SKS.call("face_mirror_reset", { what = "rig" }) and fm.cfg.rigs.COG.dist == 0.6 and fm.cfg.rigs.COG.aim.y == 0.45,
         "face mirror reset restores the current joint's camera")
+    check(SKS.call("face_mirror_reset", { what = "aim" }) and fm.cfg.rigs.COG.aim.x == 0 and fm.cfg.rigs.COG.aim.y == 0
+        and fm.cfg.rigs.COG.aim.z == 0, "face mirror aims at the anchor joint")
     check(SKS.call("face_mirror_reset", { what = "all" }) and fm.cfg.size == 260 and fm.cfg.bind == "Head", "face mirror reset all")
+    check(SKS.call("face_mirror", { patch = { hide = { legs = true } } }) and fm.cfg.hide.legs == true
+        and not SKS.call("face_mirror", { patch = { hide = { tail = true } } }) and fm.cfg.hide.tail == nil,
+        "face mirror hides a known part, refuses an unknown one")
+    SKS.call("face_mirror_reset", { what = "all" })
 end
 SNAP("面捕", function() DRAWS, CMDS = {}, {}; CB.d2d_draw() end)
 Panel.ui.page_state.mocap.channels_open = nil
