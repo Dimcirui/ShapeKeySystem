@@ -7,7 +7,7 @@ RE 引擎游戏的 REFramework 插件，用于操控游戏内的形态键（或�
 - 外部接口：其他插件可以通过公开 API 接管形态键，例如接入外部面捕。
 - 优先级：外部接口持有某个形态键时，直接覆盖其他方式；手动修改优先于自动驱动，自动驱动会在手动修改的范围基础上重映射。
 
-作者：谛听（Dimcirui）、MK（MonkeySama）、Funnyguysmz、Kevin、Motoka。
+作者：谛听（Dimcirui）、MK（MonkeySama）、Funnyguysmz、Kevin、Motoka、Moon。
 版本号和更新记录见 `reframework/autorun/ShapeKeySystem_Core/Version.lua`。
 
 ## 支持的游戏

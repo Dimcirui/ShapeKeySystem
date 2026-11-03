@@ -8,7 +8,7 @@ local V = {}
 
 V.name = "ShapeKeySystem"
 V.number = "1.14.1"
-V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka"
+V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka, Moon"
 
 V.history = {
     { version = "1.14.1", notes = "提醒更新过旧的 REFramework" },
