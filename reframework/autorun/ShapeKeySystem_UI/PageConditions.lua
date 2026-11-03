@@ -19,7 +19,7 @@ local C = T.c
 local max, min, floor = math.max, math.min, math.floor
 
 local SOURCE = { user = "用户", mods = "mod 自带" }
-local STATUS = { active = { "生效中", C.ok }, outranked = { "命中，但被上面的压着", C.warn }, idle = { "未命中", C.faint },
+local STATUS = { active = { "生效中", C.ok }, outranked = { "命中，但被上面的独占状态压着", C.warn }, idle = { "未命中", C.faint },
     off = { "已停用", C.faint } }
 local UNBOUND = "-"
 local NUM_OPS = { "<=", "<", ">=", ">", "==" }
@@ -225,7 +225,7 @@ local function states_section(ctx, x, y, w)
     local cy = y
     section_head("状态", L.f("%d 个", #data.states), x, cy)
     cy = cy + 28
-    D.text("靠上的状态优先生效，同一个状态的规则满足一种即生效；组合选「-」可临时停用", x, cy, C.faint, W.small(), w); cy = cy + 24
+    D.text("命中的状态同时生效，同一个形态键由靠上的状态决定；同一个状态的规则满足一种即生效；组合选「-」可临时停用", x, cy, C.faint, W.small(), w); cy = cy + 24
     local clip_ids = {}
     for id in pairs(data.clips) do clip_ids[#clip_ids + 1] = id end
     table.sort(clip_ids)
@@ -320,6 +320,14 @@ local function states_section(ctx, x, y, w)
                 edit(ctx, function(d) table.insert(d.states[si].rules, { logic = "AND", hold = 0, conditions = {} }) end)
                 s.form = { si = si, ri = #state.rules + 1 }
             end
+            if not closed then
+                -- exclusive: while this state matches, the states below it do not play at all
+                local label = "独占状态"
+                local tx = x + w - 24 - (D.measure(W.body(), label) + 38)
+                local ch, on = W.toggle(label, tx, ry + 2, state.exclusive == true)
+                W.tooltip("开启后，这个状态生效时下面的状态都不播放；关闭时，下面的状态可以控制它没用到的形态键", tx, ry + 2, x + w - tx, 28)
+                if ch then edit(ctx, function(d) d.states[si].exclusive = on end) end
+            end
         end
         cy = cy + h + 8
     end
@@ -349,22 +357,26 @@ local function clips_section(ctx, x, y, w)
     end
     cy = cy + 32
     cy = cy + W.text_form(s, "clip_form", "conditions_clip", x, cy, w)
-    local playing = live.cond and live.cond.playing
+    local playing_set = live.cond and live.cond.playing_set or {}
     -- keys a clip can use: every merged mesh key
     local key_items = W.shape_key_items(st.sculpt, s)
     s.search = s.search or {}
     -- the open search list of a clip adds its height to that clip's box
     local list_h = s.addkey_h or {}
     s.addkey_h = list_h
+    -- sculpt presets to import from: only those with keys on the scanned meshes
+    local presets = {}
+    for _, e in ipairs(st.presets.sculpt or {}) do if (e.hits or 0) > 0 then presets[#presets + 1] = e end end
+    s.import = s.import or {}
     for _, id in ipairs(ids) do
         local c = data.clips[id]
         local open = s.open_clip == id
         local keys = {}
         for k in pairs(c.values) do keys[#keys + 1] = k end
         table.sort(keys)
-        local h = 44 + (open and (40 + #keys * 30 + max(40, (list_h[id] or 34) + 6)) or 0)
+        local h = 44 + (open and (40 + #keys * 30 + max(40, (list_h[id] or 34) + 6) + (#presets > 0 and 36 or 0)) or 0)
         if visible(cy, h) then
-            W.panel_box(x, cy, w, h, playing == id)
+            W.panel_box(x, cy, w, h, playing_set[id] == true)
             local clicked = W.header(id, x + 8, cy + 9, min(260, w * 0.35), open, L.f("%d 个形态键", #keys))
             if clicked then
                 if open then s.open_clip = nil else s.open_clip = id end
@@ -408,30 +420,40 @@ local function clips_section(ctx, x, y, w)
                 else
                     D.text_mid("先在「捏脸」页扫描装备，才能选择形态键", x + 20, oy + 4, 28, C.faint, W.small())
                 end
-                -- copy a sculpt preset's non-zero values, or one option of its key groups, into this combination
-                local pr = st.presets.sculpt or {}
-                if #pr > 0 then
-                    local labels, picks = {}, {}
-                    for _, e in ipairs(pr) do
-                        local base = e.name .. (e.folder and "" or L.tr("（通用）"))
-                        labels[#labels + 1] = base
-                        picks[#picks + 1] = { name = e.name, folder = e.folder }
-                        for _, g in ipairs(e.key_groups or {}) do
-                            for oi, o in ipairs(g.options) do
-                                labels[#labels + 1] = base .. " · " .. g.name .. " / " .. o
-                                picks[#picks + 1] = { name = e.name, folder = e.folder, group = g.name, option = oi }
-                            end
+                -- copy a sculpt preset's non-zero values, or one option of its key groups, into this
+                -- combination: one list picks the preset, the second its values or a group option
+                if #presets > 0 then
+                    local iy = oy + max(40, (list_h[id] or 34) + 6)
+                    local pick = s.import[id] or {}
+                    s.import[id] = pick
+                    local labels, pi = {}, nil
+                    for i, e in ipairs(presets) do
+                        labels[i] = e.name .. (e.folder and "" or L.tr("（通用）"))
+                        if e.name == pick.name and e.folder == pick.folder then pi = i end
+                    end
+                    local e = pi and presets[pi]
+                    local parts, part_labels = { {} }, { L.tr("预设值") }
+                    for _, g in ipairs(e and e.key_groups or {}) do
+                        for oi, o in ipairs(g.options) do
+                            parts[#parts + 1] = { group = g.name, option = oi }
+                            part_labels[#part_labels + 1] = g.name .. " / " .. o
                         end
                     end
-                    local ix = x + 30 + min(320, w * 0.5)
-                    local iw = min(260, x + w - ix - 10)
-                    local c5, i5 = W.select("import_" .. id, ix, oy + 4, iw, 28, labels, nil, { placeholder = "从捏脸配置导入…" })
-                    local p = c5 and picks[i5]
-                    if p then
-                        ctx.call("cond_import_sculpt", { clip = id, name = p.name, folder = p.folder, group = p.group, option = p.option })
-                    end
+                    if not parts[pick.part or 1] then pick.part = 1 end
+                    D.text_mid("从捏脸配置导入", x + 20, iy, 28, C.muted, W.small())
+                    local px = x + 20 + tbw("从捏脸配置导入") + 8
+                    local bw = tbw("导入") + 16
+                    local sw = max(80, min(240, (x + w - px - bw - 26) / 2))
+                    local c5, i5 = W.select("import_" .. id, px, iy, sw, 28, labels, pi, { placeholder = "选择捏脸配置…" })
+                    if c5 and presets[i5] then pick.name, pick.folder, pick.part = presets[i5].name, presets[i5].folder, 1 end
+                    local c6, i6 = W.select("import_part_" .. id, px + sw + 6, iy, sw, 28, part_labels, pick.part or 1)
+                    if c6 then pick.part = i6 end
                     W.tooltip("把该捏脸配置里所有不为 0 的形态键值，或它某个键组选项里的值，原样加入这个组合；组合里已有的同名键会被覆盖",
-                        ix, oy + 4, iw, 28)
+                        px, iy, sw * 2 + 6, 28)
+                    if W.button("导入", px + sw * 2 + 12, iy, bw, 28, { disabled = e == nil }) and e then
+                        local p = parts[pick.part or 1]
+                        ctx.call("cond_import_sculpt", { clip = id, name = e.name, folder = e.folder, group = p.group, option = p.option })
+                    end
                 end
             end
         end

@@ -117,5 +117,7 @@ check(not find("页面出错") and find("绑定（查找过程）") and not find
 st.presets.legacy = { { part = "ch03_012_0014", source = "user", path = "user/ch03_012_001/ch03_012_0014.json" } }
 frame()
 check(not find("页面出错") and find("用它替换整套绑定") and find("ch03_012_0014.json"), "old part bindings are listed with their actions")
+st.presets.legacy = {}
+check(find("导出为 mod"), "the binding card offers 导出为 mod")
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 print("BIND FAILS:", bf)

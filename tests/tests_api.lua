@@ -113,7 +113,18 @@ local function frame() CB.tick(); CB.frame(); DRAWS, DRAWN_IMAGES, CMDS = {}, {}
 local function find(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then return d end end end
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 Panel.ui.page = "sculpt"; frame()
+Panel.ui.page_state.sculpt.filter = self_key; frame()   -- every key is listed: find it
 check(find("由 TestMod 控制") ~= nil, "sculpt page marks the held key")
+-- a key the selected key group option holds says so; set to 无 it is a normal row again
+SKS.call("key_group_new", { name = "UI组" }); SKS.call("key_group_option_add", { group = "UI组", name = "开" })
+SKS.call("key_group_assign", { group = "UI组", option = 1, names = { expr_key }, values = { [expr_key] = 0.4 } })
+SKS.call("key_group_set", { group = "UI组", value = 1 })
+Panel.ui.page_state.sculpt.filter = expr_key; frame()
+check(find("键组「UI组」· 开") ~= nil, "sculpt page: a key held by a key group option names it")
+SKS.call("key_group_set", { group = "UI组", value = 0 }); frame()
+check(find("键组「UI组」· 开") == nil and find("键组「UI组」") ~= nil, "group at 无: the key is a normal row that names its group")
+SKS.call("key_group_delete", { group = "UI组" })
+Panel.ui.page_state.sculpt.filter = ""
 -- 调试 tab: a tall window keeps the external control card in view
 local win_h = Panel.ui.win.h
 Panel.ui.page = "debug"; Panel.ui.page_state.debug = { tab = "debug" }; Panel.ui.win.h = 1060; frame()

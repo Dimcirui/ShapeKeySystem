@@ -78,8 +78,14 @@ local function binding_card(ctx, x, y, w)
             call("write_binding", { part = part, expression = st.expression.profile and st.expression.profile.id,
                                     sculpt = st.sculpt.preset and st.sculpt.preset.name or nil, gains = true })
         end
-        if W.button("恢复 mod 自带的绑定", bx + bw + 10, cy, nil, 30, { kind = "ghost" }) then
-            call("restore_mod_binding", { part = part })
+        local rc, rw = W.button("恢复 mod 自带的绑定", bx + bw + 10, cy, nil, 30, { kind = "ghost" })
+        if rc then call("restore_mod_binding", { part = part }) end
+        if W.button("导出为 mod", bx + bw + rw + 20, cy, nil, 30, { kind = "ghost" }) then
+            W.start_text(ctx.state, "export_form", { title = "作者前缀（英文字母、数字、下划线）", text = ctx.state.export_prefix or "",
+                on_submit = function(prefix)
+                    ctx.state.export_prefix = prefix
+                    call("export_mod", { prefix = prefix })
+                end })
         end
         cy = cy + 40
     end
@@ -99,6 +105,11 @@ local function binding_card(ctx, x, y, w)
         end
     end
     return h
+end
+
+-- the prefix form of 导出为 mod
+local function export_box(ctx, x, y, w)
+    return W.text_form(ctx.state, "export_form", "export_prefix", x, y, w)
 end
 
 local function tuning_line(ctx, x, y, w)
@@ -179,6 +190,7 @@ function Page.draw(ctx, x, y, w)
         cy = cy + profile_list(ctx, x, cy, w)
     else
         cy = cy + binding_card(ctx, x, cy, w) + 10
+        cy = cy + export_box(ctx, x, cy, w)
         cy = cy + tuning_line(ctx, x, cy, w)
     end
     return cy + 10 - y

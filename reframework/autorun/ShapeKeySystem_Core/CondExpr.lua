@@ -4,16 +4,19 @@
 -- File: <src>/conditions/<id>.json (src = user | mods), schema "sks.conditions/1":
 --   { name, auto = true,
 --     clips  = { <clip id> = { values = { <key> = weight }, fade_in = s, fade_out = s } },
---     states = [ { clip = <clip id>, rules = [ { logic = "AND"|"OR", hold = s,
+--     states = [ { clip = <clip id>, exclusive = false, rules = [ { logic = "AND"|"OR", hold = s,
 --                                                conditions = [ {type, op, value, band} ] } ] } ] }
--- states are in priority order: the first state with a matching rule (or still inside its hold
--- time) plays its clip. A state with clip = "" is switched off: it is skipped and never outranks
--- the states below it. auto = false pauses the rules. A binding names the set ("conditions").
+-- states are in priority order: every state with a matching rule (or still inside its hold time)
+-- plays its clip, and on a key two playing clips both name the upper one wins, so a lower state
+-- fills only the keys the states above it leave free. A matching `exclusive` state stops there:
+-- the states below it are outranked and fade out. A state with clip = "" is switched off: it is
+-- skipped and never outranks the states below it. auto = false pauses the rules. A binding names
+-- the set ("conditions").
 --
--- Blending: every clip has a weight a (0..1). The playing clip fades in over its fade_in, all
+-- Blending: every clip has a weight a (0..1). The playing clips fade in over their fade_in, all
 -- others fade out over their own fade_out. A key named by a clip becomes
 --   e' = e * (1 - a) + target * a        (e = the fcParam expression weight)
--- applied fading clips first, the playing one last. e' then goes through the usual sculpt mix
+-- applied fading clips first, then the playing ones from the lowest state to the highest. e' then goes through the usual sculpt mix
 -- (Sculpt.mix: s + (1 - s) * e') and can still be overridden by other plugins (External). Keys
 -- that are not driven by the expression profile count as e = 0 (E.for_key) and go through the
 -- same mix, so a clip always remaps on top of the sculpt value (user decision 2026-10-10).
@@ -32,7 +35,8 @@ E.preview = nil         -- clip id forced by the panel ("预览"), or nil
 
 local alpha = {}        -- clip id -> weight
 local hold_until = setmetatable({}, { __mode = "k" })   -- rule table -> os.clock deadline
-E.playing = nil         -- clip id the rules (or the preview) selected
+E.playing = nil         -- clip id of the highest playing state (or the preview)
+E.playing_set = {}      -- clip ids playing now, highest state first
 E.status = {}           -- per state index: "active" | "outranked" | "idle" | "off"
 E.animating = false     -- some weight is moving (sculpt keys need rewriting)
 local last_clock = nil
@@ -58,6 +62,7 @@ function E.validate(d)
     if d.states ~= nil and type(d.states) ~= "table" then return false, "states must be a list" end
     for i, s in ipairs(d.states or {}) do
         if type(s) ~= "table" or type(s.clip) ~= "string" then return false, "state " .. i .. ": clip must be a string" end
+        if s.exclusive ~= nil and type(s.exclusive) ~= "boolean" then return false, "state " .. i .. ": exclusive must be a boolean" end
         for j, r in ipairs(s.rules or {}) do
             if type(r) ~= "table" then return false, "state " .. i .. " rule " .. j end
             for _, c in ipairs(r.conditions or {}) do
@@ -78,6 +83,7 @@ local function normalize(d)
     end
     d.states = type(d.states) == "table" and d.states or {}
     for _, s in ipairs(d.states) do
+        s.exclusive = s.exclusive == true
         s.rules = type(s.rules) == "table" and s.rules or {}
         for _, r in ipairs(s.rules) do
             r.conditions = type(r.conditions) == "table" and r.conditions or {}
@@ -122,14 +128,14 @@ function E.select(name)
         return false
     end
     if E.current and E.current.id == e.id and E.current.source == e.source then return true end
-    E.current = { id = e.id, name = e.name, source = e.source, data = U.copy(e.data), dirty = false }
+    E.current = { id = e.id, name = e.name, source = e.source, path = e.path, data = U.copy(e.data), dirty = false }
     slot_cache = nil
     return true
 end
 
 function E.new_set(name)
-    local id = U.safe_id(name)
-    if id == "" then return false, "E_BAD_ARGS", "empty name" end
+    if U.safe_id(name) == "" then return false, "E_BAD_ARGS", "empty name" end
+    local id = U.file_id(name)
     E.current = { id = id, name = name, source = "user", data = normalize({ name = name, auto = true }), dirty = true }
     slot_cache = nil
     return true
@@ -169,13 +175,15 @@ function E.save(as_name)
     local cur = E.current
     if not cur then return false, "E_NOT_FOUND", "no condition set" end
     local name = as_name or cur.name
-    local id = U.safe_id(name)
-    if id == "" then return false, "E_BAD_ARGS", "empty name" end
+    if U.safe_id(name) == "" then return false, "E_BAD_ARGS", "empty name" end
+    -- the set itself: its user file, or for a mods set a user file of the same id that hides it
+    local id = as_name and U.file_id(name) or cur.id
+    local path = not as_name and cur.source == "user" and cur.path or U.path("user", "conditions", id .. ".json")
     local d = U.copy(cur.data)
     d.schema, d.name = E.SCHEMA, name
-    if not U.save_json(U.path("user", "conditions", id .. ".json"), d) then return false, "E_IO", "write failed" end
+    if not U.save_json(path, d) then return false, "E_IO", "write failed" end
     E.load_all()
-    cur.id, cur.name, cur.source, cur.dirty = id, name, "user", false
+    cur.id, cur.name, cur.source, cur.path, cur.dirty = id, name, "user", path, false
     return true, nil, nil, { id = id }
 end
 
@@ -209,10 +217,12 @@ function E.update(live)
     last_clock = now
     local cur = E.current
     local data = cur and cur.data
-    local pick = nil
+    local set, want_of = E.playing_set, {}
+    for i = #set, 1, -1 do set[i] = nil end
     local status = E.status
     for i in pairs(status) do status[i] = nil end
     if data and live then
+        local stopped = false   -- an exclusive state above matched
         for i, s in ipairs(data.states) do
             local hit = false
             if s.clip == "" then
@@ -221,19 +231,26 @@ function E.update(live)
                 if data.auto ~= false then
                     for _, r in ipairs(s.rules) do if rule_hits(r, now) then hit = true end end
                 end
-                if hit and not pick then pick = s.clip; status[i] = "active"
+                if hit and not stopped then
+                    status[i] = "active"
+                    if not want_of[s.clip] and data.clips[s.clip] then want_of[s.clip] = true; set[#set + 1] = s.clip end
+                    if s.exclusive then stopped = true end
                 elseif hit then status[i] = "outranked"
                 else status[i] = "idle" end
             end
         end
     end
-    if E.preview and data and data.clips[E.preview] then pick = E.preview end
-    E.playing = pick
+    if E.preview and data and data.clips[E.preview] then
+        for i = #set, 1, -1 do set[i] = nil end
+        want_of = { [E.preview] = true }
+        set[1] = E.preview
+    end
+    E.playing = set[1]
     local changed = false
     local clips = data and data.clips or {}
     for id, c in pairs(clips) do
         local a = alpha[id] or 0
-        local want = (id == pick) and 1 or 0
+        local want = want_of[id] and 1 or 0
         if a ~= want then
             local t = (want > a) and c.fade_in or c.fade_out
             local step = (t and t > 0) and (dt / t) or 1
@@ -253,12 +270,13 @@ function E.reset()
     active_dirty = true
     for k in pairs(alpha) do alpha[k] = nil end
     E.playing = nil
+    for i = #E.playing_set, 1, -1 do E.playing_set[i] = nil end
     last_clock = nil
 end
 
 function E.alpha(id) return alpha[id] or 0 end
 
--- clips with weight, fading ones first, the playing one last
+-- clips with weight: fading ones first, then the playing ones from the lowest state up
 -- 更新回调内复用活跃顺序；配置工作副本替换时同时放掉旧名称索引。
 local function active_clips()
     local data = E.current and E.current.data
@@ -269,10 +287,15 @@ local function active_clips()
     active_dirty = false
     for i = #active_list, 1, -1 do active_list[i] = nil end
     if not data then return active_list end
+    local set, in_set = E.playing_set, {}
+    for _, id in ipairs(set) do in_set[id] = true end
     for id, a in pairs(alpha) do
-        if a > 0 and id ~= E.playing and data.clips[id] then active_list[#active_list + 1] = id end
+        if a > 0 and not in_set[id] and data.clips[id] then active_list[#active_list + 1] = id end
     end
-    if E.playing and (alpha[E.playing] or 0) > 0 and data.clips[E.playing] then active_list[#active_list + 1] = E.playing end
+    for i = #set, 1, -1 do
+        local id = set[i]
+        if (alpha[id] or 0) > 0 and data.clips[id] then active_list[#active_list + 1] = id end
+    end
     return active_list
 end
 

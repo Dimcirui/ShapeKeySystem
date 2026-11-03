@@ -117,6 +117,16 @@ function U.safe_id(name)
     return s
 end
 
+-- File-name stem for a new user preset named `name`. REFramework writes non-ASCII file names in
+-- the system code page (garbled, unreadable elsewhere), so such a name becomes its ASCII part plus
+-- a hash of the whole name: "Airi 日常脸" -> "Airi_1a2b3c4d". The name itself stays in the file.
+function U.file_id(name)
+    local s = U.safe_id(name)
+    if not s:find("[\128-\255]") then return s end
+    local ascii = s:gsub("[\128-\255]+", " "):gsub("%s+", "_"):gsub("^[_%.%-]+", ""):gsub("[_%.%-]+$", "")
+    return (ascii ~= "" and ascii .. "_" or "") .. U.fnv(s)
+end
+
 -- 32-bit FNV-1a over a string, as 8 hex digits (channel-set fingerprints).
 function U.fnv(s)
     local h = 0x811C9DC5

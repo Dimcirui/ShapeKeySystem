@@ -27,6 +27,7 @@ local ActorInstances = require("ShapeKeySystem_Core.ActorInstances")
 local Proc    = require("ShapeKeySystem_Core.Procedural")
 local Mocap   = require("ShapeKeySystem_Core.Mocap")
 local Drivers = require("ShapeKeySystem_Core.Drivers")
+local Export  = require("ShapeKeySystem_Core.Export")
 local Actors  = require("ShapeKeySystem_Core.Actors")
 local FaceHold = require("ShapeKeySystem_Core.FaceHold")
 
@@ -64,6 +65,8 @@ local DEFAULTS = {
     sculpt_max = 1.0,
     -- conditional expression set used when no parent preset names one ("" = none)
     conditions = "",
+    -- driver set in effect (user/drivers/ or mods/drivers/, "" = none) and the drivers' master switch
+    drivers = "", drivers_enabled = true,
     -- face navigator art on the basic page: data/ShapeKeySystem/faces/<id>.json
     face_style = "portrait",
     -- panel drawing: "auto" (reframework-d2d when installed, else REFramework's ImGui) / "d2d" / "imgui"
@@ -549,15 +552,23 @@ local function build_mapping_state()
     bump("mapping")
 end
 
+-- hits: keys with a non-zero value in the preset or one of its key group options that are on the
+-- scanned meshes (the condition page leaves out presets without any)
 local function sculpt_entry_state(e)
-    local groups = {}
+    local groups, seen, hits = {}, {}, 0
+    local function count(values)
+        for k, v in pairs(type(values) == "table" and values or {}) do
+            if not seen[k] and tonumber(v) and tonumber(v) ~= 0 and Sculpt.K.by_name[k] then seen[k] = true; hits = hits + 1 end
+        end
+    end
+    count(e.values)
     for i, g in ipairs(e.key_groups or {}) do
         local options = {}
-        for j, o in ipairs(g.options) do options[j] = o.name end
+        for j, o in ipairs(g.options) do options[j] = o.name; count(o.values) end
         groups[i] = { name = g.name, options = options }
     end
     return { id = e.id, name = e.name, source = e.source, folder = e.folder, target_part = e.target_part,
-        key_groups = groups }
+        key_groups = groups, hits = hits }
 end
 
 -- readable name of a model ("ch03_032_501" -> "护锁刃龙 α/β") from builtin/<adapter id>/<A.model_names>
@@ -671,10 +682,14 @@ local function build_sculpt_state()
     for i, k in ipairs(Sculpt.K.keys) do
         local o = {}
         for p, v in pairs(k.overrides) do o[p] = v end
-        keys[i] = { name = k.name, label = label_of(k.name), group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts), value = k.value,
-                    default = k.default, overrides = o, owner = k.owner,
-                    locked = false, mixed = k.owner == "expression", in_preset = k.in_preset == true,
-                    in_group = Sculpt.group_of(k.name) ~= nil,
+        -- held_by: the key group option holding the key (value is then its fixed value)
+        local kg = Sculpt.group_of(k.name)
+        local held_by = k.held ~= nil and kg and { group = kg.name, option = kg.options[kg.value].name } or nil
+        keys[i] = { name = k.name, label = label_of(k.name), group = k.group, parts = U.copy(k.parts), part_labels = part_labels(k.parts),
+                    value = Sculpt.effective(k), free_value = k.value,
+                    default = k.default, overrides = held_by and {} or o, owner = k.owner,
+                    locked = held_by ~= nil, mixed = k.owner == "expression", in_preset = k.in_preset == true,
+                    in_group = kg ~= nil, key_group = kg and kg.name or nil, held_by = held_by,
                     range = { Sculpt.RANGE[1], Sculpt.RANGE[2] } }
         local g = gi[k.group]
         if not g then
@@ -1166,6 +1181,7 @@ local function scan_full()
     if pick then C.profile_override = true end
     apply_tuning(false)
     C.select_conditions()
+    C.select_drivers()
     rebuild_sculpt()
     build_presets_state()
     bump("scene")
@@ -1574,7 +1590,7 @@ local function tick()
     end
 
     -- conditional expressions: master hunter in gameplay only
-    C.cond_live = not C.menu and (CondExpr.current ~= nil or state.runtime.ui_open)
+    C.cond_live = not C.menu and (CondExpr.current ~= nil or state.runtime.ui_open or Drivers.wants_cond())
     if C.cond_live then Cnd.sample(f) end
     if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dynamic() end
     if Touch.update() then Sculpt.mark_dynamic() end
@@ -1909,9 +1925,44 @@ function cmds.select_actor(a)
     return true
 end
 
--- shape key drivers (Drivers.lua): add / remove / patch; user/drivers.json is written shortly after
+-- shape key drivers (Drivers.lua): groups and driver sets; the set's file is written shortly after
+-- an edit, the master switch goes to settings.json, and so does the selected set unless the
+-- binding in effect names one ("drivers"): that pick only lasts until the binding changes.
+local function bound_drivers()
+    local b = C.binding
+    return b and b.data and b.data.drivers or nil
+end
+
+local function sync_drivers_cfg()
+    local id = Drivers.current and Drivers.current.id or ""
+    local on = Drivers.config().enabled
+    if bound_drivers() then id = cfg.drivers end
+    if id ~= cfg.drivers or on ~= cfg.drivers_enabled then
+        cfg.drivers, cfg.drivers_enabled = id, on
+        save_soon()
+    end
+end
+
 function cmds.drivers(a)
-    return Drivers.command(a)
+    local ok, code, msg = Drivers.command(a)
+    if ok then sync_drivers_cfg() end
+    return ok, code, msg
+end
+
+-- After a scan: a binding naming a driver set selects it when the binding (or the name) changes;
+-- without one, settings.drivers comes back.
+function C.select_drivers()
+    local want = bound_drivers()
+    local key = want and ((C.binding.base or "") .. " " .. want) or nil
+    Drivers.view.binding_name = want
+    if key == C.drivers_bound then return end
+    C.drivers_bound = key
+    local id = want or cfg.drivers
+    if id == "" or (Drivers.current and Drivers.current.id == id) then return end
+    if not Drivers.select(id) and want then
+        local k = "drivers:" .. want
+        if not C.warned[k] then C.warned[k] = true; notice("warn", I18n.f("驱动配置不存在：%s", want)) end
+    end
 end
 
 function cmds.set_procedural(a)
@@ -2041,15 +2092,20 @@ function cmds.revert_node(a)
     return recompile(edits)
 end
 
+-- the profile shown under this name (ids of non-ASCII names differ from the name)
+local function profile_named(name)
+    for _, e in ipairs(Profile.list) do if e.name == name then return e end end
+end
+
 -- 创建独立的空白用户配置；先校验重名和未保存修改，旧网格权重仅在 tick 清零。
 function cmds.create_profile(a)
     if state.mapping.dirty then return false, "E_UNSAVED", "映射尚未保存，请先保存或恢复配置" end
     if type(a.name) ~= "string" then return false, "E_BAD_ARGS", "配置名称不能为空" end
-    local id = U.safe_id(a.name)
+    local id = U.file_id(a.name)
     if id == "" or id == "." or id == ".." or id:match("[%.%s]$") then
         return false, "E_BAD_ARGS", "配置名称不能为空或以点结尾"
     end
-    if Profile.registry[id] then return false, "E_EXISTS", "配置名称已存在，请使用新的名称" end
+    if Profile.registry[id] or profile_named(a.name) then return false, "E_EXISTS", "配置名称已存在，请使用新的名称" end
     local data = { schema = "sks.profile/1", id = id, name = a.name, aliases = {}, channels = {} }
     if not U.save_json(U.path("user", "profiles", id .. ".json"), data) then
         return false, "E_IO", "write failed"
@@ -2069,9 +2125,12 @@ function cmds.save_profile(a)
     if not prog then return false, "E_NOT_FOUND", "no profile" end
     local id, name
     if a.as_name ~= nil then
-        id = U.safe_id(a.as_name)
+        id = U.file_id(a.as_name)
         if id == "" then return false, "E_BAD_ARGS", "empty name" end
         name = tostring(a.as_name)
+        local same = profile_named(name)
+        if same and same.id ~= prog.id then return false, "E_EXISTS", "配置名称已存在，请使用新的名称" end
+        if same then id = same.id end   -- its own name again: the same file
     else
         if prog.source ~= "user" then return false, "E_READONLY", "builtin / mod profiles cannot be overwritten" end
         id, name = prog.id, prog.name
@@ -2388,6 +2447,7 @@ function cmds.write_binding(a)
     elseif C.binding and C.binding.base == base and C.binding.data then
         data.conditions = C.binding.data.conditions   -- callers that do not know it keep it
     end
+    if C.binding and C.binding.base == base and C.binding.data then data.drivers = C.binding.data.drivers end
     if a.gains == true then
         data.gains, data.eyes = current_gains(), eyes_subset(cfg.eyes)
     elseif type(a.gains) == "table" then
@@ -2402,7 +2462,7 @@ end
 
 -- save the tuning in effect (gains + gaze) into the user copy of the binding it came from;
 -- keeps the binding's other fields (profile, sculpt, global, fingerprints)
--- bind_config {kind = "sculpt" | "expression" | "conditions", name}: make a config the default of
+-- bind_config {kind = "sculpt" | "expression" | "conditions" | "drivers", name}: make a config the default of
 -- the outfit worn ("绑定到 ..."). Only that field changes; the binding's other fields are kept and
 -- the result goes to user/ (a mod's binding is copied, never modified).
 function cmds.bind_config(a)
@@ -2421,6 +2481,11 @@ function cmds.bind_config(a)
     elseif a.kind == "conditions" then
         if not CondExpr.find(a.name) then return false, "E_NOT_FOUND", "condition set not found: " .. tostring(a.name) end
         data.conditions = a.name
+    elseif a.kind == "drivers" then
+        local e = Drivers.find(a.name)
+        if not e then return false, "E_NOT_FOUND", "driver set not found: " .. tostring(a.name) end
+        data.drivers = e.id
+        C.drivers_bound = nil   -- select it again on the next scan, even if it was picked by hand
     else
         return false, "E_BAD_ARGS", "kind"
     end
@@ -2458,6 +2523,51 @@ function cmds.restore_mod_binding(a)
     return true
 end
 
+-- export_mod {prefix}: the setup in effect (binding, sculpt values, profile, condition and driver
+-- sets) as a mod's files under export/<prefix>/ (Export.lua), unsaved edits included.
+function cmds.export_mod(a)
+    if not Export.valid_prefix(a.prefix) then
+        return false, "E_BAD_ARGS", "前缀只能用英文字母、数字、下划线和连字符，最多 24 个字符"
+    end
+    local base, _, display, binding = bind_target()
+    if not base then return false, "E_NOT_FOUND", "no parts with shape keys worn" end
+    local folder = Presets.folder_of(base)
+    -- the profile with its unsaved mapping edits; an unedited builtin one is only referenced
+    local prog, profile = C.prog, nil
+    local pe = prog and Profile.registry[prog.id]
+    if prog and C.resolved and (state.mapping.dirty or not pe or pe.source ~= "builtin") then
+        profile = Profile.to_json(C.resolved, C.edits, prog.id, prog.name)
+    end
+    local values, overrides = Sculpt.export_values()
+    local part = primary_part()
+    local sp = C.sculpt_preset
+    local sculpt = { schema = Presets.SCULPT_SCHEMA, name = sp and sp.name or display,
+                     target = part and { part = part.id, channel_hash = part.fingerprint } or nil,
+                     values = values, overrides = overrides, key_groups = Sculpt.export_groups() }
+    local cur = CondExpr.current
+    local dc, groups = Drivers.current, Drivers.config().groups
+    local fps = {}
+    for _, p in ipairs(C.parts) do
+        if Presets.folder_of(p.id) == folder and p.fingerprint then fps[p.id] = p.fingerprint end
+    end
+    local files = Export.build({
+        prefix = a.prefix, model = folder, base = base, binding = binding,
+        profile_id = prog and prog.id, profile = profile, sculpt = sculpt,
+        conditions = cur and { id = cur.id, name = cur.name, data = cur.data } or nil,
+        drivers = dc and #groups > 0 and { id = dc.id, name = dc.name, groups = groups } or nil,
+        fingerprints = fps, gains = current_gains(), eyes = eyes_subset(cfg.eyes),
+    })
+    local root = Export.root(a.prefix)
+    local rels = {}
+    for _, f in ipairs(files) do
+        if not U.save_json(root .. "\\" .. f.rel, f.data) then return false, "E_IO", "write failed: " .. f.rel end
+        rels[#rels + 1] = "mods/" .. f.rel:gsub("\\", "/")
+    end
+    local shown = "reframework/data/ShapeKeySystem/export/" .. a.prefix .. "/"
+    notice("info", I18n.f("已导出到 %s", shown))
+    return true, nil, nil, { path = shown, files = rels }
+end
+
 -- args: part, source ("user" default): a part file left by an earlier version becomes the binding of
 -- its model; a user part file is then tombstoned
 function cmds.adopt_legacy_binding(a)
@@ -2477,7 +2587,7 @@ function cmds.adopt_legacy_binding(a)
     return true, nil, nil, res
 end
 
-local DELETE_KINDS = { binding = true, sculpt = true, profile = true, conditions = true }
+local DELETE_KINDS = { binding = true, sculpt = true, profile = true, conditions = true, drivers = true }
 
 -- args: kind, name, folder? (sculpt: the model folder; nil = the current model's, then general)
 function cmds.request_delete(a)
@@ -2489,7 +2599,11 @@ function cmds.request_delete(a)
     elseif a.kind == "conditions" then
         local e = CondExpr.find(a.name)
         if not e or e.source ~= "user" then return false, "E_READONLY", "only user condition sets can be deleted" end
-        C.pending_delete = { kind = a.kind, name = e.name, base = e.id }
+        C.pending_delete = { kind = a.kind, name = e.name, base = e.id, path = e.path }
+    elseif a.kind == "drivers" then
+        local e = Drivers.find(a.name)
+        if not e or e.source ~= "user" then return false, "E_READONLY", "only user driver sets can be deleted" end
+        C.pending_delete = { kind = a.kind, name = e.name, base = e.id, path = e.path }
     elseif a.kind == "binding" then
         if not Presets.user_binding_exists(a.name) then return false, "E_READONLY", "only user bindings can be deleted" end
         C.pending_delete = { kind = a.kind, name = a.name, base = a.name }
@@ -2515,10 +2629,14 @@ function cmds.confirm_delete()
             C.sculpt_preset, C.sculpt_preset_manual = nil, false
         end
     elseif d.kind == "conditions" then
-        ok = U.save_json(U.path("user", "conditions", d.base .. ".json"), { deleted = true })
+        ok = U.save_json(d.path, { deleted = true })
         CondExpr.load_all()
         if CondExpr.current and CondExpr.current.id == d.base then CondExpr.current = nil end
         C.build_cond_state()
+    elseif d.kind == "drivers" then
+        ok = U.save_json(d.path, { deleted = true })
+        Drivers.deleted(d.base)
+        sync_drivers_cfg()
     elseif d.kind == "binding" then
         ok = Presets.tombstone_binding(d.base)
     else
@@ -2612,7 +2730,19 @@ function SKS.init(adapter)
     Names.load_aliases()
     Labels.load()
     Mocap.load()
-    Drivers.load()
+    Drivers.cond_value = function(id)
+        if not C.cond_live then return 0 end
+        local v = Cnd.V[id]
+        if v == true then return 1 end
+        return type(v) == "number" and v or 0
+    end
+    Drivers.cond_known = function(id) return next(Cnd.defs) == nil or Cnd.defs[id] ~= nil end
+    if type(cfg.drivers) ~= "string" then cfg.drivers = "" end
+    if type(cfg.drivers_enabled) ~= "boolean" then cfg.drivers_enabled = true end
+    local driver_set, drivers_on = Drivers.start(cfg.drivers)
+    if drivers_on == false then cfg.drivers_enabled = false; save_soon() end
+    if driver_set ~= cfg.drivers then cfg.drivers = driver_set; save_soon() end
+    Drivers.config().enabled = cfg.drivers_enabled
     if adapter.face_mirror then
         state.face_mirror = adapter.face_mirror.view
         adapter.face_mirror.attach({ stable = function() return C.last_gate == "stable" end,
@@ -2780,6 +2910,9 @@ function C.update_cond_live()
     for k in pairs(lc.status) do lc.status[k] = nil end
     for k, v in pairs(CondExpr.status) do lc.status[k] = v end
     lc.playing = CondExpr.playing
+    lc.playing_set = lc.playing_set or {}
+    for k in pairs(lc.playing_set) do lc.playing_set[k] = nil end
+    for _, id in ipairs(CondExpr.playing_set) do lc.playing_set[id] = true end
     for k in pairs(lc.alpha) do lc.alpha[k] = nil end
     local data = CondExpr.current and CondExpr.current.data
     if data then for id in pairs(data.clips) do lc.alpha[id] = CondExpr.alpha(id) end end

@@ -76,7 +76,7 @@ end
 function P.validate_binding(d)
     if type(d) ~= "table" then return false, "not an object" end
     if d.schema ~= nil and d.schema ~= P.BINDING_SCHEMA then return false, "unsupported schema " .. tostring(d.schema) end
-    for _, k in ipairs({ "part", "profile", "sculpt", "conditions" }) do
+    for _, k in ipairs({ "part", "profile", "sculpt", "conditions", "drivers" }) do
         if d[k] ~= nil and type(d[k]) ~= "string" then return false, k .. " must be a string" end
     end
     if d.global ~= nil and type(d.global) ~= "boolean" then return false, "global must be true / false" end
@@ -371,14 +371,23 @@ function P.find_sculpt(name, folder, source, any_folder)
 end
 
 -- folder nil = general preset
+-- A preset of this name already in the folder keeps its file (user) or its file id (mods, so the
+-- user copy hides it); a new one gets an ASCII file id.
 function P.save_sculpt(name, folder, payload)
-    local id = U.safe_id(name)
-    if id == "" then return false, "E_BAD_ARGS", "empty name" end
+    if U.safe_id(name) == "" then return false, "E_BAD_ARGS", "empty name" end
+    local id, path = U.file_id(name), nil
+    for _, e in ipairs(P.sculpt_list) do
+        if e.name == name and e.folder == folder then
+            id = e.id
+            if e.source == "user" then path = e.path end
+            break
+        end
+    end
     payload.schema = P.SCULPT_SCHEMA
     payload.name = name
     local ok, msg = P.validate_sculpt(payload)
     if not ok then return false, "E_SCHEMA", msg end
-    if not U.save_json(sculpt_file("user", folder, id), payload) then return false, "E_IO", "write failed" end
+    if not U.save_json(path or sculpt_file("user", folder, id), payload) then return false, "E_IO", "write failed" end
     P.load_sculpt()
     return true, nil, nil, { id = id, folder = folder }
 end
@@ -405,7 +414,7 @@ function P.import(kind, path, base)
         return P.save_sculpt(base or data.name or "imported", folder, data)
     elseif kind == "profiles" then
         if type(data.channels) ~= "table" then return false, "E_SCHEMA", "channels missing" end
-        base = U.safe_id(base or data.id or data.name or "")
+        base = U.file_id(base or data.id or data.name or "")
         if base == "" then return false, "E_BAD_ARGS", "no name for the imported file" end
         if not U.save_json(U.path("user", "profiles", base .. ".json"), data) then return false, "E_IO", "write failed" end
         return true, nil, nil, { id = base }

@@ -51,7 +51,8 @@ check(math.abs(WEIGHTS[si] - (0.2 + 0.8 * 0.8)) < 1e-6,
     string.format("hit -> hurt clip remaps the sculpt-only key: 0.2 + 0.8 * 0.8 = 0.84 (got %.4f)", WEIGHTS[si]))
 HSTATE.get_IsCombat = true; ticks(1)
 local Cx = require("ShapeKeySystem_Core.CondExpr")
-check(Cx.status[1] == "active" and Cx.status[2] == "outranked", "hurt active, fight outranked (priority = order)")
+check(Cx.status[1] == "active" and Cx.status[2] == "active" and Cx.playing == "hurt" and Cx.playing_set[2] == "fight"
+    and math.abs(WEIGHTS[ei] - 1.0) < 1e-6, "hurt and fight both play; on the key both name the upper state wins")
 wait(0.25); ticks(2)
 check(Cx.playing == "fight" and math.abs(WEIGHTS[ei] - 0.5) < 1e-6, "after the hold: fight plays (0.5)")
 check(math.abs(WEIGHTS[si] - 0.2) < 1e-6, "sculpt key back to its own value")
@@ -78,6 +79,31 @@ data.states[1].clip = ""; SKS.call("cond_edit", { data = data })
 HSTATE.get_IsCombat = true; HEALTH.hp = 140; ticks(2)
 check(Cx.status[1] == "off" and Cx.playing == "fight", "clip \"\" switches the state off; the next state plays")
 data.states[1].clip = "hurt"; SKS.call("cond_edit", { data = data })
+
+-- states play together: a lower state fills the keys an upper one leaves free, unless the upper is exclusive
+do
+    local d2 = {
+        auto = true,
+        clips = { top = { values = { [expr_key] = 0.9 }, fade_in = 0, fade_out = 0 },
+                  low = { values = { [expr_key] = 0.3, [self_key] = 0.5 }, fade_in = 0, fade_out = 0 } },
+        states = {
+            { clip = "top", rules = { { logic = "AND", hold = 0, conditions = { { type = "combat", value = true } } } } },
+            { clip = "low", rules = { { logic = "AND", hold = 0, conditions = { { type = "combat", value = true } } } } },
+        },
+    }
+    HSTATE.get_IsCombat = true
+    SKS.call("cond_edit", { data = d2 }); ticks(2)
+    check(math.abs(WEIGHTS[ei] - 0.9) < 1e-6 and math.abs(WEIGHTS[si] - (0.2 + 0.8 * 0.5)) < 1e-6,
+        "non-exclusive: the upper state keeps its key, the lower one drives the key the upper leaves free")
+    d2.states[1].exclusive = true
+    SKS.call("cond_edit", { data = d2 }); ticks(2)
+    check(Cx.status[2] == "outranked" and #Cx.playing_set == 1 and math.abs(WEIGHTS[si] - 0.2) < 1e-6,
+        "exclusive: the states below do not play")
+    check(Cx.current.data.states[1].exclusive == true and Cx.current.data.states[2].exclusive == false,
+        "exclusive is kept and defaults to false")
+    HSTATE.get_IsCombat = false
+    SKS.call("cond_edit", { data = data }); ticks(2)
+end
 HSTATE.get_IsCombat = false; HEALTH.hp = 150; run_for(0.4)
 
 -- rigs dropped on the update of a hit (parts change mid-combat) keep the HP baseline
@@ -116,6 +142,30 @@ for _ = 1, 40 do ticks(1); if Cnd.V.hp_decreased then fake = true end end
 check(not fake and math.abs((Cnd.V.hp_pct or 0) - 100 / 1.5) < 1e-3, "sampling resumes after a gap without a fake hit")
 ticks(90); HSTATE.get_IsCombat = false; HEALTH.hp = 150; run_for(0.4)
 
+-- Wilds status drinks, bad conditions, time of day and weather
+ticks(1)
+check(Cnd.V.bad_condition == "none" and Cnd.V.hot_drink == nil and Cnd.V.time_zone == 2
+    and math.abs((Cnd.V.hour or 0) - 16.5) < 1e-6 and Cnd.V.weather == "Fertility",
+    "Wilds: no bad condition, noon, 16:30, plenty")
+BAD._Poison, BAD._Sleep, HSTATE["st.get_IsHotEffectActive"] = true, true, true
+ENV.zone, ENV.weather = 4, "SandStorm"; ticks(1)
+check(Cnd.V.bad_condition == "sleep" and Cnd.V.hot_drink == true and Cnd.V.time_zone == 4 and Cnd.V.weather == "SandStorm",
+    "Wilds: sleep outranks poison; hot drink; night; sandstorm")
+check(Cnd.eval_condition({ type = "bad_condition", op = "~=", value = "none" })
+    and not Cnd.eval_condition({ type = "bad_condition", value = "poison" }), "Wilds: ≠ 无 matches any bad condition")
+BAD._Sleep = nil; ticks(1)
+check(Cnd.V.bad_condition == "poison", "Wilds: poison once sleep ends")
+check(Cnd.V.focus == nil, "Wilds: focus unreadable without a sub action")
+HSTATE.sub_action = "app.PlayerCommonSubAction.cNothing"; ticks(1)
+local f_off = Cnd.V.focus
+HSTATE.sub_action = "app.WpCommonSubAction.cAimRoot"; ticks(1)
+local f_on = Cnd.V.focus
+HSTATE.sub_action = "app.WpCommonSubAction.cAimEnd"; ticks(1)
+check(f_off == false and f_on == true and Cnd.V.focus == false, "Wilds: focus while the sub action is an aim one, not on its end")
+HSTATE.sub_action = nil
+BAD._Poison, HSTATE["st.get_IsHotEffectActive"] = nil, nil
+ENV.zone, ENV.weather = 2, "Fertility"; ticks(1)
+
 -- save, select, bind
 local ok, _, _, res = SKS.call("cond_save", {})
 check(ok and res.id == "Test Set" and not st.conditions.current.dirty, "cond_save writes user/conditions/Test Set.json")
@@ -146,7 +196,10 @@ local function find(s) for _, d in ipairs(DRAWS) do if d.s:find(s, 1, true) then
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 Panel.ui.page = "cond"; Panel.ui.page_state.cond = Panel.ui.page_state.cond or {}
 Panel.ui.page_state.cond.tab = "states"; frame(); frame()
-check(find("页面出错") == nil and find("靠上的状态优先生效，同一个状态的规则满足一种即生效") ~= nil, "条件规则 page draws")
+check(find("页面出错") == nil and find("命中的状态同时生效，同一个形态键由靠上的状态决定") ~= nil, "条件规则 page draws")
+Panel.ui.page_state.cond.closed = { false }; frame(); frame()
+check(find("独占状态") ~= nil and find("页面出错") == nil, "an open state shows the 独占状态 switch")
+Panel.ui.page_state.cond.closed = nil; frame()
 check(find("＋ 添加条件") == nil and find("（回差 5）") ~= nil and find(" 或 ") ~= nil,
     "states start collapsed and show their conditions on the header line")
 local function exact0(s2) for _, dd in ipairs(DRAWS) do if dd.s == s2 then return dd end end end
@@ -283,6 +336,37 @@ do
     check(not SKS.call("cond_import_sculpt", { clip = "opt", name = "Cond Groups", group = "Look", option = 3 }),
         "import: unknown option refused")
     SKS.call("key_group_delete", { group = "Look" })
+
+    -- presets without keys on the scanned meshes are left out; keys of other combinations stay
+    SKS.call("zero_sculpt_all")
+    check(SKS.call("save_sculpt", { name = "Cond Empty" }), "import: an all-zero sculpt preset saved")
+    local hits, folder = {}, {}
+    for _, e in ipairs(st.presets.sculpt or {}) do hits[e.name], folder[e.name] = e.hits, e.folder end
+    check(hits["Cond Import"] == 2 and hits["Cond Groups"] == 2 and hits["Cond Empty"] == 0,
+        "import: presets count their keys on the meshes (2, 2, 0)")
+    rd = { auto = false, clips = { a = { values = { [expr_key] = 0.5 }, fade_in = 0, fade_out = 0 },
+                                   b = { values = {}, fade_in = 0, fade_out = 0 } }, states = {} }
+    SKS.call("cond_edit", { data = rd })
+    okc = SKS.call("cond_import_sculpt", { clip = "b", name = "Cond Import" })
+    v = st.conditions.current.data.clips
+    check(okc and v.b.values[expr_key] == 0.9 and v.a.values[expr_key] == 0.5, "import: a key of another combination is imported too")
+    local page = Panel.ui.page
+    Panel.ui.page = "cond"; Panel.ui.page_state.cond.tab = "clips"; Panel.ui.page_state.cond.open_clip = "b"
+    frame(); frame()
+    local reopened = #DRAWS == 0
+    if reopened then KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame(); frame() end   -- reopen the panel
+    local in_search = false
+    for _, it in ipairs(Panel.ui.page_state.cond.keys or {}) do if it.value == expr_key then in_search = true end end
+    check(in_search, "search: a key of another combination is listed")
+    check(find("从捏脸配置导入") ~= nil and find("选择捏脸配置…") ~= nil and find("预设值") ~= nil and find("页面出错") == nil,
+        "import row: preset list, 预设值 and 导入")
+    Panel.ui.page_state.cond.import = { b = { name = "Cond Empty", folder = folder["Cond Empty"] } }; frame()
+    check(find("选择捏脸配置…") ~= nil, "import row: a preset without hits is not offered")
+    Panel.ui.page_state.cond.import = { b = { name = "Cond Groups", folder = folder["Cond Groups"], part = 2 } }; frame(); frame()
+    check(find("Cond Groups") ~= nil and find("Look / A") ~= nil, "import row: a picked preset shows; its group options are the second list")
+    Panel.ui.page_state.cond.open_clip, Panel.ui.page_state.cond.import = nil, nil
+    if reopened then KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame() end   -- leave it closed, as found
+    Panel.ui.page = page
 end
 
 -- a set without combinations still takes states: they start unbound ("-") with their rules editable
@@ -316,5 +400,59 @@ do
     os.clock = keep_clock
     if reopened then KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame() end   -- leave it closed, as found
     Panel.ui.page = page
+end
+-- non-ASCII names get ASCII file ids; saving again keeps the same file
+do
+    local U = require("ShapeKeySystem_Core.Util")
+    check(U.file_id("Airi 日常脸"):match("^Airi_%x+$") and U.file_id("日常脸"):match("^%x+$") and U.file_id("Plain") == "Plain",
+        "file_id: ASCII names unchanged, others ASCII part + hash")
+    SKS.call("cond_new", { name = "中文规则" })
+    local ok1, _, _, r1 = SKS.call("cond_save", {})
+    SKS.call("cond_select", { name = "中文规则" })
+    local ok2, _, _, r2 = SKS.call("cond_save", {})
+    local n = 0
+    for _, e in ipairs(st.conditions.sets) do if e.name == "中文规则" then n = n + 1 end end
+    check(ok1 and ok2 and r1.id:match("^%x+$") and r2.id == r1.id and n == 1, "a Chinese condition set: ASCII id, saved again into the same file")
+    local _, _, _, s1 = SKS.call("save_sculpt", { name = "日常脸" })
+    local _, _, _, s2 = SKS.call("save_sculpt", { name = "日常脸" })
+    check(s1 and s1.id:match("^%x+$") and s2 and s2.id == s1.id, "a Chinese sculpt preset: ASCII id, saved again into the same file")
+end
+-- export as mod: the binding names prefixed copies of the sets in effect, unsaved edits included
+do
+    local U = require("ShapeKeySystem_Core.Util")
+    local okp, cp = SKS.call("export_mod", { prefix = "bad prefix" })
+    check(not okp and cp == "E_BAD_ARGS", "export: a prefix with a space is rejected")
+    SKS.call("cond_select", { name = "中文规则" })
+    SKS.call("drivers", { op = "new", name = "导出驱动" })
+    SKS.call("drivers", { op = "add", key = "NoSuchKey" })
+    local cdata = U.copy(st.conditions.current.data)
+    cdata.auto = false
+    SKS.call("cond_edit", { data = cdata })
+    local ok, _, _, res = SKS.call("export_mod", { prefix = "me" })
+    local root = { "export", "me", "reframework", "data", "ShapeKeySystem", "mods" }
+    local function exported(rel)
+        for _, f in ipairs(res and res.files or {}) do
+            if f == rel then
+                local parts = { table.unpack(root) }
+                for seg in rel:sub(6):gmatch("[^/]+") do parts[#parts + 1] = seg end
+                return U.load_json(U.path(table.unpack(parts)))
+            end
+        end
+    end
+    local bind, conds, drv
+    for _, f in ipairs(res and res.files or {}) do
+        if f:match("^mods/[^/]+/[^/]+%.json$") then bind = exported(f) end
+        if f:match("^mods/conditions/") then conds = f end
+        if f:match("^mods/drivers/") then drv = f end
+    end
+    check(ok and bind and bind.schema == "sks.binding/1" and bind.conditions and bind.conditions:match("^me%.%x+$")
+        and bind.drivers and bind.drivers:match("^me%.") and next(bind.fingerprints or {}) ~= nil,
+        "export: the binding names the prefixed sets and carries fingerprints")
+    check(conds == "mods/conditions/" .. tostring(bind and bind.conditions) .. ".json" and exported(conds).name == "中文规则"
+        and exported(conds).auto == false, "export: the condition set is copied with its unsaved edit, under its prefixed id")
+    check(bind and bind.sculpt and exported("mods/" .. bind.part:sub(1, -2) .. "/sculpt/" .. U.file_id(bind.sculpt) .. ".json"),
+        "export: the sculpt values in effect are written and named by the binding")
+    check(drv and exported(drv).groups[1].rows[1].key == "NoSuchKey", "export: the driver set is copied")
+    check(res and res.path == "reframework/data/ShapeKeySystem/export/me/", "export: the result names the export folder")
 end
 print("COND FAILS:", cf)

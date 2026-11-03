@@ -1,6 +1,6 @@
 -- ShapeKeySystem panel, advanced page "驱动": driver groups whose rows drive shape keys or hold
--- variables by a waveform or a formula (Drivers.lua). Drawing only submits `drivers`; values and
--- errors come from state.drivers.
+-- variables by a waveform or a formula (Drivers.lua), in driver sets picked at the top. Drawing only
+-- submits `drivers`; values and errors come from state.drivers.
 
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
@@ -195,11 +195,75 @@ local function group_card(ctx, g, grp, vg, x, y, w)
     return cy - y
 end
 
+local SOURCE = { user = "用户", mods = "mod 自带" }
+
+-- driver set: select | new | save as | delete; edits save themselves
+local function set_bar(ctx, x, y, w)
+    local dv, call, s = ctx.st.drivers, ctx.call, ctx.state
+    local cur = dv.current
+    W.panel_box(x, y, w, 44)
+    local labels, ids, idx = {}, {}, 1
+    for _, e in ipairs(dv.sets or {}) do
+        -- the set made for the first driver is named 默认 in its file
+        local name = (e.id == "default" and e.name == "默认") and L.tr("默认") or e.name
+        labels[#labels + 1] = L.f("%s（%s）", name, L.tr(SOURCE[e.source] or e.source)) .. W.default_suffix(ctx, e.id, dv.binding_name)
+        ids[#ids + 1] = e.id
+        if cur and cur.id == e.id then idx = #ids end
+    end
+    D.text_mid("配置", x + 10, y + 8, 28, C.muted, W.small())
+    local sw = min(260, w * 0.36)
+    if #labels > 0 then
+        local ch, i = W.select("drv_set", x + 46, y + 8, sw, 28, labels, idx)
+        if ch and ids[i] ~= (cur and cur.id) then
+            call("drivers", { op = "select", name = ids[i] })
+            s.closed, s.card_h, s.open_new = nil, nil, nil
+        end
+    else
+        D.text_mid("还没有驱动配置，添加驱动时自动新建「默认」", x + 46, y + 8, 28, C.faint, W.small(), sw)
+    end
+    local bx = x + 56 + sw
+    local function btn(label, opt)
+        local clicked, bw = W.button(label, bx, y + 8, nil, 28, opt)
+        bx = bx + bw + 6
+        return clicked
+    end
+    local function named(title, op, text)
+        W.start_text(s, "name_form", { title = title, text = text, on_submit = function(name)
+            if name ~= "" and call("drivers", { op = op, name = name }) then
+                s.closed, s.card_h, s.open_new = nil, nil, nil
+            end
+        end })
+    end
+    if cur then
+        local dw = W.default_button(ctx, bx, y + 8, "drivers", cur.id, dv.binding_name)
+        if dw > 0 then bx = bx + dw + 6 end
+    end
+    if btn("新建") then named("新建驱动配置", "new") end
+    if cur and btn("另存为") then named("另存为", "save_as", cur.name) end
+    if cur and cur.source == "user" and btn("删除", { kind = "danger" }) then
+        call("request_delete", { kind = "drivers", name = cur.id })
+    end
+    local h = 52
+    if cur and cur.source == "mods" then
+        D.text("这是 mod 自带的配置，修改会存成你自己的同名配置，mod 的文件不变。", x, y + h, C.faint, W.small(), w)
+        h = h + 24
+    end
+    local pd = ctx.st.presets.pending_delete
+    if pd and pd.kind == "drivers" then
+        D.rrect(x, y + h, w, 36, 3, C.ink); D.outline(x, y + h, w, 36, 3, 1, C.warn)
+        D.text_mid(L.f("删除驱动配置「%s」？", pd.name), x + 10, y + h + 4, 28, C.warn, W.body(), w - 200)
+        if W.button("删除", x + w - 160, y + h + 4, 70, 28, { kind = "danger" }) then call("confirm_delete") end
+        if W.button("取消", x + w - 82, y + h + 4, 70, 28, { kind = "ghost" }) then call("cancel_delete") end
+        h = h + 44
+    end
+    return h + W.text_form(s, "name_form", "drivers_name", x, y + h, w)
+end
+
 function Page.draw(ctx, x, y, w)
     local dv = ctx.st.drivers
     if not dv or not dv.cfg then return 0 end
     local call = ctx.call
-    local cy = y
+    local cy = y + set_bar(ctx, x, y, w)
     local c1, on, tw = W.toggle("启用驱动", x, cy, dv.cfg.enabled == true)
     if c1 then call("drivers", { op = "patch", patch = { enabled = on } }) end
     local full = #dv.cfg.groups >= (dv.max_groups or 32)

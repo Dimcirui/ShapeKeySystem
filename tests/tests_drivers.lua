@@ -106,10 +106,69 @@ for i, n in ipairs(CHANNELS) do if n:match("([^%.]+)$") == "Other" then oi = i -
 local _, owner = Ext.get("Other")
 check(owner == "drivers" and near(vrow(1).value, 0.7), "the key is held by owner drivers")
 check(oi and math.abs((WEIGHTS[oi] or -1) - 0.7) < 1e-3, "the driven value reaches the mesh")
-check(U.load_json(U.path("user", "drivers.json")) == nil, "the file is written only after the edits settle")
+local default_path = U.path("user", "drivers", "default.json")
+check(U.load_json(default_path) == nil, "the file is written only after the edits settle")
 Dr.flush()
-local saved = U.load_json(U.path("user", "drivers.json"))
-check(saved and saved.schema == "sks.drivers/2" and saved.groups[1].rows[1].expr == "0.7", "saved to user/drivers.json")
+local saved = U.load_json(default_path)
+check(saved and saved.schema == "sks.drivers/2" and saved.name == "默认" and saved.groups[1].rows[1].expr == "0.7",
+    "the first edit without a set creates and saves user/drivers/default.json")
+check(st.drivers.current and st.drivers.current.id == "default" and #st.drivers.sets == 1, "默认 listed and selected")
+
+-- driver sets: new, save as, select, a mods set saved as a user copy, delete, the old single file
+local function settings_drivers() ticks(61); local s = U.load_json(U.path("settings.json")); return s and s.drivers end
+ok, err = SKS.call("drivers", { op = "new", name = "默认" })
+check(not ok and err == "E_EXISTS", "a set name already taken is rejected")
+ok = SKS.call("drivers", { op = "save_as", name = "halo" })
+check(ok and Dr.current.id == "halo" and #st.drivers.cfg.groups == 1 and U.load_json(U.path("user", "drivers", "halo.json")),
+    "save_as copies the groups into a new set, written at once")
+SKS.call("drivers", { op = "patch", index = 1, patch = { expr = "0.3" } })
+SKS.call("drivers", { op = "new", name = "empty" })
+check(#st.drivers.cfg.groups == 0 and U.load_json(U.path("user", "drivers", "halo.json")).groups[1].rows[1].expr == "0.3",
+    "new starts empty; the previous set's pending edit is written first")
+ticks(3)
+check(Ext.get("Other") == nil, "switching sets lets the old set's keys go")
+check(settings_drivers() == "empty", "the selected set goes to settings.json")
+SKS.call("drivers", { op = "select", name = "halo" })
+ticks(3)
+check(near(Ext.get("Other"), 0.3), "select runs that set's groups")
+U.save_json(U.path("mods", "drivers", "mod_halo.json"), { schema = "sks.drivers/2", name = "光环",
+    groups = { { rows = { { kind = "out", key = "Other", wave = "expr", expr = "0.6" } } } } })
+Dr.load_all()
+ok = SKS.call("drivers", { op = "select", name = "光环" })
+check(ok and Dr.current.source == "mods" and crow(1).expr == "0.6", "a mods set is found by its name")
+ok, err = SKS.call("request_delete", { kind = "drivers", name = "mod_halo" })
+check(not ok and err == "E_READONLY", "a mods set cannot be deleted")
+SKS.call("drivers", { op = "patch", index = 1, patch = { expr = "0.65" } })
+Dr.flush()
+check(U.load_json(U.path("mods", "drivers", "mod_halo.json")).groups[1].rows[1].expr == "0.6"
+    and U.load_json(U.path("user", "drivers", "mod_halo.json")).groups[1].rows[1].expr == "0.65"
+    and Dr.current.source == "user", "editing a mods set saves a user copy of the same id; the mods file stays")
+SKS.call("request_delete", { kind = "drivers", name = "empty" })
+SKS.call("confirm_delete")
+check(Dr.find("empty") == nil and Dr.current.id == "mod_halo", "deleting another set keeps the selected one")
+SKS.call("request_delete", { kind = "drivers", name = "mod_halo" })
+SKS.call("confirm_delete")
+check(Dr.current.id == "mod_halo" and Dr.current.source == "mods" and crow(1).expr == "0.6",
+    "deleting the user copy brings the mods set back")
+SKS.call("drivers", { op = "select", name = "halo" })
+SKS.call("request_delete", { kind = "drivers", name = "halo" })
+SKS.call("confirm_delete")
+check(Dr.current and Dr.current.id ~= "halo" and settings_drivers() == Dr.current.id,
+    "deleting the selected set falls back to another one")
+U.save_json(U.path("mods", "drivers", "mod_halo.json"), { deleted = true })
+-- the single file of older versions becomes 默认 once, its master switch going to settings.json
+U.save_json(default_path, nil)
+U.save_json(U.path("user", "drivers.json"), { schema = "sks.drivers/2", enabled = false,
+    groups = { { rows = { { kind = "out", key = "Other", wave = "expr", expr = "0.5" } } } } })
+local id, on = Dr.start("")
+check(id == "default" and on == false and crow(1).expr == "0.5" and U.load_json(default_path).name == "默认",
+    "the old user/drivers.json is migrated to user/drivers/default.json")
+U.save_json(default_path, { deleted = true })
+Dr.load_all()
+id = Dr.start("")
+check(id ~= "default" and U.load_json(default_path).deleted == true, "a deleted 默认 is not migrated again")
+U.save_json(U.path("user", "drivers.json"), nil)
+Dr.load({ groups = { { rows = { { kind = "out", key = "Other", wave = "expr", expr = "0.7" } } } } })
 
 -- a second driver on the same key is not applied; values above the cap are clamped
 SKS.call("drivers", { op = "add", key = "other" })
@@ -243,6 +302,35 @@ check(near(ramp_after(0, 0.2), 0.5) and near(ramp_after(0, 0.2), 0), "ramp falls
 check(err_of("ramp(1, 2)") == "%s 需要 %s 个参数" and not Dr.valid_name("ramp"), "ramp takes three arguments and is not a variable name")
 Dr.clip_progress = progress1
 
+-- cond(id): a game condition read straight, past the states' priority; live = 0 lets the outputs go
+local cond0, known0 = Dr.cond_value, Dr.cond_known
+local CV = {}
+Dr.cond_value = function(id) return CV[id] or 0 end
+Dr.cond_known = function(id) return id ~= "nope" end
+check(near(ev("cond(oni) * 2"), 0) and err_of("cond(nope)") == "没有 id 为 %s 的条件" and err_of("cond(1)") ~= nil
+    and not Dr.valid_name("cond"), "cond(id) reads a condition; an unknown id is an error; cond is not a variable name")
+Dr.load({ groups = { { name = "boost", rows = {
+    hrow("var", "p", "ramp(cond(oni), 5, 1.5)"),
+    hrow("var", "live", "p > 0"),
+    hrow("out", "ChestPower", "1 - clamp((5 * p - 1) / 0.75, 0, 1)"),
+    hrow("out", "HornAttack", "clamp((5 * p - 3) / 0.167, 0, 1)") } } } })
+local function boost(on, sec)
+    CV.oni = on
+    for _ = 1, math.floor(sec / 0.05 + 0.5) do Dr.tick(0.05, 1) end
+end
+boost(0, 0.5)
+local off_free = Ext.get("ChestPower") == nil and Ext.get("HornAttack") == nil
+boost(1, 1.5)
+local _, owner = Ext.get("ChestPower")
+local chest_mid, horn_mid = Ext.get("ChestPower"), Ext.get("HornAttack")
+boost(1, 4)
+local chest_on, horn_on = Ext.get("ChestPower"), Ext.get("HornAttack")
+boost(0, 1.6)
+check(off_free and owner == "drivers" and near(chest_mid, 0.333333) and near(horn_mid, 0)
+    and near(chest_on, 0) and near(horn_on, 1) and Ext.get("ChestPower") == nil and Ext.get("HornAttack") == nil,
+    "live: keys free while off, driven through the timeline, free again once the fade-out ends")
+Dr.cond_value, Dr.cond_known = cond0, known0
+
 -- schema 1: each driver becomes a group of one output row
 Dr.load({ schema = "sks.drivers/1", items = { { enabled = false, key = "Other", wave = "expr", expr = "0.2", actor = "ada" } } })
 local mg = Dr.config().groups[1]
@@ -325,4 +413,23 @@ Panel.ui.page = "basic"
 SKS.call("set_setting", { key = "advanced", value = false })
 ticks(1)
 set_channels(saved_channels)
+-- a non-ASCII name gets an ASCII file id; the name stays in the file and finds the set
+ok = SKS.call("drivers", { op = "new", name = "光环" })
+local cid = Dr.current and Dr.current.id or ""
+local cfile = U.load_json(U.path("user", "drivers", cid .. ".json"))
+check(ok and cid:match("^[%w_]+$") and cfile and cfile.name == "光环" and Dr.find("光环") and Dr.find("光环").id == cid,
+    "a Chinese set name is saved under an ASCII file id")
+
+-- a binding naming a driver set selects it; a set picked by hand lasts until the binding changes
+SKS.call("drivers", { op = "new", name = "bind_a" })
+SKS.call("drivers", { op = "new", name = "bind_b" })
+local okb = SKS.call("bind_config", { kind = "drivers", name = "光环" })
+SKS.call("rescan"); ticks(5)
+check(okb and Dr.current and Dr.current.name == "光环" and st.drivers.binding_name == Dr.current.id,
+    "bind_config drivers: the binding selects its set")
+SKS.call("drivers", { op = "select", name = "bind_a" }); SKS.call("rescan"); ticks(5)
+check(Dr.current.id == "bind_a" and settings_drivers() == "bind_b", "a pick by hand stays through scans and is not the global set")
+local bpart = st.scene.parts[1] and st.scene.parts[1].id
+SKS.call("restore_mod_binding", { part = bpart }); SKS.call("rescan"); ticks(5)
+check(Dr.current.id == "bind_b" and st.drivers.binding_name == nil, "without the binding the global set comes back")
 print("DRIVERS FAILS:", dfails)

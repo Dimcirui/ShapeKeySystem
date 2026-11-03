@@ -17,8 +17,9 @@
 --   another plugin) is left to that owner; the driver resumes once the key is free.
 -- - A group with an error in any row writes nothing: its outputs never mix values of two ticks.
 -- - The clock advances by API's tick dt (at most 0.1 s), so a long hitch does not jump the phase.
--- - Settings live in user/drivers.json, not settings.json. Files of schema 1 (one key per driver)
---   load as groups of one output row.
+-- - Groups live in driver sets, one file each under user/drivers/ or mods/drivers/ (see "driver
+--   sets"); only the selected set runs. Files of schema 1 (one key per driver) load as groups of one
+--   output row.
 -- - A group belongs to a character (`actor`, Core/Actors.lua; "" = the player's character). Only
 --   the edited character's groups take leases; the others' values go to `D.actor_values`, which
 --   ActorInstances writes on that character's rigs.
@@ -45,9 +46,9 @@ D.GROUP_DEFAULTS = { enabled = true, name = "", actor = "" }
 D.LIMITS = { period = { 0.05, 120 }, lo = { 0, 5 }, hi = { 0, 5 }, phase = { 0, 1 } }
 -- names a variable cannot take: the inputs, constants and `clip` of every formula. `a` is kept
 -- for the progress of a condition clip that hosts a group.
-local RESERVED = { t = true, a = true, pi = true, tau = true, clip = true, ramp = true }
+local RESERVED = { t = true, a = true, pi = true, tau = true, clip = true, ramp = true, cond = true }
 
-local CFG_PATH = U.path("user", "drivers.json")
+local CFG_PATH = U.path("user", "drivers.json")   -- before driver sets; migrated by D.start
 local clock, floor, abs, pi = os.clock, math.floor, math.abs, math.pi
 
 local cfg = { enabled = true, groups = {} }
@@ -56,7 +57,7 @@ local st = { save_at = nil, held = {} }   -- held: norm key -> name, leases set 
 -- err = { template, args... }, owner = another owner holding the key, dup = { group, row } of the
 -- row that already holds it } } }
 D.view = { cfg = cfg, groups = {}, time = 0, waves = D.WAVES, wave_names = D.WAVE_NAMES, kinds = D.KINDS,
-    kind_names = D.KIND_NAMES, max_groups = D.MAX_GROUPS, max_rows = D.MAX_ROWS }
+    kind_names = D.KIND_NAMES, max_groups = D.MAX_GROUPS, max_rows = D.MAX_ROWS, sets = {}, current = nil }
 D.time = 0
 D.current_actor, D.default_actor = "", ""   -- the edited character, the player's character (API)
 D.actor_values = {}   -- actor id -> norm key -> { name, value }, other characters' drivers this tick
@@ -66,6 +67,12 @@ local compiled = {}   -- group index -> { ok, rows = { { fn, slot } } }
 -- clip(name) in a formula: the condition clip's weight, 0..1 along its fade-in / fade-out
 -- (CondExpr.alpha, set by API). 0 for a clip that does not exist or does not play.
 D.clip_progress = function() return 0 end
+-- cond(id) in a formula: a game condition's value this tick (true = 1, false = 0, numbers as
+-- they are), 0 while conditions are not sampled (menus) or not readable; cond_known(id) is false
+-- for an id the game does not define, which is a formula error (both set by API)
+D.cond_value = function() return 0 end
+D.cond_known = function() return true end
+local cond_seen = false   -- a cond() was compiled in the group being compiled
 
 -- ---------------------------------------------------------------- formula
 local function frac(x) return x - floor(x) end
@@ -174,6 +181,18 @@ local function parse(toks, names)
                 take()
                 local id = arg.v
                 return function() return D.clip_progress(id) end
+            end
+            if name == "cond" and peek() == "(" then
+                take()
+                local arg = take()
+                if not (arg and arg.k == "id") or peek() ~= ")" then
+                    error({ "cond 的参数是一个条件的 id（英文字母、数字、下划线），例如 cond(oni_mode)" }, 0)
+                end
+                take()
+                local id = arg.v
+                if not D.cond_known(id) then error({ "没有 id 为 %s 的条件", id }, 0) end
+                cond_seen = true
+                return function() return D.cond_value(id) end
             end
             if name == "ramp" and peek() == "(" then
                 -- ramp(target, in, out): follows target (clamped to 0..1) at 1 / in per second
@@ -377,6 +396,7 @@ local function recompile(g)
     local names, nslots = {}, 0
     local cg = { ok = true, rows = {} }
     local vg = { rows = {} }
+    cond_seen = false
     for r, row in ipairs(grp.rows) do
         local formula = D.formula_of(row)
         local fn, err = compile_env(formula, names)
@@ -396,11 +416,24 @@ local function recompile(g)
         local slot
         if name then nslots = nslots + 1; slot = nslots; names[name] = slot end
         if err then cg.ok = false end
+        if name == "live" and row.kind == "var" then cg.live = slot end
         cg.rows[r] = { fn = fn, slot = slot }
         vg.rows[r] = { value = 0, err = err, formula = formula }
     end
+    cg.cond = cond_seen
     compiled[g] = cg
     D.view.groups[g] = vg
+end
+
+-- true while an enabled group reads cond(): API then samples the conditions even without a
+-- condition set
+function D.wants_cond()
+    if not cfg.enabled then return false end
+    for g, grp in ipairs(cfg.groups) do
+        local cg = compiled[g]
+        if grp.enabled and cg and cg.cond then return true end
+    end
+    return false
 end
 
 local function recompile_all()
@@ -409,36 +442,162 @@ local function recompile_all()
     for g = 1, #cfg.groups do recompile(g) end
 end
 
--- data: a decoded drivers.json (tests); default user/drivers.json
-function D.load(data)
-    if data == nil then data = U.load_json(CFG_PATH) end
-    cfg.enabled, cfg.groups = true, {}
-    if type(data) == "table" then
-        if type(data.enabled) == "boolean" then cfg.enabled = data.enabled end
-        if type(data.groups) == "table" then
-            for i, src in ipairs(data.groups) do
-                if i > D.MAX_GROUPS then break end
-                cfg.groups[i] = sanitize_group(src)
-            end
-        else
-            for i, src in ipairs(type(data.items) == "table" and data.items or {}) do
-                if i > D.MAX_GROUPS then break end
-                cfg.groups[i] = group_of_item(src)
-            end
+-- the groups of a decoded file, schema 1 or 2
+local function groups_of(data)
+    local groups = {}
+    if type(data) ~= "table" then return groups end
+    if type(data.groups) == "table" then
+        for i, src in ipairs(data.groups) do
+            if i > D.MAX_GROUPS then break end
+            groups[i] = sanitize_group(src)
+        end
+    else
+        for i, src in ipairs(type(data.items) == "table" and data.items or {}) do
+            if i > D.MAX_GROUPS then break end
+            groups[i] = group_of_item(src)
         end
     end
+    return groups
+end
+
+local function set_groups(groups)
+    cfg.groups = groups
+    D.view.cfg = cfg
     D.time = 0
     recompile_all()
 end
 
+-- data: a decoded drivers file; replaces the groups (and the master switch, when the data has one)
+-- of the current set without touching any file (tests)
+function D.load(data)
+    if type(data) == "table" and type(data.enabled) == "boolean" then cfg.enabled = data.enabled
+    else cfg.enabled = true end
+    set_groups(groups_of(data))
+end
+
+-- ---------------------------------------------------------------- driver sets
+-- Each set is one file, user/drivers/<id>.json or mods/drivers/<id>.json (a user file shadows the
+-- mods file of the same id; a user file of {"deleted": true} is skipped, so the mods set shows again). The selected set's id and the master
+-- switch live in settings.json (API). Edits are saved to the selected set 0.5 s after they settle;
+-- a mods set is saved as a user file of the same id, the mods file is never written.
+D.list = {}        -- { id, name, source, path }, sorted by name
+D.current = nil    -- { id, name, source, path } of the set being edited
+D.DEFAULT_ID, D.DEFAULT_NAME = "default", "默认"
+
+local function user_path(id) return U.path("user", "drivers", id .. ".json") end
+
+function D.load_all()
+    local list = {}
+    for _, src in ipairs({ "user", "mods" }) do
+        for _, f in ipairs(U.list_json(src .. "\\drivers")) do
+            local d = U.load_json(f.path)
+            local taken = false
+            for _, e in ipairs(list) do if e.id == f.base then taken = true end end   -- user wins
+            if type(d) == "table" and d.deleted ~= true and not taken then
+                local name = type(d.name) == "string" and d.name ~= "" and d.name or f.base
+                list[#list + 1] = { id = f.base, name = name, source = src, path = f.path }
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    D.list = list
+    D.view.sets = list
+    return list
+end
+
+function D.find(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    for _, e in ipairs(D.list) do if e.id == name then return e end end
+    for _, e in ipairs(D.list) do if e.name == name then return e end end
+end
+
+local function set_current(cur)
+    D.current = cur
+    D.view.current = cur and { id = cur.id, name = cur.name, source = cur.source } or nil
+end
+
 function D.save()
     st.save_at = nil
-    return U.save_json(CFG_PATH, { schema = D.SCHEMA, enabled = cfg.enabled, groups = cfg.groups })
+    local cur = D.current
+    if not cur then return false end
+    -- a mods set is written as the user file of the same id
+    local path = cur.source == "user" and cur.path or user_path(cur.id)
+    if not U.save_json(path, { schema = D.SCHEMA, name = cur.name, groups = cfg.groups }) then return false end
+    if cur.source ~= "user" or not D.find(cur.id) then
+        cur.source, cur.path = "user", path
+        D.load_all()
+        set_current(cur)
+    end
+    return true
 end
 
 -- slider drags patch every frame: write the file once they settle
 function D.save_soon() st.save_at = clock() + 0.5 end
 function D.flush() if st.save_at then D.save() end end
+
+-- Makes the set id (or name) the one in effect; the previous set's pending edits are written first.
+-- Its keys go back on the next tick unless the new set drives them too.
+function D.select(name)
+    local e = D.find(name)
+    if not e then return false end
+    D.flush()
+    set_current({ id = e.id, name = e.name, source = e.source, path = e.path })
+    set_groups(groups_of(U.load_json(e.path)))
+    return true
+end
+
+local function check_name(name)
+    if type(name) ~= "string" then return nil, "E_BAD_ARGS", "name must be a string" end
+    name = name:gsub("^%s+", ""):gsub("%s+$", ""):sub(1, D.MAX_NAME)
+    local id = U.file_id(name)
+    if id == "" then return nil, "E_BAD_ARGS", "empty name" end
+    if D.find(id) or D.find(name) then return nil, "E_EXISTS", "a driver set with this name exists" end
+    return name, id
+end
+
+-- a new set: empty, or (copy) holding the current groups. Written at once and selected.
+local function create(name, copy)
+    local id, err
+    name, id, err = check_name(name)
+    if not name then return false, id, err end
+    D.flush()
+    local groups = copy and U.copy(cfg.groups) or {}
+    set_current({ id = id, name = name, source = "user", path = user_path(id) })
+    set_groups(groups)
+    if not D.save() then return false, "E_IO", "write failed" end
+    return true
+end
+
+-- the user file of set id was tombstoned (API confirm_delete). When it was the selected one, the
+-- mods set of the same id takes its place, else the first remaining set, else none.
+function D.deleted(id)
+    D.load_all()
+    if D.current and D.current.id == id then
+        st.save_at = nil
+        set_current(nil)
+        if not (D.select(id) or D.list[1] and D.select(D.list[1].id)) then set_groups({}) end
+    end
+end
+
+-- Once at load. want = settings.drivers. A user/drivers.json from before driver sets becomes
+-- user/drivers/default.json (once: a tombstone of it counts). Returns the selected id ("" = none)
+-- and false when the old file had the master switch off.
+function D.start(want)
+    local enabled
+    if U.load_json(user_path(D.DEFAULT_ID)) == nil then
+        local old = U.load_json(CFG_PATH)
+        local groups = groups_of(old)
+        if #groups > 0 and U.save_json(user_path(D.DEFAULT_ID), { schema = D.SCHEMA, name = D.DEFAULT_NAME, groups = groups }) then
+            if old.enabled == false then enabled = false end
+            if want == nil or want == "" then want = D.DEFAULT_ID end
+        end
+    end
+    D.load_all()
+    set_current(nil)
+    set_groups({})
+    if not D.select(want) and D.list[1] then D.select(D.list[1].id) end
+    return D.current and D.current.id or "", enabled
+end
 
 -- a variable name not used in group grp yet: x1, x2, ...
 local function free_var(grp)
@@ -497,9 +656,16 @@ local ROW_FIELDS = { kind = true, key = true, var = true, wave = true, expr = tr
 --   | { op = "patch", index, patch } (group: enabled, name; row fields go to row 1)
 --   | { op = "patch", index, row, patch } | { op = "add_row", index, kind?, key?, var? }
 --   | { op = "remove_row", index, row } | { op = "move_row", index, row, to }
+--   | { op = "select", name } | { op = "new", name } | { op = "save_as", name } (driver sets)
 -- Returns ok, err, msg like the API commands.
 function D.command(a)
     if type(a) ~= "table" then return false, "E_BAD_ARGS", "args must be a table" end
+    if a.op == "select" then
+        if not D.select(a.name) then return false, "E_NOT_FOUND", "driver set not found: " .. tostring(a.name) end
+        return true
+    elseif a.op == "new" or a.op == "save_as" then
+        return create(a.name, a.op == "save_as")
+    end
     local groups = cfg.groups
     local function group_of()
         local g = tonumber(a.index)
@@ -568,9 +734,15 @@ function D.command(a)
         end
         recompile(g)
     else
-        return false, "E_BAD_ARGS", "op: add / remove / patch / add_row / remove_row / move_row"
+        return false, "E_BAD_ARGS", "op: add / remove / patch / add_row / remove_row / move_row / select / new / save_as"
     end
-    D.save_soon()
+    -- the master switch lives in settings.json (API); the first edit without any set creates 默认
+    if not (a.op == "patch" and a.index == nil) then
+        if not D.current then
+            set_current({ id = D.DEFAULT_ID, name = D.DEFAULT_NAME, source = "user", path = user_path(D.DEFAULT_ID) })
+        end
+        D.save_soon()
+    end
     return true
 end
 
@@ -616,7 +788,9 @@ function D.tick(dt, hi, writable)
             if c.slot then env[c.slot] = x end
             if row.kind == "var" then
                 v.value = x
-            elseif not run or row.key == "" then
+            elseif not run or row.key == "" or (cg.live and env[cg.live] == 0) then
+                -- a variable `live` above the outputs at 0 lets their keys go: sculpt and key groups
+                -- show through until it turns non-zero
                 v.value = 0
             elseif writable and not writable(row.key) then
                 v.value, v.owner = 0, "?"
