@@ -216,11 +216,26 @@ for _, A in ipairs(Games.list) do
         end
         check(n == 25 and #lost == 0 and sig.by_name.jawOpen.fallback and sig.by_name["blink.L"].fallback,
             "onimusha_wots: 25 bsControl signals fall back to one bone signal each (" .. n .. ") " .. table.concat(lost, ", "))
+        local g = sig.groups
+        check(g.mouth and g.eyes and g.brows and #g.eyes == 6 and #g.mouth > 20
+            and sig.by_name.jawOpen.mix_key == Profile.FALLBACK_MIX .. "mouth",
+            "onimusha_wots: fallback groups are the eyes, the brows and the whole mouth")
     end
 end
 Profile.adapter = keep
 Profile.load_signals()
 Profile.load_all()
+
+-- Onimusha bone fallback: a region's face_joint signals count only after its bsControl has held still a while
+do
+    local gate, now = {}, 100
+    local function mix(moving, step) now = now + step; return Onimusha.fallback_mix(gate, moving, now) end
+    local first, early = mix(false, 0), mix(false, 0.6)
+    for _ = 1, 10 do mix(false, 0.05) end
+    local idle, moving, after = mix(false, 0), mix(true, 0.05), mix(false, 0.3)
+    check(first == 0 and early > 0 and early < 1 and idle == 1 and moving == 0 and after == 0,
+        "Onimusha fallback weight: 0 while the region's bsControl moves, fades in after it holds still")
+end
 
 -- Wilds bone fallback: face joints back up fcParam channels with the larger of the two values
 do

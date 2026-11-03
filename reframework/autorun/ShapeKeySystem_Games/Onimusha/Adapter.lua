@@ -14,6 +14,7 @@
 local BoneReads = require("ShapeKeySystem_Core.BoneReads")
 local FaceMirror = require("ShapeKeySystem_Games.FaceMirror")
 local L = require("ShapeKeySystem_Core.I18n")
+local Profile = require("ShapeKeySystem_Core.Profile")
 
 local A = {
     id = "onimusha_wots",
@@ -56,9 +57,10 @@ local A = {
 }
 
 local M_JBN, M_BUSY, M_LOAD, M_LPOS
--- children of the player root, and Hair, which hangs under Head once the player is set up
+-- children of the player root, and Hair / OniHair, which hang under Head / OniHead once the
+-- player is set up
 local PARTS = { Head = true, Body = true, Cloak = true, Gauntlet = true, Amulet = true,
-                OniHead = true, OniBody = true, Hair = true }
+                OniHead = true, OniBody = true, Hair = true, OniHair = true }
 local HEADS = { Head = true, OniHead = true }
 local PLAYER_MESH = "/ch001_"   -- the player character's meshes (mods replace the same files)
 local T_MESH
@@ -143,7 +145,8 @@ end
 -- Only parts count: in combat the game hangs effect_Player_00 objects on the player and removes
 -- them again, and a signature that changed with them dropped the rigs and rescanned every few
 -- frames (a full collect and every channel name read again each time).
--- Parts are the root's part children plus the parts one level below them (Hair under Head).
+-- Parts are the root's part children plus the parts one level below them (Hair under Head,
+-- OniHair under OniHead).
 local function part_list(root)
     local list, names = {}, {}
     local function add_children(tr, nested)
@@ -190,7 +193,7 @@ function A.prepare_parts(parts)
 end
 
 A.slot_names = { Head = "头部", Body = "身体", Cloak = "披风", Gauntlet = "护手", Amulet = "护身符",
-                 OniHead = "鬼化头部", OniBody = "鬼化身体", Hair = "头发" }
+                 OniHead = "鬼化头部", OniBody = "鬼化身体", Hair = "头发", OniHair = "鬼化头发" }
 
 function A.model_of(part)
     if type(part) ~= "string" or not A.is_part(part) then return nil end
@@ -247,12 +250,48 @@ function A.bind(face, keys)
     return out, #out // 3 + (out.signals and #out.signals.list or 0)
 end
 
+-- The face_joint signals stand in for bsControl only while the bsControl channels of their region
+-- (signals.json fallback_group: eyes, brows, the whole mouth) hold still, e.g. the protagonist's
+-- speech moves the bones alone: they are calibrated on their own travel and would outgrow the
+-- bsControl expression. Any channel of the region past ACTIVE marks it animated; its fallback weight
+-- drops to 0 at once and fades back in over FADE_SEC after IDLE_SEC of stillness.
+local ACTIVE, IDLE_SEC, FADE_SEC = 0.02, 0.5, 0.25
+local MIX = Profile.FALLBACK_MIX
+
+-- a region's fallback weight after this frame's reading; gate = that region's state (per bound
+-- face), moving = one of its bsControl channels moved, now = os.clock()
+function A.fallback_mix(gate, moving, now)
+    local dt = math.min(now - (gate.clock or now), 0.1)
+    gate.clock = now
+    if moving or not gate.still_since then gate.still_since = now end
+    local mix = gate.mix or 0
+    if now - gate.still_since < IDLE_SEC then mix = 0
+    elseif mix < 1 then mix = math.min(1, mix + dt / FADE_SEC) end
+    gate.mix = mix
+    return mix
+end
+
 function A.read(handle, P, inv_full)
     for i = 1, #handle, 3 do
         local position = M_LPOS:call(handle[i + 1])
         P[handle[i]] = position and position[handle[i + 2]] * inv_full or 0
     end
-    if handle.signals then BoneReads.read(handle.signals, P) end
+    if not handle.signals then return end
+    BoneReads.read(handle.signals, P)
+    -- a face without bsControl reads its bone signals as they are
+    if #handle == 0 then return end
+    local now = os.clock()
+    handle.gates = handle.gates or {}
+    for group, keys in pairs(Profile.signals.groups) do
+        local moving = false
+        for _, k in ipairs(keys) do
+            local v = P[k]
+            if v and (v > ACTIVE or v < -ACTIVE) then moving = true; break end
+        end
+        local gate = handle.gates[group] or {}
+        handle.gates[group] = gate
+        P[MIX .. group] = A.fallback_mix(gate, moving, now)
+    end
 end
 
 function A.gate()

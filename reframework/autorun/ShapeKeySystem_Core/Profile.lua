@@ -16,7 +16,11 @@
 -- Signal dictionary (sks.signals/2): every entry names a raw channel (`raw`, `param` in /1) or
 -- none (`raw` null or absent: the game lacks it, the node reads 0 and the channel is flagged
 -- no_signal). `lo` / `hi` give the raw range mapped to 0..1, default 0..full. `fallback` (one raw
--- or a list) are raws read without lo / hi; the signal is the largest of them and the main raw. A name the
+-- or a list) are raws read without lo / hi; the signal is the largest of them and the main raw,
+-- the fallback raws scaled by the weight of its `fallback_group` (P[FALLBACK_MIX .. group],
+-- 0..1, absent = 1) so the adapter can mute a whole region while any of its main raws moves; the
+-- group's main raws are listed in `groups[group]` and bound with every signal that falls back. A
+-- name the
 -- dictionary does not list is a compile error, so typos are not mistaken for missing signals.
 -- A game with no dictionary at all (no builtin/<id>/signals.json) has no signals: every name
 -- compiles as no_signal.
@@ -46,7 +50,7 @@ function P.no_signal_key(name) return "nosig." .. name end
 function P.load_signals(data)
     local id = P.adapter.id
     data = data or (id and U.load_json(U.path("builtin", id, "signals.json"))) or {}
-    local s = { list = {}, by_name = {}, full = tonumber(data.full) or 0.01, none = data.signals == nil }
+    local s = { list = {}, by_name = {}, groups = {}, full = tonumber(data.full) or 0.01, none = data.signals == nil }
     local raw = P.adapter.raw
     for i, e in ipairs(data.signals or {}) do
         local v = e.raw
@@ -73,6 +77,14 @@ function P.load_signals(data)
                           fallback = #fallback > 0 and fallback or nil,
                           label = #labels > 0 and table.concat(labels, " / ") or "无信号", a = a, b = b,
                           guessed = e.guessed == true, note = e.note or "" }
+            if type(e.fallback_group) == "string" then
+                sig.mix_key = P.FALLBACK_MIX .. e.fallback_group
+                local g = s.groups[e.fallback_group] or {}
+                s.groups[e.fallback_group] = g
+                local seen = false
+                for _, k in ipairs(g) do seen = seen or k == key end
+                if key ~= nil and not seen then g[#g + 1] = key end
+            end
             s.list[#s.list + 1] = sig
             s.by_name[e.name] = sig
         end
@@ -81,22 +93,30 @@ function P.load_signals(data)
     return s
 end
 
+-- prefix of the raw keys the adapter writes each group's fallback weight to: 1 reads the fallback
+-- raws, 0 ignores them
+P.FALLBACK_MIX = "fallback_mix."
+
 -- a dictionary signal's value from normalised raws: the main raw through lo / hi, or the largest
--- fallback raw when that is larger
+-- fallback raw (times the fallback weight) when that is larger
 function P.signal_value(sig, raws)
     local v = sig.key ~= nil and (raws[sig.key] or 0) * sig.a + sig.b or 0
+    local mix = sig.mix_key and raws[sig.mix_key] or 1
     for _, k in ipairs(sig.fallback or {}) do
-        local f = raws[k] or 0
+        local f = (raws[k] or 0) * mix
         if f > v then v = f end
     end
     return v
 end
 
--- every raw key a signal reads
+-- every raw key a signal reads: its own, and with fallback raws the main raws of its group, whose
+-- motion decides the group's weight
 function P.signal_keys(sig)
     local keys = {}
     if sig.key ~= nil then keys[1] = sig.key end
     for _, k in ipairs(sig.fallback or {}) do keys[#keys + 1] = k end
+    local g = sig.fallback and sig.mix_key and P.signals.groups[sig.mix_key:sub(#P.FALLBACK_MIX + 1)]
+    for _, k in ipairs(g or {}) do if k ~= sig.key then keys[#keys + 1] = k end end
     return keys
 end
 
