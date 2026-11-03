@@ -104,6 +104,8 @@ sdk = {
     typeof = function(n) return n end,
     get_managed_singleton = function(name)
         if name == "app.DemoMediator" then return DEMO end
+        if name == "app.EnvironmentManager" then return ENV_MGR end
+        if name == "ace.WeatherManager" then return WEATHER_MGR end
         local player = { call = function(_, m)
                              if m == "get_Character" then return HUNTER end
                              return { call = function() return root end }
@@ -288,9 +290,36 @@ local hunter_health = { call = function(_, m)
 end, get_field = function(_, f) if f == "<HealthMgr>k__BackingField" then return health_mgr end end }
 local stamina = { call = function(_, m) if m == "get_Stamina" then return 100 elseif m == "get_MaxStamina" then return 150 end end }
 local handling = { call = function(_, m) return HSTATE["wh." .. m] end }
+-- bad conditions: BAD.<field name> = true makes that one active ("_Sleep", "_Poison", ...)
+BAD = {}
+local bad_conditions = {
+    call = function() end,
+    get_field = function(_, f) return { call = function(_, m) if m == "get_IsActive" then return BAD[f] == true end end } end,
+}
+local hunter_status = { call = function(_, m)
+    if m == "get_BadConditions" then return bad_conditions end
+    return HSTATE["st." .. m]
+end }
+-- app.EnvironmentManager / ace.WeatherManager
+ENV = { zone = 2, hour = 16, minute = 30, weather = "Fertility" }
+ENV_MGR = { call = function(_, m, a)
+    if m == "getTimeZone" then return a == 0 and ENV.zone or nil end
+    if m == "HourCache" then return ENV.hour elseif m == "MinuteCache" then return ENV.minute end
+end }
+WEATHER_MGR = { call = function(_, m) if m == "get_CurrentWeatherName" then return ENV.weather end end }
+-- weapon sub action: HSTATE.sub_action names its type ("app.WpCommonSubAction.cAimRoot", ...)
+local sub_controller = { call = function(_, m)
+    if m == "get_CurrentAction" and HSTATE.sub_action then
+        return { get_type_definition = function()
+            return { is_a = function(_, n) return n == HSTATE.sub_action end }
+        end }
+    end
+end }
 HUNTER = {
     call = function(_, m)
         if m == "get_HunterHealth" then return hunter_health end
+        if m == "get_SubActionController" then return sub_controller end
+        if m == "get_HunterStatus" then return hunter_status end
         if m == "get_HunterStamina" then return stamina end
         if m == "get_WeaponHandling" then return handling end
         return HSTATE[m]
