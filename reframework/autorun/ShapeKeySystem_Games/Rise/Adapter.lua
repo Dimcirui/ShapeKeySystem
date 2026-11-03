@@ -202,6 +202,19 @@ function A.child_tag(tr, name)
     return ok and tag or "@-"
 end
 
+-- Action effects attach to the hunter several times per second; a signature that changed with them
+-- dropped and re-armed the rigs. Every other child keeps its order, name, count and child_tag.
+local EFFECT_CHILDREN = { effect_player00 = true, effect_HunterWireBase = true }
+function A.signature(root)
+    local parts, c = {}, root:call("get_Child")
+    while c do
+        local name = go_name(c) or "?"
+        if not EFFECT_CHILDREN[name] then parts[#parts + 1] = name .. (A.child_tag(c, name) or "") end
+        c = c:call("get_Next")
+    end
+    return table.concat(parts, "|")
+end
+
 -- f_body279 -> "f_279", "body": the parts of one equipment number share a binding; the body part
 -- represents the set
 function A.model_of(part)

@@ -247,6 +247,13 @@ check(Scene.children_signature(ROOT) ~= sig, "a part rebuilt under the same name
 ticks(10)
 check(st.scene.last_scan ~= scanned, "a changed part: the next scan runs in full")
 ARMOR._mesh.get_address = mesh_addr
+-- action effects come and go under the hunter several times per second
+local armor_next = ARMOR.get_Next
+local effect = { call = function(self, m, ...) return self[m](self, ...) end, get_Next = armor_next }
+effect.get_GameObject = function() return { call = function() return "effect_HunterWireBase" end } end
+ARMOR.get_Next = function() return effect end
+check(Scene.children_signature(ROOT) == sig, "an action effect under the hunter keeps the signature")
+ARMOR.get_Next = armor_next
 SKS.call("set_setting", { key = "periodic_scan_sec", value = 5 }); ticks(10)
 
 -- Cutscenes play a copy of the hunter (snow.eventcut.EventPlayer) whose face is DummyFace.

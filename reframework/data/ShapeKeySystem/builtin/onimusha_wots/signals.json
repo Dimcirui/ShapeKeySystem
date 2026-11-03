@@ -5,42 +5,49 @@
     {
       "name": "blink.L",
       "raw": "bsControl_003.z",
+      "fallback_group": "eyes",
       "fallback": "bone.eyeClose.L",
       "note": "eyeClosed_L"
     },
     {
       "name": "blink.R",
       "raw": "bsControl_004.x",
+      "fallback_group": "eyes",
       "fallback": "bone.eyeClose.R",
       "note": "eyeClosed_R"
     },
     {
       "name": "eyeWide.L",
       "raw": "bsControl_006.x",
+      "fallback_group": "eyes",
       "fallback": "bone.eyeWiden.L",
       "note": "eyeOpen_L"
     },
     {
       "name": "eyeWide.R",
       "raw": "bsControl_005.z",
+      "fallback_group": "eyes",
       "fallback": "bone.eyeWiden.R",
       "note": "eyeOpen_R"
     },
     {
       "name": "eyeSquint.L",
       "raw": "bsControl_010.z",
+      "fallback_group": "eyes",
       "fallback": "bone.lowerLidRaise.L",
       "note": "lidTightener_L"
     },
     {
       "name": "eyeSquint.R",
       "raw": "bsControl_010.y",
+      "fallback_group": "eyes",
       "fallback": "bone.lowerLidRaise.R",
       "note": "lidTightener_R"
     },
     {
       "name": "browBring.L",
       "raw": "bsControl_000.y",
+      "fallback_group": "brows",
       "fallback": "bone.browInnerDown.L",
       "note": "browLowerer_L",
       "guessed": true
@@ -48,6 +55,7 @@
     {
       "name": "browBring.R",
       "raw": "bsControl_000.x",
+      "fallback_group": "brows",
       "fallback": "bone.browInnerDown.R",
       "note": "browLowerer_R",
       "guessed": true
@@ -55,57 +63,67 @@
     {
       "name": "browDown.L",
       "raw": "bsControl_000.y",
+      "fallback_group": "brows",
       "fallback": "bone.browLower.L",
       "note": "browLowerer_L"
     },
     {
       "name": "browDown.R",
       "raw": "bsControl_000.x",
+      "fallback_group": "brows",
       "fallback": "bone.browLower.R",
       "note": "browLowerer_R"
     },
     {
       "name": "browInnerUp.L",
       "raw": "bsControl_008.x",
+      "fallback_group": "brows",
       "fallback": "bone.browRaise.L",
       "note": "innerBrowRaiser_L"
     },
     {
       "name": "browInnerUp.R",
       "raw": "bsControl_007.z",
+      "fallback_group": "brows",
       "fallback": "bone.browRaise.R",
       "note": "innerBrowRaiser_R"
     },
     {
       "name": "browOuterUp.L",
       "raw": "bsControl_021.z",
+      "fallback_group": "brows",
       "fallback": "bone.browRaise.L",
       "note": "outerBrowRaiser_L"
     },
     {
       "name": "browOuterUp.R",
       "raw": "bsControl_021.y",
+      "fallback_group": "brows",
       "fallback": "bone.browRaise.R",
       "note": "outerBrowRaiser_R"
     },
     {
       "name": "sneer.L",
       "raw": "bsControl_020.y",
+      "fallback_group": "mouth",
       "note": "noseWrinkler_L"
     },
     {
       "name": "sneer.R",
       "raw": "bsControl_020.x",
+      "fallback_group": "mouth",
       "note": "noseWrinkler_R"
     },
     {
       "name": "upperLipUp.L",
       "raw": "bsControl_024.z",
+      "fallback_group": "mouth",
       "note": "upperLipRaiser_L"
     },
     {
       "name": "upperLipUp.R",
       "raw": "bsControl_024.y",
+      "fallback_group": "mouth",
       "note": "upperLipRaiser_R"
     },
     {
@@ -119,91 +137,107 @@
     {
       "name": "smile.L",
       "raw": "bsControl_012.x",
+      "fallback_group": "mouth",
       "fallback": "bone.mouthCornerUp.L",
       "note": "lipCornerPuller_L"
     },
     {
       "name": "smile.R",
       "raw": "bsControl_011.z",
+      "fallback_group": "mouth",
       "fallback": "bone.mouthCornerUp.R",
       "note": "lipCornerPuller_R"
     },
     {
       "name": "dimple.L",
       "raw": "bsControl_003.y",
+      "fallback_group": "mouth",
       "note": "dimpler_L"
     },
     {
       "name": "dimple.R",
       "raw": "bsControl_003.x",
+      "fallback_group": "mouth",
       "note": "dimpler_R"
     },
     {
       "name": "stretch.L",
       "raw": "bsControl_014.x",
+      "fallback_group": "mouth",
       "fallback": "bone.mouthCornerOut.L",
       "note": "lipStretcher_L"
     },
     {
       "name": "stretch.R",
       "raw": "bsControl_013.z",
+      "fallback_group": "mouth",
       "fallback": "bone.mouthCornerOut.R",
       "note": "lipStretcher_R"
     },
     {
       "name": "frown.L",
       "raw": "bsControl_011.y",
+      "fallback_group": "mouth",
       "fallback": "bone.mouthCornerDown.L",
       "note": "lipCornerDepressor_L"
     },
     {
       "name": "frown.R",
       "raw": "bsControl_011.x",
+      "fallback_group": "mouth",
       "fallback": "bone.mouthCornerDown.R",
       "note": "lipCornerDepressor_R"
     },
     {
       "name": "lowerLipDown.L",
       "raw": "bsControl_016.y",
+      "fallback_group": "mouth",
       "fallback": "bone.lowerLipDrop",
       "note": "lowerLipDepressor_L；bsControl 不动时由自动嘴型的下唇骨骼兜底"
     },
     {
       "name": "lowerLipDown.R",
       "raw": "bsControl_016.x",
+      "fallback_group": "mouth",
       "fallback": "bone.lowerLipDrop",
       "note": "lowerLipDepressor_R；bsControl 不动时由自动嘴型的下唇骨骼兜底"
     },
     {
       "name": "funnel.L",
       "raw": "bsControl_023.z",
+      "fallback_group": "mouth",
       "note": "upperLipFunneler（左右共用）",
       "guessed": true
     },
     {
       "name": "funnel.R",
       "raw": "bsControl_023.z",
+      "fallback_group": "mouth",
       "note": "upperLipFunneler（左右共用）",
       "guessed": true
     },
     {
       "name": "press.L",
       "raw": "bsControl_012.y",
+      "fallback_group": "mouth",
       "note": "lipPressor（左右共用）"
     },
     {
       "name": "press.R",
       "raw": "bsControl_012.y",
+      "fallback_group": "mouth",
       "note": "lipPressor（左右共用）"
     },
     {
       "name": "mouthMove.left",
       "raw": "bsControl_018.x",
+      "fallback_group": "mouth",
       "note": "mouthLeft"
     },
     {
       "name": "mouthMove.right",
       "raw": "bsControl_018.y",
+      "fallback_group": "mouth",
       "note": "mouthRight"
     },
     {
@@ -217,38 +251,45 @@
     {
       "name": "chinRaise",
       "raw": "bsControl_002.z",
+      "fallback_group": "mouth",
       "note": "chinRaiser"
     },
     {
       "name": "jawOpen",
       "raw": "bsControl_009.x",
+      "fallback_group": "mouth",
       "fallback": "bone.jawDrop",
       "note": "jawOpen；bsControl 不动时由自动嘴型的下巴骨骼兜底（说话嘴型只动面部骨骼）"
     },
     {
       "name": "cheekShrink",
       "raw": "bsControl_002.x",
+      "fallback_group": "mouth",
       "note": "cheekSuck_R",
       "guessed": true
     },
     {
       "name": "upperLipRoll",
       "raw": "bsControl_025.y",
+      "fallback_group": "mouth",
       "note": "upperLipSuck"
     },
     {
       "name": "lowerLipRoll",
       "raw": "bsControl_017.z",
+      "fallback_group": "mouth",
       "note": "lowerLipSuck"
     },
     {
       "name": "puff.L",
       "raw": "bsControl_001.x",
+      "fallback_group": "mouth",
       "note": "cheekPuff_L"
     },
     {
       "name": "puff.R",
       "raw": "bsControl_000.z",
+      "fallback_group": "mouth",
       "note": "cheekPuff_R"
     },
     {
@@ -302,36 +343,42 @@
     {
       "name": "cheekSquint.L",
       "raw": "bsControl_001.z",
+      "fallback_group": "mouth",
       "fallback": "bone.cheekRaise.L",
       "note": "cheekRaiser_L"
     },
     {
       "name": "cheekSquint.R",
       "raw": "bsControl_001.y",
+      "fallback_group": "mouth",
       "fallback": "bone.cheekRaise.R",
       "note": "cheekRaiser_R"
     },
     {
       "name": "funnelTogether.L",
       "raw": "bsControl_012.z",
+      "fallback_group": "mouth",
       "note": "lipPucker（左右共用）",
       "guessed": true
     },
     {
       "name": "funnelTogether.R",
       "raw": "bsControl_012.z",
+      "fallback_group": "mouth",
       "note": "lipPucker（左右共用）",
       "guessed": true
     },
     {
       "name": "lipsTogether.L",
       "raw": "bsControl_012.y",
+      "fallback_group": "mouth",
       "note": "lipPressor（左右共用）",
       "guessed": true
     },
     {
       "name": "lipsTogether.R",
       "raw": "bsControl_012.y",
+      "fallback_group": "mouth",
       "note": "lipPressor（左右共用）",
       "guessed": true
     },

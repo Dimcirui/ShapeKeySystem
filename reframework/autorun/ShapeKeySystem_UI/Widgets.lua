@@ -82,7 +82,7 @@ end
 
 -- Outfit defaults (bindings). The dropdown marks the default entry (W.default_suffix); next to it
 -- W.default_button makes the selected config the default of the outfit worn (hidden when it is).
---   kind: "sculpt" | "expression" | "conditions"; cur: the config selected now (name / id);
+--   kind: "sculpt" | "expression" | "conditions" | "drivers"; cur: the config selected now (name / id);
 --   bound: the config the binding names for this kind (nil = none)
 -- Returns the width used.
 function W.default_button(ctx, x, y, kind, cur, bound)

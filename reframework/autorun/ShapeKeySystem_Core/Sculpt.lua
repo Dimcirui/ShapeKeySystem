@@ -28,7 +28,9 @@ function S.key_of(channel_name)
 end
 
 -- K.keys: list of { name, group, parts = {ids}, value, default, overrides = {part = v},
---                   owner = "self" / "expression" }
+--                   owner = "self" / "expression", held = v or nil }
+-- value / overrides are the key's own (free) values; held is the fixed value of the key group option
+-- in effect, which replaces them while it is set (S.effective).
 -- Every channel is listed. A key whose every channel is driven by the expression profile has
 -- owner "expression": still editable (2026-10-10), but the sculpt layer does not write it — its
 -- value is the rest position the expression writer remaps the expression weight onto
@@ -59,6 +61,7 @@ local function preset_value(preset, part, name)
 end
 
 local warm = {}   -- mesh address -> warm-up count of targets dropped by clear_targets
+local refresh_held   -- key groups section
 
 -- parts: Scene parts { id, mesh, names, n }; owned[mesh] = { [index] = true } (expression)
 -- presets_of(part_id) -> active, mod, fill: the sculpt preset the character's binding selects, the
@@ -180,7 +183,7 @@ function S.rebuild(parts, owned, presets_of)
     K.keys, K.by_name, K.targets = keys, by_name, targets
     -- the binding's preset brings its key groups until they are edited or another preset is loaded
     if not K.groups_touched then K.groups = U.copy(group_source and group_source.key_groups or {}) end
-    S.apply_groups()
+    refresh_held(false)
     return keys
 end
 
@@ -193,11 +196,11 @@ end
 
 -- ---------------------------------------------------------------- key groups
 -- A key group switches between up to MAX_OPTIONS sets of keys, like an integer parameter: value n
--- gives the keys of option n their fixed values, every other key of the group (all of them at 0)
--- goes back to the mod default. Options of one group may share a key with different values (one
--- key, several steps); a key belongs to one group only, so groups never fight each other or the
--- key list. Groups belong to the loaded sculpt preset
--- (key_groups) and are applied onto the key values; per-part values do not apply to their keys.
+-- holds the keys of option n at their fixed values (key.held); every other key of the group, and
+-- all of them at 0, are free and show their own values (2026-11-02: before, they went back to the
+-- mod default and could not be edited). Options of one group may share a key with different values
+-- (one key, several steps); a key belongs to one group only, so groups never fight each other.
+-- Groups belong to the loaded sculpt preset (key_groups); a held key ignores its per-part values.
 -- K.groups = { { name, value = 0..#options, options = { { name, values = { key = value } } } } }
 S.MAX_OPTIONS = 8
 local GROUPS = {}   -- snapshot field (a table key: never a key name)
@@ -229,22 +232,34 @@ local function index_groups()
     end
 end
 
--- writes the groups onto the key values; a key only changes (and counts as edited) when its value does
-function S.apply_groups()
+-- sets key.held from the groups. keep: a key that left its group altogether keeps the value it was
+-- held at (it stays where it was on screen); undo / redo restore the free values as they were.
+function refresh_held(keep)
     index_groups()
     local lo, hi = S.RANGE[1], S.RANGE[2]
     local changed = false
-    for n, m in pairs(K.member) do
-        local k = K.by_name[n]
-        if k then
-            local on = m.options[m.group.value]
-            local v = on and U.clamp(tonumber(m.group.options[m.group.value].values[n]) or 0, lo, hi) or k.default
-            if abs(v - k.value) > 1e-9 or next(k.overrides) ~= nil then
-                k.value, k.overrides, k.touched, changed = v, {}, true, true
-            end
+    for _, k in ipairs(K.keys) do
+        local m = K.member[k.name]
+        local v = nil
+        if m and m.options[m.group.value] then
+            v = U.clamp(tonumber(m.group.options[m.group.value].values[k.name]) or 0, lo, hi)
         end
+        if keep and not m and k.held ~= nil then
+            k.value, k.overrides, k.touched = k.held, {}, true
+        end
+        if v ~= k.held then k.held, changed = v, true end
     end
     if changed then S.mark_dirty() end
+end
+
+function S.apply_groups() refresh_held(true) end
+
+-- the value a key shows and writes (part nil: its merged value)
+function S.effective(k, part)
+    if k.held ~= nil then return k.held end
+    local o = part and k.overrides[part]
+    if o ~= nil then return o end
+    return k.value
 end
 
 function S.group_of(name)
@@ -287,7 +302,7 @@ function S.group_delete(ref)
     if not g then return bad_group(ref) end
     group_edit(nil)
     table.remove(K.groups, gi)
-    index_groups()
+    S.apply_groups()
     S.mark_dirty()
     return true
 end
@@ -360,7 +375,8 @@ function S.option_assign(ref, i, names, values)
     for _, n in ipairs(names) do
         local k = K.by_name[n]
         local v = values and tonumber(values[n])
-        if not v then v = abs(k.value - k.default) > 1e-6 and k.value or 1.0 end
+        local cur = S.effective(k)
+        if not v then v = abs(cur - k.default) > 1e-6 and cur or 1.0 end
         o.values[n] = U.clamp(v, lo, hi) + 0.0
     end
     S.apply_groups()
@@ -443,7 +459,8 @@ local function restore(s)
         end
     end
     local g = s[GROUPS]
-    if g then K.groups, K.groups_touched = U.copy(g.groups), g.touched; index_groups() end
+    if g then K.groups, K.groups_touched = U.copy(g.groups), g.touched end
+    refresh_held(false)
     S.mark_dirty()
 end
 
@@ -515,7 +532,7 @@ end
 function S.check_editable(name)
     local k = K.by_name[name]
     if not k then return "E_NOT_FOUND", "unknown sculpt key: " .. tostring(name) end
-    if K.member[name] then return "E_IN_GROUP", "key is held by a key group: " .. tostring(name) end
+    if k.held ~= nil then return "E_IN_GROUP", "key is held by a key group: " .. tostring(name) end
     return nil
 end
 
@@ -547,7 +564,7 @@ end
 function S.set_override(name, part, value)
     local k = K.by_name[name]
     if not k then return false, "E_NOT_FOUND", "unknown sculpt key: " .. tostring(name) end
-    if K.member[name] then return false, "E_IN_GROUP", "key is held by a key group: " .. tostring(name) end
+    if k.held ~= nil then return false, "E_IN_GROUP", "key is held by a key group: " .. tostring(name) end
     local found = false
     for _, p in ipairs(k.parts) do if p == part then found = true end end
     if not found then return false, "E_NOT_FOUND", tostring(name) .. " is not on part " .. tostring(part) end
@@ -579,6 +596,7 @@ function S.clear_all()
     S.push_undo(nil)
     for _, g in ipairs(K.groups) do if g.value ~= 0 then g.value, K.groups_touched = 0, true end end
     for _, k in ipairs(K.keys) do k.value, k.overrides, k.touched = 0.0, {}, true end
+    refresh_held(false)
     S.mark_dirty()
     return true
 end
@@ -597,6 +615,7 @@ function S.reset_all()
         k.value, k.overrides, k.touched = k.default, {}, true
         for p, v in pairs(k.preset_overrides) do k.overrides[p] = v end
     end
+    refresh_held(false)
     S.mark_dirty()
     return true
 end
@@ -621,7 +640,7 @@ function S.apply_preset(preset)
             k.touched = true
         end
     end
-    S.apply_groups()
+    refresh_held(false)
     S.mark_dirty()
 end
 
@@ -673,9 +692,7 @@ local function base_value(key, part, preview)
         if d ~= nil then return d end
         return key.default
     end
-    local o = key.overrides[part]
-    if o ~= nil then return o end
-    return key.value
+    return S.effective(key, part)
 end
 S.base_value = base_value
 

@@ -115,7 +115,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 
 `Signal`：`{ slot = 3, name = "smile.L", label = "fcParam_033", no_signal = false, guessed = false, note = "颧大肌" }`。
 `label` 是适配器给出的原始通道名；`no_signal` 为 true 时本游戏没有这个信号，实时值恒为 0。实时值在 `live.signal[slot]`，
-已按信号自己的 `lo` / `hi` 归一化。字典项可以带 `fallback`（一个或一组原始通道，不经 `lo` / `hi`），信号取主通道和这些通道里最大的值，`label` 用 ` / ` 连起各通道名；只有 `fallback` 的项也算有信号。鬼武者的 25 个 bsControl 信号各带一个同类动作的面部骨骼信号（`builtin/onimusha_wots/face.json`），bsControl 不动时（比如说话时的自动嘴型只动骨骼）由骨骼接管。`p` 节点的显示名用 `SKS.raw_label(v)` 取得。
+已按信号自己的 `lo` / `hi` 归一化。字典项可以带 `fallback`（一个或一组原始通道，不经 `lo` / `hi`），信号取主通道和这些通道里最大的值（兜底通道先乘所在 `fallback_group` 的兜底权重 `P["fallback_mix.<组>"]`，由适配器写入，0–1，没写时为 1；带兜底的信号同时绑定本组所有主通道），`label` 用 ` / ` 连起各通道名；只有 `fallback` 的项也算有信号。鬼武者的 25 个 bsControl 信号各带一个同类动作的面部骨骼信号（`builtin/onimusha_wots/face.json`），bsControl 不动时（比如说话时的自动嘴型只动骨骼）由骨骼接管：按区域分组（眼、眉、整个嘴部，嘴部包括没有兜底的嘴部通道），组内任一 bsControl 通道超过 0.02 时该组兜底权重立即归 0，组内通道全部静止 0.5 秒后在 0.25 秒内升回 1；没有 bsControl 的头部恒为 1。骨骼信号按自己的行程标定，幅度比 bsControl 大，所以有 bsControl 表情时不能参与比较。`p` 节点的显示名用 `SKS.raw_label(v)` 取得。
 
 ### 3.6 `state.sculpt`
 | 字段 | 类型 | 说明 |
@@ -263,6 +263,7 @@ SKS.set_ui_open(b)   -- 告诉后端面板是否打开（影响第 1 节第 5 �
 | `request_delete` | `{kind, name}` | 进入待确认状态（`state.presets.pending_delete`） | — |
 | `confirm_delete` / `cancel_delete` | `{}` | 确认或取消删除；只能删除 `user/` 下的文件 | user/* |
 | `import_preset` | `{kind, path}` | 从指定路径复制到 `user/`，复制前先校验 | user/* |
+| `export_mod` | `{prefix}` | 把当前生效的一整套导出成 mod 的文件，见第 9 节「导出为 mod」 | export/<前缀>/ |
 
 ### 5.6 错误码
 | 代码 | 含义 |
@@ -317,11 +318,12 @@ reframework/data/ShapeKeySystem/
   builtin/  profiles/*.json, aliases.json, labels.json, names/*.json   （随插件发布，只读；各游戏通用）
             <游戏 id>/ signals.json, armor_names.json, profiles/*.json   （只属于这个游戏，荒野是 mhwilds/）
                        recording_catalog.json, recordings/*.json       （内置面部动画测试数据）
-  mods/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （随 mod 发布，只读）
-  user/     bindings/*.json, profiles/*.json, sculpt/*.json, names/*.json  （用户自己的，插件只写这里）
+  mods/     default.json, <建模>/, profiles/, sculpt/, conditions/, drivers/, names/  （随 mod 发布，只读；结构见第 9 节「目录」）
+  user/     同 mods/                                      （用户自己的，插件只写这里）
             recordings/*.json                             （用户面部动画录制）
             mocap.json                                    （面捕设置，见「面捕」一节）
             face_mirror.json                              （表情镜设置，见「表情镜」一节；荒野、RE4R 和鬼武者）
+  export/   <前缀>/reframework/...                        （「导出为 mod」的输出，见第 9 节）
   mocap/    live.json                                     （没有 ShapeKeySystem_Mocap.dll 时由桥接脚本写入的最新一帧；脚本在 builtin/mocap/）
 ```
 
@@ -393,9 +395,14 @@ reframework/data/ShapeKeySystem/
     default.json                          全局默认父预设
     profiles/*.json                       表情配置
     sculpt/*.json                         通用捏脸预设
+    conditions/*.json                     条件规则
+    drivers/*.json                        驱动配置
+    names/*.json                          名字表（读不到通道名的游戏）
     <建模>/<代表部件ID>.json               这套建模的父预设，例如 ch03_012_001/ch03_012_0012.json
     <建模>/sculpt/*.json                   这个建模的捏脸预设
 ```
+
+SKS 新建的配置文件，文件名（也是 id）只用 ASCII：名字含非 ASCII 字符时取「名字里的 ASCII 部分_名字的 8 位哈希」，例如 `Airi 日常脸` → `Airi_b865a681.json`，没有 ASCII 部分时只有哈希（`Util.file_id`）。REFramework 按系统代码页写非 ASCII 文件名，在别的电脑上读不出来。显示名写在文件的 `name` 字段里，下拉列表照常显示。已有的文件保存时仍写回原文件；同名的 mod 配置保存成 `user/` 下同 id 的文件。
 
 建模文件夹取部件 ID 去掉最后一位（`ch03_012_0014` → `ch03_012_001`）。不符合 `chXX_SSS_MMMs` 格式的部件，直接用部件 ID 作文件夹名。
 
@@ -445,24 +452,54 @@ reframework/data/ShapeKeySystem/
 
 ### mod 作者（以及 Toolkit 导出）需要放的文件
 
+最省事的做法：在游戏里调好后，到「总体绑定管理 → 总体绑定」点「导出为 mod」，填作者前缀。SKS 把当前生效的一整套写到 `reframework/data/ShapeKeySystem/export/<前缀>/`，里面的 `reframework` 文件夹就是 mod 包要带的内容（见下面「导出为 mod」）。手写时的结构：
+
 ```
-reframework/data/ShapeKeySystem/mods/ch03_012_001/ch03_012_0012.json     # 只为带形态键的部件生成
+reframework/data/ShapeKeySystem/mods/
+  ch03_012_001/ch03_012_0012.json     绑定（父预设），文件名是这套建模的代表部件；只为带形态键的建模写
+  ch03_012_001/sculpt/<id>.json       这个建模的捏脸预设
+  profiles/<前缀>.<名字>.json          表情配置，只有内置配置覆盖不到时才需要
+  conditions/<前缀>.<名字>.json        条件规则
+  drivers/<前缀>.<名字>.json           驱动配置
+  names/<前缀>.json                   名字表，只在读不到通道名的游戏（崛起、鬼武者）、且键名不在内置名字表里时需要
+```
+
+```
+mods/ch03_012_001/ch03_012_0012.json
   {"schema": "sks.binding/1", "part": "ch03_012_0012",
-   "profile": "shinano",                         # 可省：用全局配置
-   "sculpt": "Airi 日常脸",                       # 可省：捏脸值为 0
-   "gains": {"for_profile": "shinano", "master_gain": 1.0, "region_gains": {"mouth": 1.0},
+   "profile": "airi.face",                       # 可省：用全局配置
+   "sculpt": "Airi 日常脸",                       # 捏脸预设的 name；可省：捏脸值为 0
+   "conditions": "airi.battle",                  # 可省：用玩家的全局条件规则
+   "drivers": "airi.halo",                       # 可省：用玩家选的驱动配置
+   "gains": {"for_profile": "airi.face", "master_gain": 1.0, "region_gains": {"mouth": 1.0},
              "channel_gains": {"mouthSmileLeft": 1.2}},
    "eyes": {"full_deg": {"yaw": 25, "pitch": 20}, "invert": {"yaw": false}, "sets": {"look": true}},
    "fingerprints": {"ch03_012_0012": "1a2b3c4d"}}
-reframework/data/ShapeKeySystem/mods/ch03_012_001/sculpt/Airi 日常脸.json
+mods/ch03_012_001/sculpt/Airi_b865a681.json
   {"schema": "sks.sculpt/1", "name": "Airi 日常脸",
    "target": {"part": "ch03_012_0012", "channel_hash": "1a2b3c4d"},
    "values": {"Waist_thin": 0.3}, "overrides": {"ch03_012_0014": {"Waist_thin": 0.5}}}
-reframework/data/ShapeKeySystem/mods/profiles/<作者前缀.名字>.json            # 只有内置配置覆盖不到时才需要
 ```
 
+- **文件名只用 ASCII**：中文等非 ASCII 文件名换一台电脑可能读不出来。显示名写在文件里的 `name` 字段。
+- **全局目录加作者前缀**：`profiles/`、`conditions/`、`drivers/`、`names/` 和通用的 `sculpt/` 是所有 mod 共用的，同名文件后装的会覆盖先装的，所以文件名用 `<作者前缀>.<名字>`。建模文件夹里的文件按部件 ID 区分，不用前缀。
+- **引用**：绑定的 `profile`、`conditions`、`drivers` 写对方的 id（文件名去掉 `.json`；表情配置以文件里的 `id` 字段为准），`sculpt` 写捏脸预设的 `name`，先在本建模文件夹找，再找通用的。找不到的引用不生效并提示一次。
+- **驱动随装备生效**：绑定写了 `drivers` 时，穿上这套装备就切到这套驱动；玩家在驱动页手动切换的配置在换装之前一直有效，不写进 `settings.json`。没有绑定引用时用玩家自己选的（`settings.json` 的 `drivers`）。
+- **玩家的修改**：玩家改了 mod 自带的配置，会存成 `user/` 下同 id 的文件盖住 mod 的那份，mod 的文件不动。
+- **依赖**：条件规则组合里的键、驱动形态键行的键都要是这个 mesh 的键名；驱动公式里的 `clip(名字)` 指条件规则里的组合，两份要一起发；`cond(id)` 的条件 id 每个游戏不同（见「条件规则」一节）。
 - `values` 的键是**捏脸键名**（通道名去掉 `xxx.` 前缀和 `_LODn` 后缀，大小写保持不变），只写不归表情配置管的键。
-- 通道指纹：把这个部件全部通道名（mesh 里的完整名字）排序后用 `\n` 连接，算 FNV-1a 32 位，写成 8 位小写十六进制（`Util.fnv`）。
+- 通道指纹：把这个部件全部通道名（mesh 里的完整名字）排序后用 `
+` 连接，算 FNV-1a 32 位，写成 8 位小写十六进制（`Util.fnv`）。
+
+### 导出为 mod（`export_mod {prefix}`，2026-11-02）
+
+`Export.lua`。把当前生效的一整套原样写成 mod 的文件，未保存的修改也算在内：
+
+- **收集**：当前的绑定（还没有时新建）、当前捏脸值（含键组，名字取当前捏脸配置的名字，没有时取装备名）、当前表情配置（含未保存的映射修改，展开 `extends` 写成一份完整配置；没改过的内置配置只引用不复制）、当前条件规则、当前驱动配置（没有组时不导出）。
+- **改名**：表情配置、条件规则、驱动的 id 改成 `<前缀>.<原 id>`（原 id 不是 ASCII 时先按 `Util.file_id` 换掉），已带这个前缀的不变；绑定里的引用和 `gains.for_profile` 跟着改。捏脸写进建模文件夹，文件名为 `Util.file_id(名字)`。
+- **绑定**：写入当前的增益和视线设置，以及这套建模所有穿着部件的通道指纹；去掉 `global`。
+- **输出**：`export/<前缀>/reframework/data/ShapeKeySystem/mods/...`，只写这一份。前缀只能用英文字母、数字、下划线和连字符，最多 24 个字符。再次导出到同一前缀会覆盖同名文件，上次有、这次没有的文件不会删除（REFramework 不能删除文件）。
+- **结果**：`{path, files}`；面板提示「已导出到 <目录>」。
 
 ## 10. 待定
 
@@ -535,7 +572,7 @@ end)
 
 - **优先级**：外部插件 > 条件表情 > fcParam 表情（含捏脸合成）> 纯捏脸。片段的值相当于"表情值"：`e' = e × (1 − α) + 目标 × α`，然后照常和捏脸值做重映射 `s + (1 − s) × e'`，外部插件仍然可以覆盖。不受表情驱动的键按 e = 0 处理，走同一个重映射（2026-10-10 用户决定统一成重映射；之前是从捏脸值线性插值到目标，会把捏过的值往下拉）。所以片段只会在捏脸值之上往上加，不会压低捏脸值；捏脸值 ≥ 1 时片段不起作用。面部图互动同理。
 - **作用范围**：只作用于游戏中的主角色。菜单、加载、过场、公会卡里不判断条件，片段会重置。
-- **规则**（沿用用户 RE4 变体管理器的设计）：状态列表从上到下排优先级，第一个命中的状态播放它的片段。每个状态可以有多条规则，任意一条命中即算命中。规则内的条件统一用"且"或"或"连接，空规则永远不命中。条件读不到值时算不满足。`hold` 表示条件结束后再保持多少秒。数值条件的 `band` 是回差，命中后要越过阈值这么多才算结束。状态的 `clip` 为空字符串时（面板里选「-」）该状态停用：跳过判断，也不压住下面的状态；删除片段时引用它的状态改为空字符串，规则保留。`auto = false` 时暂停所有规则。面板的「预览」可以强制播放某个片段。面板把片段称为「形态键配置组合」。
+- **规则**（沿用用户 RE4 变体管理器的设计）：状态列表从上到下排优先级。命中的状态同时播放各自的片段，两个片段写到同一个形态键时靠上的状态说了算，所以下面的状态只补上面的状态没用到的键；开启 `exclusive`（面板「独占状态」，默认关）的状态命中时，它下面的状态都不播放（状态显示为被压着）。2026-11-01 起如此，之前只播放第一个命中的状态。每个状态可以有多条规则，任意一条命中即算命中。规则内的条件统一用"且"或"或"连接，空规则永远不命中。条件读不到值时算不满足。`hold` 表示条件结束后再保持多少秒。数值条件的 `band` 是回差，命中后要越过阈值这么多才算结束。状态的 `clip` 为空字符串时（面板里选「-」）该状态停用：跳过判断，也不压住下面的状态；删除片段时引用它的状态改为空字符串，规则保留。`auto = false` 时暂停所有规则。面板的「预览」可以强制播放某个片段。面板把片段称为「形态键配置组合」。
 - **文件**：`user/conditions/<id>.json` 或 `mods/conditions/<id>.json`，schema 为 `sks.conditions/1`，格式见 `CondExpr.lua` 文件头。父预设用 `"conditions": "<id>"` 引用；没有父预设引用时，使用 `settings.conditions`。
 - **命令**：`cond_select {name}`、`cond_new {name}`、`cond_edit {data}`（整份替换工作副本）、`cond_save {as_name?}`、`cond_revert`、`cond_preview {clip?}`、`cond_import_sculpt {clip, name, folder?, group?, option?}`（把捏脸配置合并值里不为 0 的键原样写进工作副本的这个片段，同名键覆盖、其他键保留，不读按部件的覆盖；带 `group` 时只写这个键组第 `option` 个选项里的值，`group` / `option` 为名字或从 1 开始的序号，找不到返回 `E_NOT_FOUND`。片段的值只会把形态键从捏脸值往 1 推，不能把同组其他选项的键压回默认值，所以导入一个选项是叠加，不是切换；`folder` 的查找同 `load_sculpt`；结果 `{count}`）；删除走 `request_delete {kind = "conditions"}`。`write_binding` 增加 `conditions` 参数；不传这个参数时，保留同一部件原有的引用。
 - **状态**：`state.conditions = {rev, sets, current = {id, name, source, dirty, data}, defs, binding_name, binding_part, global_name}`。实时值在 `live.cond = {values, status, playing, alpha, sampled}`，只在面板打开时更新。
@@ -568,7 +605,7 @@ end)
 - **绑定**：按装备（模型）记录"穿上它时默认用哪个表情配置 / 捏脸配置 / 条件表情配置，以及增益和视线设置"。它只是引用，不会改动配置文件本身。手动切换的配置在换装之前一直有效（表情配置用 `C.profile_manual` 记录）。
 - **三个页面统一结构**：捏脸、表情详情、条件表情的顶部都是 配置下拉 + [设为默认] + 保存 / 另存为（表情详情是 应用 + 保存调整）。下拉里，这套装备的默认配置后面标"· 默认"；只有全局默认生效时标"· 全局默认"，按钮这时写成"设为 <装备名> 的默认"。当前选中的就是默认配置时，不显示按钮。实现：`W.default_suffix`、`W.default_button`。装备名放在按钮的悬停提示里。
   - 捏脸页「保存」：当前是自己的配置时直接覆盖；当前是 mod 自带的或还没有配置时在操作栏下展开命名编辑行。「另存为…」取代原来的「新建…」。「保存并绑定」去掉了。
-- **命令** `bind_config {kind = "sculpt" | "expression" | "conditions", name}`：只改生效绑定里对应的那一个字段，其他字段保留，写到 `user/`（mod 的绑定会复制一份，原文件不动）。身上没有绑定时，为通道最多的那个部件所属模型新建一个整套共用的绑定。状态在 `state.presets.bind = {base, model, display, active}`，`state.presets.binding` 里新增 `profile_id`、`conditions`。
+- **命令** `bind_config {kind = "sculpt" | "expression" | "conditions" | "drivers", name}`：只改生效绑定里对应的那一个字段，其他字段保留，写到 `user/`（mod 的绑定会复制一份，原文件不动）。身上没有绑定时，为通道最多的那个部件所属模型新建一个整套共用的绑定。状态在 `state.presets.bind = {base, model, display, active}`，`state.presets.binding` 里新增 `profile_id`、`conditions`。
 - **装备名**：`builtin/armor_names.json`（418 个模型编号，由 Modding-Toolkit 的 `assets/mhws/armor_sets/mhws_armor_sets.json` 生成）。显示优先级：绑定文件里的 `name` > 原版装备名 > 模型编号。
 - **页面调整**：「预设」页从导航移除，内容放进「设置与调试」底部可折叠的"绑定与配置文件"区，给排查问题用。查找过程里，整套共用的绑定不再重复列出。「视线」页并进了表情详情底部的「视线设置」区。
 - **捏脸**：新增 `reset_sculpt_all`（重置）、`zero_sculpt_all`（归零），各算一步撤销。新增「隐藏非预设通道」（`SculptKey.in_preset`），「A/B 对比」改名为「对比初始」。
@@ -791,26 +828,32 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 | 形态键 | `GumSize_0` | `clamp(u, 0, 1) * blow` |
 | 形态键 | 张嘴 | `0.5 * GumSize_0` |
 
-写入：形态键行的值作为外部值（`External.lua`，所有者 `drivers`）每帧续租，覆盖表情和捏脸、走同一套写入保护；值限制在 0 到 `sculpt_max`。变量不限制范围，也不写任何形态键。面捕或其他插件正在控制的形态键先让给它们（API 每帧先跑面捕，再跑驱动），对方放开后下一帧接回。同一个形态键被多行驱动时只有最先出现的那行生效（先按组、再按行）。组里任何一行有错误时，整组都不写入，避免同一组的形态键一部分是新值、一部分停在旧值。关掉、删除或改名的行当帧放开原来的键。时钟按 API 每帧的 dt 累加（单帧最多 0.1 秒），游戏卡顿时相位不跳。
+写入：形态键行的值作为外部值（`External.lua`，所有者 `drivers`）每帧续租，覆盖表情和捏脸、走同一套写入保护；值限制在 0 到 `sculpt_max`。变量不限制范围，也不写任何形态键。面捕或其他插件正在控制的形态键先让给它们（API 每帧先跑面捕，再跑驱动），对方放开后下一帧接回。组里名为 `live` 的变量行为 0 时，它下面的形态键行都不写入并放开键，捏脸和键组的值照常显示，`live` 不为 0 时再接管；所以 `live` 要写在形态键行之前，例如 `live = p > 0` 让驱动只在动画播放期间占用形态键。同一个形态键被多行驱动时只有最先出现的那行生效（先按组、再按行）。组里任何一行有错误时，整组都不写入，避免同一组的形态键一部分是新值、一部分停在旧值。关掉、删除或改名的行当帧放开原来的键。时钟按 API 每帧的 dt 累加（单帧最多 0.1 秒），游戏卡顿时相位不跳。
 
-公式：数字、`t`（秒）、`pi`、`tau`，以及本组上面各行定义的名称；运算 `+ - * / % ^` 和括号（`^` 右结合，一元负号低于 `^`；除以 0 和负数的非整数次方得 0）；比较 `< <= > >= == !=`（`~=` 同 `!=`），成立得 1、不成立得 0，优先级低于加减，不能连写（`a < b < c` 报错，要写成 `(a < b) < c`）。函数：`clip(组合名)`（条件规则里这个形态键配置组合当前的权重，随它的淡入从 0 升到 1、随淡出降回 0；组合不存在或没在播放时为 0。参数直接写组合名，只能是英文字母、数字、下划线，例如 `clip(aim)`。用它可以让驱动组在条件触发时按进度播放一段动画，比如瞄准时光环先在原处消失、再到另一处旋转出现；条件结束时倒着播回去）、`ramp(目标, 淡入秒, 淡出秒)`（跟随目标值，目标截到 0–1；升向目标时每秒走 1/淡入秒，降时每秒走 1/淡出秒，相当于给一个开关加上自己的淡入淡出。例如 `ramp(clip(aim) > 0.5, 1.2, 0.4)`：瞄准时 1.2 秒内从 0 走到 1，松开后 0.4 秒内回到 0，和组合自己的淡入淡出时长无关。公式里每个 `ramp` 各自记住当前值，组重新编译时从 0 开始）、`sin cos abs floor frac sqrt smoothstep`（1 个参数）、`rand(x)`（同一个整数内的 x 得同一个 0–1 随机值；随机种子每次启动游戏时换一个，所以每次进游戏的随机序列不同）、`min max pulse(x, 占空比)`（2 个）、`clamp(x, lo, hi) lerp(a, b, k)`（3 个），以及以 1 为一个周期、输出 0–1 的 `osc tri saw square noise`（`osc` / `tri` 在整周期为 0、半周期为 1，`square` 前半周期为 1）。公式由 `Drivers.lua` 自己解析成闭包，不经过 Lua 的 `load`；最长 200 个字符，括号最多嵌套 32 层。
+公式：数字、`t`（秒）、`pi`、`tau`，以及本组上面各行定义的名称；运算 `+ - * / % ^` 和括号（`^` 右结合，一元负号低于 `^`；除以 0 和负数的非整数次方得 0）；比较 `< <= > >= == !=`（`~=` 同 `!=`），成立得 1、不成立得 0，优先级低于加减，不能连写（`a < b < c` 报错，要写成 `(a < b) < c`）。函数：`clip(组合名)`（条件规则里这个形态键配置组合当前的权重，随它的淡入从 0 升到 1、随淡出降回 0；组合不存在或没在播放时为 0。参数直接写组合名，只能是英文字母、数字、下划线，例如 `clip(aim)`。用它可以让驱动组在条件触发时按进度播放一段动画，比如瞄准时光环先在原处消失、再到另一处旋转出现；条件结束时倒着播回去）、`ramp(目标, 淡入秒, 淡出秒)`（跟随目标值，目标截到 0–1；升向目标时每秒走 1/淡入秒，降时每秒走 1/淡出秒，相当于给一个开关加上自己的淡入淡出。例如 `ramp(clip(aim) > 0.5, 1.2, 0.4)`：瞄准时 1.2 秒内从 0 走到 1，松开后 0.4 秒内回到 0，和组合自己的淡入淡出时长无关。公式里每个 `ramp` 各自记住当前值，组重新编译时从 0 开始）、`cond(条件id)`（游戏条件这一帧的值：布尔为 1 / 0，数值原样，读不到或在菜单里为 0。直接读条件本身，不经过条件规则的状态优先级，所以别的状态顶掉片段时不受影响；id 写错是公式错误。有启用的组用到 cond 时，即使没有条件表情配置也会采样条件。例如 `ramp(cond(oni_mode), 5, 1.5)`：鬼变身时 5 秒走完一段时间线，解除后 1.5 秒倒回）、`sin cos abs floor frac sqrt smoothstep`（1 个参数）、`rand(x)`（同一个整数内的 x 得同一个 0–1 随机值；随机种子每次启动游戏时换一个，所以每次进游戏的随机序列不同）、`min max pulse(x, 占空比)`（2 个）、`clamp(x, lo, hi) lerp(a, b, k)`（3 个），以及以 1 为一个周期、输出 0–1 的 `osc tri saw square noise`（`osc` / `tri` 在整周期为 0、半周期为 1，`square` 前半周期为 1）。公式由 `Drivers.lua` 自己解析成闭包，不经过 Lua 的 `load`；最长 200 个字符，括号最多嵌套 32 层。
 
 名称：变量名只能用英文字母、数字和下划线，不能以数字开头，最长 40 个字符，也不能是函数名或 `t`、`a`、`pi`、`tau`、`clip`、`ramp`（`a` 留给以后由条件片段直接运行的组）。形态键名本身符合这个规则时，这一行的值也可以被下面的行按形态键名读到（如上例的 `GumSize_0`）；中文名的形态键只能写、不能读。一行只能读它上面的名称；同一组里一个名称只能定义一次。读的是该行算出的原值，不是限制到 0–`sculpt_max` 后的值。出错时页面在该行下显示原因。
 
 | 命令 | 参数 | 作用 | 持久化 |
 |---|---|---|---|
-| `drivers` | `{op = "add", key?, actor?}` | 新增一组，带一个形态键行（默认正弦、周期 2 秒、0–1），最多 32 组；`actor` 是所属角色 | `user/drivers.json` |
+| `drivers` | `{op = "add", key?, actor?}` | 新增一组，带一个形态键行（默认正弦、周期 2 秒、0–1），最多 32 组；`actor` 是所属角色 | 当前驱动配置 |
 | `drivers` | `{op = "remove", index}` | 删除第 index 组 | 同上 |
 | `drivers` | `{op = "patch", index, patch}` | 修改一组：`enabled`、`name`（最长 40 个字符）。`patch` 里的行字段（见下一条）改第 1 行 | 同上 |
 | `drivers` | `{op = "patch", index, row, patch}` | 修改第 index 组的第 row 行：`kind`（`out` / `var`）、`key`、`var`、`wave`、`period`（0.05–120）、`lo` / `hi`（0–5）、`phase`（0–1）、`expr`。任一字段不合法时整条不改 | 同上 |
 | `drivers` | `{op = "add_row", index, kind?, key?, var?}` | 在组末尾加一行，每组最多 32 行；变量行不给 `var` 时取 `x1`、`x2`…中第一个没用过的 | 同上 |
 | `drivers` | `{op = "remove_row", index, row}` | 删除一行 | 同上 |
 | `drivers` | `{op = "move_row", index, row, to}` | 把一行移到第 to 行 | 同上 |
-| `drivers` | `{op = "patch", patch = {enabled}}` | 总开关 | 同上 |
+| `drivers` | `{op = "patch", patch = {enabled}}` | 总开关 | `settings.json` 的 `drivers_enabled` |
+| `drivers` | `{op = "select", name}` | 切换驱动配置（`name` 为文件名或配置名）；先写入上一个配置还没保存的修改，上一个配置占着的形态键下一帧放开（新配置也驱动的除外），时钟和 `ramp` 从 0 开始 | `settings.json` 的 `drivers` |
+| `drivers` | `{op = "new", name}` | 新建空的驱动配置并选中，立即写文件；名字已被占用时返回 `E_EXISTS` | `user/drivers/<id>.json` |
+| `drivers` | `{op = "save_as", name}` | 把当前配置的组复制成新配置并选中，其余同 `new` | 同上 |
+| `request_delete` | `{kind = "drivers", name}` | 删除驱动配置，确认后写删除标记；只能删 `user/` 下的。删的是当前配置时，改用 `mods/` 下同名的配置，没有时用列表里第一个，都没有时不选 | `user/drivers/<id>.json` |
 
-`user/drivers.json`：`{"schema": "sks.drivers/2", "enabled": true, "groups": [{enabled, name, actor, rows: [{kind, key, var, wave, period, lo, hi, phase, expr}]}]}`。`actor` 为空表示玩家所在的角色。读取 `sks.drivers/1` 的旧文件（`items: [{enabled, key, wave, period, lo, hi, phase, expr, actor}]`）时，每条驱动变成只有一个形态键行的组，下次保存时写成新格式。当前编辑角色的驱动以外部值写入；其他角色的驱动写到它们自己的网格上（表情配置里的通道覆盖该槽位，其他同名形态键直接写入，驱动停止后恢复原值）。驱动页只列出当前编辑角色的组。读取时缺失或类型不对的字段取默认值，数值按上表范围截断。拖动滑块时 0.5 秒后才写文件。
+驱动配置：每套一个文件，`user/drivers/<id>.json` 或 `mods/drivers/<id>.json`（id 的取法见第 9 节「目录」），同 id 时 `user/` 优先。同一时刻只运行当前选中的一套，选中的配置记在 `settings.json` 的 `drivers`，总开关记在 `drivers_enabled`。生效的绑定可以用 `"drivers": "<id>"` 指定一套：绑定（或它引用的 id）变化时切到这套；之后在驱动页手动切换的配置在下次变化之前一直有效，也不写进 `settings.json`；没有绑定引用时回到 `settings.json` 的那套。驱动页的「设为默认」用 `bind_config {kind = "drivers"}` 写这个字段。修改照常 0.5 秒后自动保存到当前配置；当前配置来自 `mods/` 时，写成 `user/` 下的同名文件，mod 的文件不动，删掉这份 `user/` 文件就回到 mod 自带的版本。还没有任何配置时，第一次修改会新建 `user/drivers/default.json`（名字为「默认」）。以前版本的 `user/drivers.json` 在启动时原样复制成 `user/drivers/default.json` 并选中，原来关着总开关的仍然关着；`default.json` 已存在或已被删除时不再复制，旧文件留着不动。
 
-`state.drivers`：`cfg`（上面的设置）、`groups[g].rows[r] = {value, formula, err, owner, dup}`（当前值、实际执行的公式、错误 `{模板, 参数...}`、占用该键的其他所有者、与之重复的那一行 `{组, 行}`）、`waves` / `wave_names`、`kinds` / `kind_names`、`max_groups` / `max_rows`。
+配置文件：`{"schema": "sks.drivers/2", "name": "显示名", "groups": [{enabled, name, actor, rows: [{kind, key, var, wave, period, lo, hi, phase, expr}]}]}`。`actor` 为空表示玩家所在的角色。读取 `sks.drivers/1` 的旧文件（`items: [{enabled, key, wave, period, lo, hi, phase, expr, actor}]`）时，每条驱动变成只有一个形态键行的组，下次保存时写成新格式。当前编辑角色的驱动以外部值写入；其他角色的驱动写到它们自己的网格上（表情配置里的通道覆盖该槽位，其他同名形态键直接写入，驱动停止后恢复原值）。驱动页只列出当前编辑角色的组。读取时缺失或类型不对的字段取默认值，数值按上表范围截断。拖动滑块时 0.5 秒后才写文件。
+
+`state.drivers`：`cfg`（`enabled` 和当前配置的 `groups`）、`sets`（`[{id, name, source, path}]`，按名字排序）、`current`（`{id, name, source}`，没有配置时为 nil）、`groups[g].rows[r] = {value, formula, err, owner, dup}`（当前值、实际执行的公式、错误 `{模板, 参数...}`、占用该键的其他所有者、与之重复的那一行 `{组, 行}`）、`waves` / `wave_names`、`kinds` / `kind_names`、`max_groups` / `max_rows`。
 
 ## 界面语言
 
@@ -826,25 +869,27 @@ python reframework/data/ShapeKeySystem/builtin/mocap/rhylive_bridge.py 9001     
 
 键组用一个整数在几组形态键之间切换，比如几种发型、几种眼型。键组存在捏脸配置文件里，只属于这份配置：加载另一份配置时换成那份的键组，没有键组的配置清空当前键组。
 
-- **取值**：`value = 0` 时整组关闭，组里所有形态键回到 mod 默认值；`value = n` 时第 n 个选项里的形态键取它在这个选项里的固定值，组里其他形态键回到 mod 默认值。一个键组最多 8 个选项。
+- **取值**：`value = n` 时第 n 个选项占用它的形态键，取它在这个选项里的固定值；组里不在这个选项里的形态键，以及 `value = 0`（「无」）时的全部形态键不被占用，显示并写入它们自己的值，可以照常调整。键组切回 0 时，键回到自己的值，不是 mod 默认值（2026-11-02 起；之前回到 mod 默认值，也不能调整）。一个键组最多 8 个选项。
 - **不重叠**：同一个键组的几个选项可以共用一个形态键，各存各的值（一个键做出几档）；不同键组不能共用。收入另一个键组已有的键返回 `E_CONFLICT`，消息里写明所在的键组；文件里同一个键出现在两个键组时整份配置不读取。
-- **和其他层的关系**：键组改的是捏脸值，外部插件、驱动、条件表情照样能盖过它。键组里的键不在按部件分组的列表里，`set_sculpt_key` / `set_sculpt_override` / `reset_sculpt_key` 返回 `E_IN_GROUP`，也不使用按部件的单独值。表情配置驱动的键也可以收入，界面标出"与表情冲突"：它的固定值是表情叠加的起点（`S.mix`）。
+- **和其他层的关系**：键组改的是捏脸值，外部插件、驱动、条件表情照样能盖过它。被选中选项占用的键，`set_sculpt_key` / `set_sculpt_override` / `reset_sculpt_key` 返回 `E_IN_GROUP`，也不使用按部件的单独值；不被占用时这些命令照常改它自己的值。实现：键自己的值存在 `value` / `overrides`，占用值存在 `held`，写入和显示用 `Sculpt.effective`。表情配置驱动的键也可以收入，界面标出"与表情冲突"：它的固定值是表情叠加的起点（`S.mix`）。
 - **重置 / 归零**：`reset_sculpt_all`、`zero_sculpt_all` 把所有键组切回 0。键组的每次修改都算一步撤销，几帧之内连续切换同一个键组合并为一步。
 - **文件**：`sks.sculpt/1` 增加可选字段 `key_groups`：
   `[{"name": "发型", "value": 2, "options": [{"name": "马尾", "values": {"Hair_ponytail": 1}}, {"name": "短发", "values": {"Hair_short": 1, "Hair_bangs_cut": 0.6}}]}]`。
-  键组里的键的当前值也照常写进 `values`。名字未知时存成 `#XXXXXXXX` 的键，名字找到后按名字使用。
+  键组里的键自己的值（不是占用值）照常写进 `values`。名字未知时存成 `#XXXXXXXX` 的键，名字找到后按名字使用。
 
 命令（`group` 为键组名或从 1 开始的序号，`option` 为从 1 开始的选项序号）：
 
 | 命令 | 参数 | 作用 |
 |---|---|---|
 | `key_group_new` | `{name}` | 新建空键组，值为 0；重名返回 `E_EXISTS` |
-| `key_group_rename` / `key_group_delete` | `{group, name}` / `{group}` | 改名 / 删除；删除后组里的形态键回到列表，保留当前值 |
+| `key_group_rename` / `key_group_delete` | `{group, name}` / `{group}` | 改名 / 删除；删除后组里的形态键离开键组，保留当前值 |
 | `key_group_set` | `{group, value}` | 切换到 0..选项数；条件表情和驱动以后也经这个命令切换 |
 | `key_group_option_add` | `{group, name}` | 新增选项，结果 `{option}`；满 8 个返回 `E_LIMIT` |
-| `key_group_option_rename` / `key_group_option_delete` | `{group, option, name}` / `{group, option}` | 改名 / 删除选项；不在本组其他选项里的形态键回到列表，后面的选项序号减一 |
+| `key_group_option_rename` / `key_group_option_delete` | `{group, option, name}` / `{group, option}` | 改名 / 删除选项；不在本组其他选项里的形态键离开键组并保留当前值，后面的选项序号减一 |
 | `key_group_assign` | `{group, option, names, values?}` | 把形态键收入选项。`names` 为键名列表，或 `"modified"`（所有不在键组里、值和 mod 默认值不同的键）。固定值取 `values[name]`，没有时取当前值（等于默认值时取 1）；已在这个选项里的键只改值 |
-| `key_group_unassign` | `{name 或 names, group?, option?}` | 移出这个选项；不给 `group` 时移出整个键组。不再属于键组的形态键回到列表，保留当前值 |
+| `key_group_unassign` | `{name 或 names, group?, option?}` | 移出这个选项；不给 `group` 时移出整个键组。不再属于键组的形态键保留当前值 |
 | `key_group_set_key` | `{group, option, name, value}` | 改一个键在这个选项里的固定值 |
 
-`state.sculpt.key_groups[g] = {name, value, options[o] = {name, keys[k] = {name, label, value, mixed, missing}}}`，`state.sculpt.max_options = 8`；`state.sculpt.keys[i].in_group` 标出键组里的键。
+`state.sculpt.key_groups[g] = {name, value, options[o] = {name, keys[k] = {name, label, value, mixed, missing}}}`，`state.sculpt.max_options = 8`；`state.sculpt.keys[i]` 的 `in_group`、`key_group`（键组名）标出键组里的键，`held_by = {group, option}` 标出正被选中选项占用的键（这时 `value` 是占用值，`free_value` 是它自己的值，`locked = true`）。
+
+捏脸页（2026-11-02）：所有形态键都列在按部件分组的列表里，搜索能搜到任何键。被键组选项占用的键显示「键组「名字」· 选项」和数值，不能拖；不被占用的键组成员在第二行标「键组「名字」」；表情配置驱动的键标「表情叠加」；其他插件控制的键照旧显示「由 X 控制」和「收回」。过滤开关「只看已修改」「隐藏表情通道」「隐藏非预设通道」「隐藏键组占用」默认都关；有搜索词时只按搜索词和「只看已修改」过滤。

@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.14.1"
-V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka"
+V.number = "1.15.0"
+V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka, Moon"
 
 V.history = {
+    { version = "1.15.0", notes = "新增导出为 mod 和多套驱动配置；鬼武者支持表情镜和条件" },
     { version = "1.14.1", notes = "提醒更新过旧的 REFramework" },
     { version = "1.14.0", notes = "表情镜支持 RE4R、按部位隐藏；面板改为标签页" },
     { version = "1.13.0", notes = "荒野新增表情镜；面捕可驱动任意表情配置" },

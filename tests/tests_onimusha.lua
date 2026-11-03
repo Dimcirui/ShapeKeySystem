@@ -99,7 +99,7 @@ ARMOR._mesh.getMesh = function() return { call = function() return "Art/Model/Ch
 check(not A.is_face(ARMOR), "an NPC head with bsControl is not a face")
 ARMOR._mesh.getMesh = npc_path
 check(A.is_part("ch001_00_10_event") and not A.is_part("ch034_00_10"), "the cutscene copy's parts are named after the player's meshes")
-check(A.is_part("Hair") and A.model_of("Hair") == "musashi" and A.model_of("Head") == "musashi" and A.model_of("ch001_00_10_event") == "musashi"
+check(A.is_part("Hair") and A.is_part("OniHair") and A.model_of("OniHair") == "musashi" and A.model_of("Hair") == "musashi" and A.model_of("Head") == "musashi" and A.model_of("ch001_00_10_event") == "musashi"
     and A.representative_of("Body") == "musashi" and A.model_of("Gm800_000_00") == nil, "every player part belongs to musashi")
 local Presets = require("ShapeKeySystem_Core.Presets")
 local chain = {}

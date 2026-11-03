@@ -274,7 +274,7 @@ check(math.abs(WEIGHTS[i_waist] - 0.25) < 1e-6, "loading is one undo step")
 ok, code = SKS.call("load_sculpt", { name = "nope" })
 check(not ok and code == "E_NOT_FOUND", "unknown preset -> E_NOT_FOUND")
 
--- key groups: an integer switches between sets of keys with fixed values; 0 = all at the mod default
+-- key groups: an integer switches between sets of keys with fixed values; 0 = the keys' own values
 do
     local res
     ok = SKS.call("key_group_new", { name = "体型" })
@@ -285,8 +285,8 @@ do
     SKS.call("reset_sculpt_key", { name = "Other" })
     SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.9 })
     ok = SKS.call("key_group_assign", { group = "体型", option = 1, names = "modified" }); ticks(1)
-    check(ok and math.abs(WEIGHTS[i_waist] - 0.25) < 1e-6 and key("Waist_thin").in_group,
-        "modified keys go into an option with their value; group at 0: back to the mod default")
+    check(ok and math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6 and key("Waist_thin").in_group and not key("Waist_thin").held_by,
+        "modified keys go into an option with their value; group at 0: the key keeps its own value")
     ok = SKS.call("key_group_assign", { group = "体型", option = 2, names = { "Other" }, values = { Other = 0.3 } })
     local ok2 = SKS.call("key_group_assign", { group = "体型", option = 2, names = { "Waist_thin" }, values = { Waist_thin = 0.5 } })
     check(ok and ok2, "options of one group share a key with their own values")
@@ -301,7 +301,16 @@ do
     ok, code = SKS.call("key_group_set", { group = "体型", value = 3 })
     check(not ok and code == "E_BAD_ARGS", "a value past the last option is refused")
     ok, code = SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.5 })
-    check(not ok and code == "E_IN_GROUP", "a grouped key is not set from the key list")
+    check(not ok and code == "E_IN_GROUP" and key("Waist_thin").held_by and key("Waist_thin").held_by.option == "标准",
+        "a key the selected option holds is not set from the key list, and shows who holds it")
+    SKS.call("key_group_set", { group = "体型", value = 0 })
+    ok = SKS.call("set_sculpt_key", { name = "Waist_thin", value = 0.7 }); ticks(1)
+    check(ok and math.abs(WEIGHTS[i_waist] - 0.7) < 1e-6, "group at 0: its keys are edited freely")
+    SKS.call("key_group_set", { group = "体型", value = 2 }); ticks(1)
+    check(math.abs(WEIGHTS[i_waist] - 0.5) < 1e-6, "an option on holds the key again")
+    SKS.call("key_group_set", { group = "体型", value = 0 }); ticks(1)
+    check(math.abs(WEIGHTS[i_waist] - 0.7) < 1e-6, "back at 0: the key's own value shows again")
+    SKS.call("key_group_set", { group = "体型", value = 2 })
     ok = SKS.call("key_group_assign", { group = "体型", option = 1, names = { "EyeBlinkLeft" }, values = { EyeBlinkLeft = 0.5 } })
     local o1 = st.sculpt.key_groups[1].options[1]
     check(ok and #o1.keys == 2 and o1.keys[1].name == "EyeBlinkLeft" and o1.keys[1].mixed, "an expression key may join and is marked as mixed")
@@ -641,6 +650,17 @@ check(fsig.by_name.lip.fallback == nil and fsig.by_name.only.key == nil and not 
     and fv({ [5] = 0.6 }, 3) == 0.6, "fallback: the main raw is not its own fallback; fallback alone is a signal")
 check(Profile.signal_value(fsig.by_name.jaw, { [2] = 0.4 }) == 0.4 and #Profile.signal_keys(fsig.by_name.only) == 1,
     "fallback: live signal value and bound keys include the fallback raws")
+local gsig = Profile.load_signals({ full = 0.01, signals = {
+    { name = "jaw", raw = 1, fallback = 2, fallback_group = "mouth" }, { name = "lip", raw = 3, fallback_group = "mouth" },
+    { name = "brow", raw = 4, fallback = 5, fallback_group = "brows" } } })
+local gm = Profile.FALLBACK_MIX .. "mouth"
+local jk = Profile.signal_keys(gsig.by_name.jaw)
+check(Profile.signal_value(gsig.by_name.jaw, { [1] = 0.1, [2] = 0.8, [gm] = 0 }) == 0.1
+    and Profile.signal_value(gsig.by_name.jaw, { [1] = 0.1, [2] = 0.8, [gm] = 0.5 }) == 0.4
+    and Profile.signal_value(gsig.by_name.brow, { [5] = 0.8, [gm] = 0 }) == 0.8,
+    "fallback: the group's weight scales the fallback raws, 0 leaves the main raw alone, other groups unaffected")
+check(#jk == 3 and jk[3] == 3 and #Profile.signal_keys(gsig.by_name.lip) == 1 and #gsig.groups.mouth == 2,
+    "fallback: a signal that falls back also binds the main raws of its group")
 Profile.load_signals()
 for _, e in ipairs(Profile.list) do
     if e.source == "builtin" then

@@ -109,7 +109,8 @@ local function toolbar(ctx, x, y, w)
     local ab_label = sc.ab_preview and "正在看：初始" or "对比初始"
     local f = W.body()
     local sw = min(200, w * 0.28)
-    local left_w = sw + 12 + D.measure(f, "只看已修改") + 50 + D.measure(f, "显示表情通道") + 50 + D.measure(f, "隐藏非预设通道") + 50
+    local left_w = sw + 12 + D.measure(f, "只看已修改") + 50 + D.measure(f, "隐藏表情通道") + 50 + D.measure(f, "隐藏非预设通道") + 50
+        + D.measure(f, "隐藏键组占用") + 50
     local right_w = 0
     for _, l in ipairs({ ab_label, "归零", "重置", "重做", "撤销" }) do right_w = right_w + D.measure(f, l) + 28 end
     local wrap = left_w + right_w > w - 20
@@ -120,14 +121,17 @@ local function toolbar(ctx, x, y, w)
     local c1, v1, w1 = W.toggle("只看已修改", bx, cy + 8, s.only_modified == true)
     if c1 then s.only_modified = v1 end
     bx = bx + w1 + 12
-    local c2, v2, w2 = W.toggle("显示表情通道", bx, cy + 8, s.show_locked == true)
-    if c2 then s.show_locked = v2 end
+    -- hiding is the user's choice: every key is listed by default, held ones say who holds them
+    local c2, v2, w2 = W.toggle("隐藏表情通道", bx, cy + 8, s.hide_expression == true)
+    if c2 then s.hide_expression = v2 end
     bx = bx + w2 + 12
-    -- keys no preset names (whole parts like a leg mesh's corrective keys) hidden by default
-    local c3, v3, w3 = W.toggle("隐藏非预设通道", bx, cy + 8, s.hide_unpreset ~= false)
+    local c3, v3, w3 = W.toggle("隐藏非预设通道", bx, cy + 8, s.hide_unpreset == true)
     if c3 then s.hide_unpreset = v3 end
-    W.tooltip("只显示 mod 自带或当前捏脸配置里用到的形态键（改过的键总会显示）", bx, cy + 8, w3, 28)
+    W.tooltip("只显示 mod 自带或当前捏脸配置里用到的形态键", bx, cy + 8, w3, 28)
     bx = bx + w3 + 12
+    local c4, v4, w4 = W.toggle("隐藏键组占用", bx, cy + 8, s.hide_held == true)
+    if c4 then s.hide_held = v4 end
+    bx = bx + w4 + 12
     -- right side
     local rx = x + w - 10
     local ry = wrap and (cy + 46) or (cy + 8)
@@ -166,6 +170,7 @@ local function key_row(ctx, k, x, y, w)
     local has_ovr = next(k.overrides or {}) ~= nil
     -- second line only for what the group header does not already say
     local sub = {}
+    if k.key_group and not k.held_by then sub[#sub + 1] = L.f("键组「%s」", k.key_group) end
     if k.mixed then sub[#sub + 1] = L.tr("表情叠加") end
     if multi then sub[#sub + 1] = table.concat(k.part_labels or k.parts, " · ") end
     if has_ovr then sub[#sub + 1] = L.tr("有部件单独值") end
@@ -190,7 +195,12 @@ local function key_row(ctx, k, x, y, w)
     local bx = x + w - bw - 2
     local ax = min(x + w - 106, bx - 8 - (D.measure(f, "按部件") + 22))
     local ext = W.external_owner(ctx.st, k.name)
-    if ext then
+    if k.held_by and not ext then
+        -- the selected option of its key group holds it; free again when the group is set to 无
+        local cw = W.chip(L.f("键组「%s」· %s", k.held_by.group, k.held_by.option), x + nw, y + 11 + oy0, C.brass)
+        D.text_mid(string.format("%.2f", k.value), x + nw + cw + 10, y + 7 + oy0, 28, C.faint, W.mono())
+        W.tooltip("键组设为「无」后可以自由调整", x + nw, y + 11 + oy0, cw, 22)
+    elseif ext then
         local cw = W.chip(L.f("由 %s 控制", ext), x + nw, y + 11 + oy0, C.brass)
         D.text_mid(string.format("%.2f", k.value), x + nw + cw + 10, y + 7 + oy0, 28, C.faint, W.mono())
         local rw = D.measure(f, "收回") + 22
@@ -204,7 +214,7 @@ local function key_row(ctx, k, x, y, w)
         if W.tbutton("默认", bx, y + 10 + oy0, { disabled = not modified }) then call("reset_sculpt_key", { name = k.name }) end
         W.tooltip(L.f("恢复为 mod 默认值 %.2f", k.default or 0), bx, y + 10 + oy0, bw, 22)
     end
-    if expanded and not ext then
+    if expanded and not ext and not k.held_by then
         local oy = y + rh
         for i, p in ipairs(k.parts) do
             local ov = k.overrides[p]
@@ -241,7 +251,7 @@ local function group_key_row(ctx, g, oi, k, x, y, w)
     if W.tbutton("移出", x + w - rw - 2, y + 4) then
         call("key_group_unassign", { group = g.name, option = oi, name = k.name })
     end
-    W.tooltip("移出这个选项；不在本组其他选项里的形态键回到下面的列表并保留当前值", x + w - rw - 2, y + 4, rw, 22)
+    W.tooltip("移出这个选项；不在本组其他选项里的形态键离开键组并保留当前值", x + w - rw - 2, y + 4, rw, 22)
     return h
 end
 
@@ -401,19 +411,21 @@ function Page.draw(ctx, x, y, w)
     -- "hide non-preset keys" only means something when some key is named by a preset
     local any_preset = false
     for _, k in ipairs(sc.keys or {}) do if k.in_preset then any_preset = true; break end end
-    local hide_np = s.hide_unpreset ~= false and any_preset
+    local hide_np = s.hide_unpreset == true and any_preset
     for _, g in ipairs(sc.groups or {}) do
         local rows = {}
         for _, i in ipairs(g.key_indices) do
             local k = sc.keys[i]
             local mod = abs(k.value - (k.default or 0)) > 1e-6
-            -- expression keys: listed when asked for, or when they carry a sculpt value
-            -- keys a key group holds are listed under it
-            local ok = not k.in_group and (s.show_locked or not k.mixed or mod or k.value > 0)
-                and (not hide_np or k.in_preset or mod)
-                and (filter == "" or k.name:lower():find(filter, 1, true)
-                    or (k.label and k.label:lower():find(filter, 1, true)))
-                and (not s.only_modified or mod)
+            -- a search finds every key, whatever is hidden
+            local ok
+            if filter ~= "" then
+                ok = k.name:lower():find(filter, 1, true) or (k.label and k.label:lower():find(filter, 1, true))
+            else
+                ok = not (s.hide_expression and k.mixed) and not (hide_np and not k.in_preset)
+                    and not (s.hide_held and k.held_by)
+            end
+            ok = ok and (not s.only_modified or mod)
             if ok then rows[#rows + 1] = k end
         end
         if #rows > 0 then
