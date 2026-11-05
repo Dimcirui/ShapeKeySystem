@@ -5,7 +5,7 @@ local L = require("ShapeKeySystem_Core.I18n")
 
 local D = {}
 
-local SKS
+local SKS, Panel
 local drawn = false
 local want_signals = false
 local last_err = ""
@@ -235,6 +235,15 @@ function D.draw()
     local st, live = SKS.state, SKS.live
     local rt, ex, eyes, dbg = st.runtime, st.expression, st.eyes, st.debug
 
+    -- a second way into the panel for players whose hotkey does nothing
+    if Panel then
+        if not Panel.available() then
+            imgui.text_colored(L.tr("无法弹出可视化界面：没有可用的绘制方式（安装 reframework-d2d 或更新 REFramework）"), 0xFF5555FF)
+        elseif imgui.button(Panel.ui_open() and L.tr("关闭可视化界面") or L.tr("弹出可视化界面")) then
+            Panel.set_open(not Panel.ui_open())
+        end
+    end
+
     imgui.text(dbg.status)
     local a = dbg.perf
     imgui.text(string.format("avg ms/frame: total %.3f | read %.3f  compute %.3f  write %.3f  scan %.3f | writes %.1f  skipped %.1f",
@@ -366,6 +375,7 @@ function D.end_frame(panel_open, panel_signals)
     drawn = false
 end
 
-function D.attach(sks) SKS = sks end
+-- panel: { available(), ui_open(), set_open(on) } for the open button, optional
+function D.attach(sks, panel) SKS, Panel = sks, panel end
 
 return D
