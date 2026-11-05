@@ -31,7 +31,11 @@ if not ok then
     end)
     return
 end
-DebugUI.attach(SKS)
+DebugUI.attach(SKS, {
+    available = D.available,
+    ui_open = function() return Panel.ui_open() == true end,
+    set_open = Panel.set_open,
+})
 
 -- runs fn inside the adapter's lookup cache (cache_begin / cache_end, optional): the primary
 -- character is resolved once per callback, and the window closes even when fn fails
