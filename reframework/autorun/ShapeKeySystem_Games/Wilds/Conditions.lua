@@ -163,7 +163,18 @@ function C.reset() ctx.hunter = nil end
 
 -- One read of every condition into the cleared V; false when there is no hunter. The hunter is
 -- re-fetched every 60 frames.
-function C.sample(V, frame)
+-- wanted (optional): only the conditions someone reads are sampled; the rest stay nil
+local HEALTH = { hp_pct = true, hp_decreased = true, hp_increased = true, dead = true, red_hp_pct = true }
+local WEAPON = { weapon_type = true, weapon_form = true, spirit_level = true, charge_level = true }
+local function any(wanted, set)
+    if not wanted then return true end
+    for id in pairs(set) do if wanted[id] then return true end end
+    return false
+end
+local STATUS = { bad_condition = true }
+for _, b in ipairs(STATUS_BOOLS) do STATUS[b[1]] = true end
+
+function C.sample(V, frame, wanted)
     if not ctx.hunter or frame >= ctx.refresh_at then
         ctx.hunter = nil
         pcall(function()
@@ -173,13 +184,18 @@ function C.sample(V, frame)
     end
     local h = ctx.hunter
     if not h then return false end
-    for _, b in ipairs(HUNTER_BOOLS) do V[b[1]] = bool(call(h, b[2])) end
-    local won = bool(field(h, "_IsWeaponOn"))
-    if won == nil then won = bool(call(h, "get_IsWeaponOn")) end
-    V.weapon_on = won
+    local function want(id) return not wanted or wanted[id] end
+    for _, b in ipairs(HUNTER_BOOLS) do
+        if want(b[1]) then V[b[1]] = bool(call(h, b[2])) end
+    end
+    if want("weapon_on") then
+        local won = bool(field(h, "_IsWeaponOn"))
+        if won == nil then won = bool(call(h, "get_IsWeaponOn")) end
+        V.weapon_on = won
+    end
     -- focus mode: the weapon sub action is an aim one (Wp03SubAction.cAimRoot while held,
     -- cAimStart on entry; cAimEnd and cNothing are not)
-    local sub = call(call(h, "get_SubActionController"), "get_CurrentAction")
+    local sub = want("focus") and call(call(h, "get_SubActionController"), "get_CurrentAction")
     if sub then
         local ok, aim = pcall(function()
             local td = sub:get_type_definition()
@@ -187,10 +203,12 @@ function C.sample(V, frame)
         end)
         if ok then V.focus = aim == true end
     end
-    local feel = call(h, "get_EnemyFeelRateType")
-    V.enemy_aware = (type(feel) == "number") and feel ~= 0 or nil
+    if want("enemy_aware") then
+        local feel = call(h, "get_EnemyFeelRateType")
+        V.enemy_aware = (type(feel) == "number") and feel ~= 0 or nil
+    end
     -- health
-    local hh = call(h, "get_HunterHealth")
+    local hh = any(wanted, HEALTH) and call(h, "get_HunterHealth")
     local mgr = field(hh, "<HealthMgr>k__BackingField")
     local hp, maxhp = num(call(mgr, "get_Health")), num(call(mgr, "get_MaxHealth"))
     V.dead = bool(call(hh, "get_IsDead"))
@@ -199,12 +217,14 @@ function C.sample(V, frame)
         local red = num(call(hh, "get_RedHealth"))
         V.red_hp_pct = red and (red / maxhp * 100) or nil
     end
-    local st = call(h, "get_HunterStamina")
+    local st = want("stamina_pct") and call(h, "get_HunterStamina")
     local sv, sm = num(call(st, "get_Stamina")), num(call(st, "get_MaxStamina"))
     V.stamina_pct = (sv and sm and sm > 0) and (sv / sm * 100) or nil
-    local status = call(h, "get_HunterStatus")
-    for _, b in ipairs(STATUS_BOOLS) do V[b[1]] = bool(call(status, b[2])) end
-    local bad = call(status, "get_BadConditions")
+    local status = any(wanted, STATUS) and call(h, "get_HunterStatus")
+    for _, b in ipairs(STATUS_BOOLS) do
+        if status and want(b[1]) then V[b[1]] = bool(call(status, b[2])) end
+    end
+    local bad = status and want("bad_condition") and call(status, "get_BadConditions")
     if bad then
         V.bad_condition = "none"
         for _, b in ipairs(BAD_CONDITIONS) do
@@ -212,15 +232,19 @@ function C.sample(V, frame)
         end
     end
     -- time of day and weather
-    local env = sdk.get_managed_singleton("app.EnvironmentManager")
-    local zone = call(env, "getTimeZone", 0)
-    V.time_zone = (type(zone) == "number" and zone >= 0) and zone or nil
-    local hr, mi = call(env, "HourCache"), call(env, "MinuteCache")
-    V.hour = (type(hr) == "number" and type(mi) == "number") and (hr + mi / 60) or nil
-    local wname = call(sdk.get_managed_singleton("ace.WeatherManager"), "get_CurrentWeatherName")
-    V.weather = (type(wname) == "string" and wname ~= "") and wname or nil
+    if want("time_zone") or want("hour") then
+        local env = sdk.get_managed_singleton("app.EnvironmentManager")
+        local zone = call(env, "getTimeZone", 0)
+        V.time_zone = (type(zone) == "number" and zone >= 0) and zone or nil
+        local hr, mi = call(env, "HourCache"), call(env, "MinuteCache")
+        V.hour = (type(hr) == "number" and type(mi) == "number") and (hr + mi / 60) or nil
+    end
+    if want("weather") then
+        local wname = call(sdk.get_managed_singleton("ace.WeatherManager"), "get_CurrentWeatherName")
+        V.weather = (type(wname) == "string" and wname ~= "") and wname or nil
+    end
     -- weapon
-    local wt = call(h, "get_WeaponType")
+    local wt = any(wanted, WEAPON) and call(h, "get_WeaponType")
     if type(wt) == "number" then
         V.weapon_type = wt
         local wh = call(h, "get_WeaponHandling")

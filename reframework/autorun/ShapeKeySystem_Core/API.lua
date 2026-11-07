@@ -1480,6 +1480,22 @@ local function refresh_actors()
     if changed then request_rescan(1) end
 end
 
+-- The condition ids the rules of the set in effect and the drivers read; nil (all) while the panel
+-- is open, so its live values stay complete.
+local cond_wanted = {}
+local function wanted_conditions()
+    if state.runtime.ui_open then return nil end
+    for id in pairs(cond_wanted) do cond_wanted[id] = nil end
+    local cur = CondExpr.current
+    for _, st in ipairs(cur and cur.data.states or {}) do
+        for _, rule in ipairs(st.rules or {}) do
+            for _, c in ipairs(rule.conditions or {}) do cond_wanted[c.type] = true end
+        end
+    end
+    Drivers.cond_ids(cond_wanted)
+    return cond_wanted
+end
+
 local function tick()
     Playback.tick(false)
     C.frame = C.frame + 1
@@ -1600,7 +1616,7 @@ local function tick()
     -- conditional expressions: master hunter in gameplay only
     C.cond_live = not C.menu and (CondExpr.current ~= nil or state.runtime.ui_open or Drivers.wants_cond())
     local cond_start = clock()
-    if C.cond_live then Cnd.sample(f) end
+    if C.cond_live then Cnd.sample(f, wanted_conditions()) end
     Perf.record("cond_sample", clock() - cond_start)
     if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dynamic() end
     if Touch.update() then Sculpt.mark_dynamic() end

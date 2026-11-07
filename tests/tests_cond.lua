@@ -143,7 +143,17 @@ for _ = 1, 40 do ticks(1); if Cnd.V.hp_decreased then fake = true end end
 check(not fake and math.abs((Cnd.V.hp_pct or 0) - 100 / 1.5) < 1e-3, "sampling resumes after a gap without a fake hit")
 ticks(90); HSTATE.get_IsCombat = false; HEALTH.hp = 150; run_for(0.4)
 
--- Wilds status drinks, bad conditions, time of day and weather
+-- with the panel closed only the conditions the set's rules or the drivers read are sampled
+ticks(1)
+check(Cnd.V.combat ~= nil and Cnd.V.bad_condition == nil and Cnd.V.weather == nil and Cnd.V.stamina_pct == nil,
+    "Wilds: a closed panel samples only the conditions the rules read")
+local Drivers = require("ShapeKeySystem_Core.Drivers")
+local wanted = Drivers.cond_ids({})
+check(next(wanted) == nil, "no driver reads a condition yet")
+
+-- Wilds status drinks, bad conditions, time of day and weather (the open panel samples them all)
+KEYS[0x2E] = true; ticks(1); KEYS[0x2E] = false; ticks(1)
+check(st.runtime.ui_open == true, "panel opened for the live condition values")
 ticks(1)
 check(Cnd.V.bad_condition == "none" and Cnd.V.hot_drink == nil and Cnd.V.time_zone == 2
     and math.abs((Cnd.V.hour or 0) - 16.5) < 1e-6 and Cnd.V.weather == "Fertility",
@@ -166,6 +176,8 @@ check(f_off == false and f_on == true and Cnd.V.focus == false, "Wilds: focus wh
 HSTATE.sub_action = nil
 BAD._Poison, HSTATE["st.get_IsHotEffectActive"] = nil, nil
 ENV.zone, ENV.weather = 2, "Fertility"; ticks(1)
+KEYS[0x2E] = true; ticks(1); KEYS[0x2E] = false; ticks(1)
+check(st.runtime.ui_open == false, "panel closed again")
 
 -- save, select, bind
 local ok, _, _, res = SKS.call("cond_save", {})

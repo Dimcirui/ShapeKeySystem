@@ -49,13 +49,14 @@ function C.reset()
     for k in pairs(V) do V[k] = nil end
 end
 
--- one read of every condition. frame: the update counter
-function C.sample(frame)
+-- one read of the conditions. frame: the update counter. wanted (optional): the ids someone reads;
+-- an adapter may skip the others, which then stay unread (nil) this update
+function C.sample(frame, wanted)
     for k in pairs(V) do V[k] = nil end
     -- not sampled on the previous update (menu, loading): the old HP belongs to another moment
     if last_frame ~= frame - 1 then last_hp, last_max = nil, nil end
     last_frame = frame
-    if not (game and game.sample and game.sample(V, frame)) then last_hp, last_max = nil, nil; return false end
+    if not (game and game.sample and game.sample(V, frame, wanted)) then last_hp, last_max = nil, nil; return false end
     local hp, maxhp = V.hp, V.hp_max
     V.hp, V.hp_max = nil, nil
     if hp and maxhp and maxhp > 0 then

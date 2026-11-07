@@ -329,6 +329,8 @@ boost(0, 1.6)
 check(off_free and owner == "drivers" and near(chest_mid, 0.333333) and near(horn_mid, 0)
     and near(chest_on, 0) and near(horn_on, 1) and Ext.get("ChestPower") == nil and Ext.get("HornAttack") == nil,
     "live: keys free while off, driven through the timeline, free again once the fade-out ends")
+local read_ids = Dr.cond_ids({})
+check(read_ids.oni == true and next(read_ids, next(read_ids)) == nil, "cond_ids lists the conditions the drivers read")
 Dr.cond_value, Dr.cond_known = cond0, known0
 
 -- schema 1: each driver becomes a group of one output row

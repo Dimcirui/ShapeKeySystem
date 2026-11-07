@@ -73,6 +73,7 @@ D.clip_progress = function() return 0 end
 D.cond_value = function() return 0 end
 D.cond_known = function() return true end
 local cond_seen = false   -- a cond() was compiled in the group being compiled
+local cond_ids = {}       -- the ids cond() reads in the group being compiled
 
 -- ---------------------------------------------------------------- formula
 local function frac(x) return x - floor(x) end
@@ -192,6 +193,7 @@ local function parse(toks, names)
                 local id = arg.v
                 if not D.cond_known(id) then error({ "没有 id 为 %s 的条件", id }, 0) end
                 cond_seen = true
+                cond_ids[id] = true
                 return function() return D.cond_value(id) end
             end
             if name == "ramp" and peek() == "(" then
@@ -396,7 +398,7 @@ local function recompile(g)
     local names, nslots = {}, 0
     local cg = { ok = true, rows = {} }
     local vg = { rows = {} }
-    cond_seen = false
+    cond_seen, cond_ids = false, {}
     for r, row in ipairs(grp.rows) do
         local formula = D.formula_of(row)
         local fn, err = compile_env(formula, names)
@@ -420,7 +422,7 @@ local function recompile(g)
         cg.rows[r] = { fn = fn, slot = slot }
         vg.rows[r] = { value = 0, err = err, formula = formula }
     end
-    cg.cond = cond_seen
+    cg.cond, cg.cond_ids = cond_seen, cond_ids
     compiled[g] = cg
     D.view.groups[g] = vg
 end
@@ -434,6 +436,18 @@ function D.wants_cond()
         if grp.enabled and cg and cg.cond then return true end
     end
     return false
+end
+
+-- adds the condition ids the enabled groups read through cond() to `out`
+function D.cond_ids(out)
+    if not cfg.enabled then return out end
+    for g, grp in ipairs(cfg.groups) do
+        local cg = compiled[g]
+        if grp.enabled and cg and cg.cond_ids then
+            for id in pairs(cg.cond_ids) do out[id] = true end
+        end
+    end
+    return out
 end
 
 local function recompile_all()
