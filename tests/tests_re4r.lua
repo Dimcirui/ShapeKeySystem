@@ -341,6 +341,24 @@ check(#diagnostic>1,"existing probe action exposes native read diagnostics")
 local saved_channels={table.unpack(CHANNELS)}
 CHANNELS[1],CHANNELS[5]=CHANNELS[5],CHANNELS[1]
 check(not W.set_weight(m,4,1,"Size"),"native hash remains protected after reordering")
+local batch_check=W.begin_batch(m)
+check(not W.set_weight(m,4,1,"Size",batch_check),"native hash remains protected inside a batch after reordering")
+CHANNELS[1],CHANNELS[5]=CHANNELS[5],CHANNELS[1]
+-- ShapeKeySystem_Native.dll: a batch queues its writes and hands them over in one call
+local plugin_calls={}
+sks_native={write_weights=function(addr,idx,val,n) plugin_calls[#plugin_calls+1]={addr=addr,idx=idx[1],val=val[1],n=n}; return n end}
+local queued=W.begin_batch(m)
+before=#writes
+check(W.set_weight(m,1,0.25,CHANNELS[2],queued) and #writes==before,"a native batch queues its writes")
+W.flush(queued)
+check(#plugin_calls==1 and plugin_calls[1].n==1 and plugin_calls[1].idx==1 and plugin_calls[1].val==0.25
+    and plugin_calls[1].addr==m:get_address(),"flush hands the queued writes to the plugin in one call")
+check(not W.set_weight(m,0,1,native,W.begin_batch(m)),"a native batch still rejects native channels")
+sks_native={write_weights=function() error("plugin failed") end}
+queued=W.begin_batch(m)
+W.set_weight(m,1,0.5,CHANNELS[2],queued); W.flush(queued)
+check(#writes==before+1,"a failed plugin call writes the queued values one by one")
+sks_native=nil
 CHANNELS=saved_channels
 local before_reset=#writes
 CB.reset()

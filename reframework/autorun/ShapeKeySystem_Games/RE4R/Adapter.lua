@@ -19,7 +19,7 @@ local FaceMirror = require("ShapeKeySystem_Games.FaceMirror")
 local L = require("ShapeKeySystem_Core.I18n")
 local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_names = true, hash_item_only = true,
     rewrite_active_weights = true, scene_search = false, scoped_bindings = true,
-    active_sculpt = true, batch_weights = true, cache_channels = true, inspect_before_scan = true, skip_empty_actors = true,
+    active_sculpt = true, batch_weights = true, native_write = true, cache_channels = true, inspect_before_scan = true, skip_empty_actors = true,
     instance_auto_profile = true,
     conditions = Conditions,
     playback = Playback,

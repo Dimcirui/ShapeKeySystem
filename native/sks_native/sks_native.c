@@ -404,6 +404,45 @@ static int read_pose(Binding *b, void *motion, void *info, void *data, int blink
     return 1;
 }
 
+/* ---------------------------------------------------------------- blendshape writes */
+typedef struct {
+    REFrameworkMethodHandle channels, count, list, length, set;
+} MeshMethods;
+static MeshMethods MM;
+static int mesh_state;
+
+static int resolve_mesh_methods(void)
+{
+    if (mesh_state) return mesh_state;
+    REFrameworkTDBHandle tdb = sdk->functions->get_tdb();
+    MeshMethods m;
+    m.channels = sdk->tdb->find_method(tdb, "via.render.Mesh", "get_BlendShapeChannelNum");
+    m.count = sdk->tdb->find_method(tdb, "via.render.Mesh", "get_BlendShapeChannelWeightCount");
+    m.list = sdk->tdb->find_method(tdb, "via.render.Mesh", "get_ChannelWeightList");
+    m.length = sdk->tdb->find_method(tdb, "System.Array", "get_Length");
+    m.set = sdk->tdb->find_method(tdb, "via.render.Mesh", "setBlendShapeChannelWeightParam(System.UInt64, System.Single)");
+    mesh_state = m.channels && m.count && m.list && m.length && m.set ? 1 : -1;
+    if (mesh_state == 1) MM = m;
+    return mesh_state;
+}
+
+/* Writer.limit(): the smallest of channel count, weight count and the live weight list (-1 unreadable) */
+static int64_t mesh_limit(void *mesh)
+{
+    Ret r;
+    if (!call0(MM.channels, mesh, &r)) return -1;
+    int64_t limit = (int32_t)r.dword;
+    if (!call0(MM.count, mesh, &r)) return -1;
+    int64_t wc = (int32_t)r.dword;
+    if (!call0(MM.list, mesh, &r) || !managed(r.ptr)) return -1;
+    void *list = r.ptr;
+    if (!call0(MM.length, list, &r)) return -1;
+    int64_t length = (int32_t)r.dword;
+    if (wc < limit) limit = wc;
+    if (length < limit) limit = length;
+    return limit < 0 ? -1 : limit;
+}
+
 /* ---------------------------------------------------------------- Lua */
 static uintptr_t check_address(lua_State *L, int i)
 {
@@ -499,12 +538,42 @@ static int l_pose_read(lua_State *L)
     return 1;
 }
 
+/* write_weights(mesh, {channel index...}, {weight...}, n) -> writes | nil, error.
+   Lua has already decided what to write and which channels may be written; this checks the
+   bounds once and writes them in one call. */
+static int l_write_weights(lua_State *L)
+{
+    void *mesh = (void *)check_address(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    luaL_checktype(L, 3, LUA_TTABLE);
+    lua_Integer n = luaL_checkinteger(L, 4);
+    if (resolve_mesh_methods() != 1) { lua_pushnil(L); lua_pushstring(L, "mesh methods missing"); return 2; }
+    if (!managed(mesh)) { lua_pushnil(L); lua_pushstring(L, "invalid mesh"); return 2; }
+    int64_t limit = mesh_limit(mesh);
+    if (limit < 0) { lua_pushnil(L); lua_pushstring(L, "mesh bounds unreadable"); return 2; }
+    int written = 0;
+    for (lua_Integer i = 1; i <= n; ++i) {
+        lua_rawgeti(L, 2, i);
+        lua_Integer idx = lua_tointeger(L, -1);
+        lua_rawgeti(L, 3, i);
+        double v = lua_tonumber(L, -1);
+        lua_pop(L, 2);
+        if (idx < 0 || idx >= limit || !finite(v)) continue;
+        void *args[2] = { (void *)(uintptr_t)idx, single_arg(v) };
+        Ret r;
+        if (call(MM.set, mesh, args, 2, &r)) ++written;
+    }
+    lua_pushinteger(L, written);
+    return 1;
+}
+
 static int l_version(lua_State *L) { lua_pushinteger(L, NATIVE_VERSION); return 1; }
 
 static void sks_register(lua_State *L)
 {
     static const luaL_Reg fns[] = { { "version", l_version }, { "pose_bind", l_pose_bind },
-        { "pose_free", l_pose_free }, { "pose_read", l_pose_read }, { NULL, NULL } };
+        { "pose_free", l_pose_free }, { "pose_read", l_pose_read }, { "write_weights", l_write_weights },
+        { NULL, NULL } };
     lua_newtable(L);
     luaL_setfuncs(L, fns, 0);
     lua_setglobal(L, "sks_native");
