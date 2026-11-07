@@ -2,7 +2,8 @@
 --
 -- Design taken from the user's RE4 MOD Variant Manager (Conditions/Registry.lua):
 --   def = { id (stored in configs, never rename), kind = "bool" | "number" | "enum", label,
---           get(V) -> value | nil, options = {{value, label}} for enums }
+--           get(V) -> value | nil, options = {{value, label}} for enums,
+--           any_value / none_value (enums, optional): the option any_value means "not none_value" }
 --   nil means "cannot read" and counts as NOT satisfied (never as false).
 --   cond = { type, op, value, band }   rule = { conditions, logic = "AND" | "OR", hold }
 --   An empty rule never matches; an unknown condition id evaluates false (retired ids degrade).
@@ -102,7 +103,15 @@ function C.eval_condition(cond)
     if d.kind == "bool" then
         r = cur == (cond.value ~= false)
     elseif d.kind == "enum" then
-        local eq = cur == cond.value or (tonumber(cur) ~= nil and tonumber(cur) == tonumber(cond.value))
+        local eq
+        if d.any_value ~= nil and tonumber(cond.value) == d.any_value then
+            -- "any stage": every value but the none one
+            local n = tonumber(cur)
+            if n == nil then was[cond] = false; return false end
+            eq = n ~= (d.none_value or 0)
+        else
+            eq = cur == cond.value or (tonumber(cur) ~= nil and tonumber(cur) == tonumber(cond.value))
+        end
         r = (cond.op == "~=") and not eq or ((cond.op ~= "~=") and eq)
     else
         local v = tonumber(cond.value)
