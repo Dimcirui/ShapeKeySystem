@@ -93,7 +93,7 @@ for _, row in ipairs(BOOLS) do def({ id = row[1], kind = "bool", label = row[3] 
 def({ id = "hp_pct", kind = "number", label = "血量 %", min = 0, max = 100 })
 def({ id = "hp_decreased", kind = "bool", label = "掉血事件（配合保持时间）" })
 def({ id = "hp_increased", kind = "bool", label = "回血事件（配合保持时间）" })
-def({ id = "has_armor_mesh", kind = "bool", label = "护甲网格存在" })
+def({ id = "has_armor_mesh", kind = "bool", label = "穿着防弹衣" })
 def({ id = "dead", kind = "bool", label = "死亡" })
 local vital = { id = "hp_vital", kind = "enum", label = "游戏生命状态", options = {
     { value = 0, label = "正常（Fine）" }, { value = 2, label = "危险（Danger）" }, { value = 4, label = "死亡（Dead）" },
@@ -166,32 +166,53 @@ function C.migrate(cond)
     return true
 end
 
-function C.sample(V)
+-- a merged condition needs every boolean of its group; the HP change needs the HP reading
+local group_of = { hp_decreased = "hp_change", hp_increased = "hp_change" }
+for _, g in ipairs(GROUPS) do
+    for _, tier in ipairs(g) do group_of[tier[2]] = g.id end
+end
+local HEALTH = { hp_pct = true, hp_decreased = true, hp_increased = true, hp_change = true, dead = true }
+
+-- wanted (optional): only the conditions someone reads are sampled; the rest stay nil
+function C.sample(V, _, wanted)
+    local function want(id) return not wanted or wanted[id] or (group_of[id] and wanted[group_of[id]]) end
     local context = call(sdk.get_managed_singleton("chainsaw.CharacterManager"), "getPlayerContextRef()")
     if not context then last_context = nil; return false end
     local ok, address = pcall(context.get_address, context)
     local changed = ok and last_context ~= nil and last_context ~= address
     last_context = ok and address or nil
     for _, row in ipairs(BOOLS) do
-        local value = call(context, row[2])
-        if type(value) == "boolean" then V[row[1]] = value end
+        if want(row[1]) then
+            local value = call(context, row[2])
+            if type(value) == "boolean" then V[row[1]] = value end
+        end
     end
-    local hp = call(context, "get_HitPoint")
-    local current, maximum = call(hp, "get_CurrentHitPoint"), call(hp, "get_DefaultHitPoint")
-    if not changed and finite(current) and current >= 0 and finite(maximum) and maximum > 0 then
-        V.hp, V.hp_max = current, maximum
+    local health = not wanted
+    if wanted then for id in pairs(HEALTH) do if wanted[id] then health = true end end end
+    if health then
+        local hp = call(context, "get_HitPoint")
+        local current, maximum = call(hp, "get_CurrentHitPoint"), call(hp, "get_DefaultHitPoint")
+        if not changed and finite(current) and current >= 0 and finite(maximum) and maximum > 0 then
+            V.hp, V.hp_max = current, maximum
+        end
+        if finite(current) then V.dead = current <= 0 end
     end
-    local status = call(context, "getHitPointVital")
-    if finite(status) then V.hp_vital = status end
-    if finite(current) then V.dead = current <= 0 end
-    local body = call(context, "get_BodyUpdater")
-    local armor = call(body, "get_HasArmorMesh")
-    if type(armor) == "boolean" then V.has_armor_mesh = armor end
+    if want("hp_vital") then
+        local status = call(context, "getHitPointVital")
+        if finite(status) then V.hp_vital = status end
+    end
+    local body = (want("has_armor_mesh") or want("is_burning")) and call(context, "get_BodyUpdater")
+    if want("has_armor_mesh") then
+        local armor = call(body, "get_HasArmorMesh")
+        if type(armor) == "boolean" then V.has_armor_mesh = armor end
+    end
     -- 普通火焰攻击只挂燃烧特效、不置 IsInBurnDamage；特效编号熄灭后回到 -1。
-    local bok, burn = pcall(function() return body and body:get_field("_CurrentBurnEffectID") end)
-    if bok and type(burn) == "number" and burn >= 0 then V.is_burning = true end
+    if want("is_burning") then
+        local bok, burn = pcall(function() return body and body:get_field("_CurrentBurnEffectID") end)
+        if bok and type(burn) == "number" and burn >= 0 then V.is_burning = true end
+    end
     -- PlayerEquipment 挂在头部对象上，只能经 HeadUpdater 的字段取到。
-    local head = call(context, "get_HeadUpdater")
+    local head = want("weapon_kind") and call(context, "get_HeadUpdater")
     local fok, equipment = pcall(function() return head and head:get_field("<Equipment>k__BackingField") end)
     if fok and equipment and sdk.is_managed_object(equipment) then
         V.weapon_kind = 4

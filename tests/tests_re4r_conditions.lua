@@ -85,4 +85,33 @@ check(shown.hold_state and shown.hp_change and shown.is_pull_trigger and shown.i
     "merged and independent conditions are listed")
 clear()
 
+-- sampling only the conditions someone reads (the panel closed)
+do
+    local saved = sdk.get_managed_singleton
+    local calls = {}
+    local function obj(values)
+        return { get_address = function() return 0x10 end, get_field = function() return nil end,
+            call = function(_, name) calls[name] = (calls[name] or 0) + 1; return values[name] end }
+    end
+    local hp = obj({ get_CurrentHitPoint = 800, get_DefaultHitPoint = 1000 })
+    local ctx = obj({ get_IsAiming = false, get_IsWheel = true, get_IsHolding = true, get_IsBattle = true, get_HitPoint = hp })
+    sdk.get_managed_singleton = function(name)
+        if name == "chainsaw.CharacterManager" then return obj({ ["getPlayerContextRef()"] = ctx }) end
+        return saved(name)
+    end
+    RC.reset()
+    clear(); calls = {}
+    RC.sample(V, 1, { hold_state = true }); RC.derive(V)
+    check(V.hold_state == 2 and calls.get_IsAiming and calls.get_IsHolding and not calls.get_IsBattle and not calls.get_HitPoint,
+        "a merged condition reads its group's booleans and nothing else")
+    clear(); calls = {}
+    RC.sample(V, 2, { hp_change = true })
+    check(V.hp == 800 and calls.get_HitPoint and not calls.get_IsAiming, "the HP change reads the HP")
+    clear(); calls = {}
+    RC.sample(V, 3, nil)
+    check(V.is_battle == true and V.hp == 800 and calls.get_IsAiming, "without a list every condition is read")
+    sdk.get_managed_singleton = saved
+    RC.reset(); clear()
+end
+
 print("RE4R CONDITIONS " .. asserts .. " assertions; FAILS: " .. fails)
