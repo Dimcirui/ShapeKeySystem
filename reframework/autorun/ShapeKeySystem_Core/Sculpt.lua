@@ -811,7 +811,7 @@ local function tick_active(preview, eps)
 end
 
 -- returns writes, error string (mesh lost readiness)
-local function write_item(t, item, preview, eps)
+local function write_item(t, item, preview, eps, batch)
     local last, writes = t.last, 0
     local w = value_for(item.key, t.id, preview)
     for _, i in ipairs(item.idx) do
@@ -825,7 +825,7 @@ local function write_item(t, item, preview, eps)
         end
         local active = W.adapter.rewrite_active_weights and (w ~= 0 or l ~= 0)
         if active or abs(w - l) > eps then
-            if W.set_weight(t.mesh, i, w, item.key.name) then
+            if W.set_weight(t.mesh, i, w, item.key.name, batch) then
                 last[i] = w
                 writes = writes + 1
             elseif not t.refused then
@@ -863,7 +863,9 @@ function S.tick(edit_mode, preview, eps)
         elseif not G.mesh_still_ready(t.mesh) then
             return writes, "sculpt mesh no longer ready: " .. t.id
         elseif t.dirty or edit_mode or W.adapter.rewrite_active_weights then
-            for _, item in ipairs(t.items) do writes = writes + write_item(t, item, preview, eps) end
+            local batch = W.adapter.native_write and W.begin_batch(t.mesh) or nil
+            for _, item in ipairs(t.items) do writes = writes + write_item(t, item, preview, eps, batch) end
+            W.flush(batch)
             t.dirty, t.dynamic_dirty = false, false
         elseif t.dynamic_dirty then
             if not names_ready then
@@ -878,7 +880,9 @@ function S.tick(edit_mode, preview, eps)
                 for _, i in ipairs(t.dyn_by_norm[name] or {}) do current[i] = true end
             end
             for i in pairs(t.dyn_prev) do current[i] = true end
-            for i in pairs(current) do writes = writes + write_item(t, t.items[i], preview, eps) end
+            local batch = W.adapter.native_write and W.begin_batch(t.mesh) or nil
+            for i in pairs(current) do writes = writes + write_item(t, t.items[i], preview, eps, batch) end
+            W.flush(batch)
             local now = {}
             for name in pairs(lazy_dynamic) do
                 for _, i in ipairs(t.dyn_by_norm[name] or {}) do now[i] = true end

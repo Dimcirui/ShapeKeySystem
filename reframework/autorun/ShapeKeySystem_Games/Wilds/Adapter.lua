@@ -22,6 +22,8 @@ local L = require("ShapeKeySystem_Core.I18n")
 local A = {
     id = "mhwilds",
     name = "Monster Hunter Wilds",
+    -- ShapeKeySystem_Native.dll writes each mesh's queued weights in one call
+    native_write = true,
     conditions = Cond,
     input = Input,
     playback = Playback,
@@ -258,15 +260,33 @@ function A.bind(face, keys)
         local j = n <= 200 and jbn(face, string.format("fcParam_%03d", n))
         if j then out[#out + 1] = n; out[#out + 1] = j end
     end
+    -- the fcParam joints' addresses, for one ShapeKeySystem_Native.dll call per read
+    local addresses = {}
+    for k = 2, #out, 2 do
+        local ok, address = pcall(function() return out[k]:get_address() end)
+        if not (ok and address) then addresses = nil; break end
+        addresses[#addresses + 1] = address
+    end
+    out.addresses = addresses
     out.bones = bind_bones(face, keys)
     out.signals = BoneReads.bind(face, keys, bone_sigs, jbn)
     return out, #out // 2 + (out.signals and #out.signals.list or 0)
 end
 
 function A.read(handle, P, inv_full)
-    for k = 1, #handle, 2 do
-        local p = M_LPOS:call(handle[k + 1])
-        P[handle[k]] = p and p.z * inv_full or 0
+    local native = rawget(_G, "sks_native")
+    local flat = handle.addresses and #handle.addresses > 0 and type(native) == "table"
+        and type(native.joint_positions) == "function" and select(2, pcall(native.joint_positions, handle.addresses))
+    if type(flat) == "table" then
+        for k = 1, #handle, 2 do
+            local z = flat[(k + 1) // 2 * 3]
+            P[handle[k]] = type(z) == "number" and z * inv_full or 0
+        end
+    else
+        for k = 1, #handle, 2 do
+            local p = M_LPOS:call(handle[k + 1])
+            P[handle[k]] = p and p.z * inv_full or 0
+        end
     end
     if handle.signals then BoneReads.read(handle.signals, P) end
     local b = handle.bones

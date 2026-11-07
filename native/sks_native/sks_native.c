@@ -755,6 +755,30 @@ static int l_joint_poses(lua_State *L)
     return 1;
 }
 
+/* joint_positions({joint...}) -> {x, y, z, ...}: local positions only (Wilds reads fcParam joints by
+   their z); a joint that cannot be read gives false in its three slots | nil, error */
+static int l_joint_positions(lua_State *L)
+{
+    luaL_checktype(L, 1, LUA_TTABLE);
+    if (resolve_read_methods() != 1) { lua_pushnil(L); lua_pushstring(L, "joint methods missing"); return 2; }
+    lua_Integer n = luaL_len(L, 1);
+    lua_createtable(L, (int)(n * 3), 0);
+    for (lua_Integer i = 1; i <= n; ++i) {
+        lua_rawgeti(L, 1, i);
+        void *joint = (void *)(uintptr_t)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        float p[3];
+        Ret r;
+        bool ok = managed(joint) && call0(RM.local_position, joint, &r);
+        if (ok) memcpy(p, r.bytes, sizeof(p));
+        for (int k = 0; k < 3; ++k) {
+            if (ok) lua_pushnumber(L, p[k]); else lua_pushboolean(L, 0);
+            lua_rawseti(L, -2, (i - 1) * 3 + k + 1);
+        }
+    }
+    return 1;
+}
+
 /* tap_weights(mesh, {channel index...}) -> {channel count | false, limit | false, weight | false, ...};
    channels at or above the limit are not read | nil, error */
 static int l_tap_weights(lua_State *L)
@@ -834,7 +858,7 @@ static void sks_register(lua_State *L)
     static const luaL_Reg fns[] = { { "version", l_version }, { "pose_bind", l_pose_bind },
         { "pose_free", l_pose_free }, { "pose_read", l_pose_read }, { "write_weights", l_write_weights },
         { "motion_meshes", l_motion_meshes }, { "motion_curves", l_motion_curves },
-        { "joint_poses", l_joint_poses }, { "tap_weights", l_tap_weights }, { "layout_walk", l_layout_walk },
+        { "joint_poses", l_joint_poses }, { "joint_positions", l_joint_positions }, { "tap_weights", l_tap_weights }, { "layout_walk", l_layout_walk },
         { NULL, NULL } };
     lua_newtable(L);
     luaL_setfuncs(L, fns, 0);
@@ -897,8 +921,9 @@ EXPORT bool reframework_plugin_initialize(const REFrameworkPluginInitializeParam
 {
     ref_fn = param->functions;
     sdk = param->sdk;
-    if (!sdk || !param->version || !param->version->game_name || strcmp(param->version->game_name, "RE4") != 0)
-        return true;   /* RE4R only for now: elsewhere SKS keeps its Lua paths */
+    const char *game = param->version ? param->version->game_name : NULL;
+    if (!sdk || !game || (strcmp(game, "RE4") != 0 && strcmp(game, "MHWILDS") != 0))
+        return true;   /* RE4R and Wilds for now: elsewhere SKS keeps its Lua paths */
     lua_ok = host_lua_matches(param->reframework_module);
     if (!lua_ok) {
         ref_fn->log_error("[ShapeKeySystem_Native] REFramework does not use Lua 5.4.3: not registering sks_native");
