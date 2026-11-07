@@ -99,6 +99,7 @@ do
     SKS.call("cond_edit", { data = d2 }); ticks(2)
     check(Cx.status[2] == "outranked" and #Cx.playing_set == 1 and math.abs(WEIGHTS[si] - 0.2) < 1e-6,
         "exclusive: the states below do not play")
+    check(Cx.status_by[2] == 1 and Cx.status_by[1] == nil, "an outranked state records which exclusive state covers it")
     check(Cx.current.data.states[1].exclusive == true and Cx.current.data.states[2].exclusive == false,
         "exclusive is kept and defaults to false")
     HSTATE.get_IsCombat = false
