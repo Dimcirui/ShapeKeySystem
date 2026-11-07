@@ -71,10 +71,26 @@ local d = CondExpr.normalize({ states = { { clip = "a", rules = { { conditions =
     { type = "is_aiming", value = true }, { type = "is_holding", value = false }, { type = "is_run", value = true } } } } } } })
 local c = d.states[1].rules[1].conditions
 check(c[1].type == "hold_state" and c[1].op == "==" and c[1].value == 1, "is_aiming=true -> hold_state == 1")
-check(c[2].type == "hold_state" and c[2].op == "==" and c[2].value == 0, "is_holding=false -> hold_state == 0")
+check(c[2].type == "hold_state" and c[2].op == "~=" and c[2].value == RC.ANY, "is_holding=false -> hold_state ~= any stage")
 check(c[3].type == "is_run" and c[3].value == true, "a lower tier keeps its old id")
 CondExpr.normalize(d)
-check(c[1].type == "hold_state" and c[1].value == 1 and c[2].value == 0, "normalizing again changes nothing")
+check(c[1].type == "hold_state" and c[1].value == 1 and c[2].value == RC.ANY, "normalizing again changes nothing")
+
+-- "any stage": every value but none; an unread value matches neither way
+for _, case in ipairs({ { 2, true }, { 3, true }, { 0, false } }) do
+    clear(); V.hold_state = case[1]
+    check(Cnd.eval_condition({ type = "hold_state", op = "==", value = RC.ANY }) == case[2]
+        and Cnd.eval_condition({ type = "hold_state", op = "~=", value = RC.ANY }) == not case[2],
+        "hold_state " .. case[1] .. (case[2] and " is" or " is not") .. " any stage")
+end
+clear()
+check(not Cnd.eval_condition({ type = "hold_state", op = "==", value = RC.ANY })
+    and not Cnd.eval_condition({ type = "hold_state", op = "~=", value = RC.ANY }), "an unread merged condition matches neither way")
+local any_first = true
+for _, def in ipairs(RC.defs) do
+    if def.any_value and not (def.options[1].value == RC.ANY and def.options[2].value == 0) then any_first = false end
+end
+check(any_first, "every merged condition lists its any-stage option first, then none")
 
 -- the old booleans stay defined (old rules, cond() in driver formulas) but are not listed
 local hidden, shown = {}, {}
