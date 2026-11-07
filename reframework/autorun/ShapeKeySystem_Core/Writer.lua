@@ -50,9 +50,10 @@ local function native_writer()
 end
 
 -- The context is local to one write invocation and never survives an engine callback.
+-- Adapters without strict bounds get a batch only to queue writes for the plugin.
 function W.begin_batch(mesh)
-    if not W.adapter.batch_weights or not W.adapter.strict_bounds then return nil end
     local native = native_writer()
+    if not (W.adapter.batch_weights and W.adapter.strict_bounds) and not native then return nil end
     local context = W.adapter.write_context and W.adapter.write_context(mesh)
     local hashes = type(context) == "table" and context.hashes
     local ok, stamp = pcall(function() return hashes and hashes:get_address() end)
@@ -130,7 +131,7 @@ function W.write_target(t, vals, force, eps, base, mix, skip)
         if force or active or abs(w - last[k]) > eps then
             -- always a float: a Lua integer (e.g. a value clamped to the integer 1 from
             -- settings.json) reaches the System.Single parameter as raw bits (1 -> 1.4e-45)
-            if W.adapter.batch_weights then batch = batch or W.begin_batch(mesh) end
+            if W.adapter.batch_weights or W.adapter.native_write then batch = batch or W.begin_batch(mesh) end
             if W.set_weight(mesh, idxs[k], w, t.names and t.names[idxs[k] + 1], batch) then
                 last[k] = w
                 writes = writes + 1

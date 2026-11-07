@@ -13,6 +13,61 @@ end
 local function short(path) return path:match("autorun/(.+)$") or path end
 
 check(Games.game_name() == "mhwilds" and Games.pick("mhwilds") == Wilds and SKS.adapter == Wilds, "mhwilds picks the Wilds adapter")
+
+-- ShapeKeySystem_Native.dll: one call for the fcParam joints gives the per-joint read's values
+do
+    local face = ROOT:call("get_Child")
+    local joints, next_address = {}, 0x9000
+    for n = 10, 14 do
+        local j = face:getJointByName(string.format("fcParam_%03d", n))
+        next_address = next_address + 0x10
+        local address = next_address
+        j.get_address = function() return address end
+        joints[address] = j
+    end
+    local h = Wilds.bind(face, {10, 11, 12, 13, 14})
+    FC[10], FC[11], FC[12], FC[13], FC[14] = 0.1, 0.5, 0, 1, 0.25
+    local plain = {}
+    sks_native = nil
+    Wilds.read(h, plain, 2)
+    local calls = 0
+    sks_native = { joint_positions = function(addresses)
+        calls = calls + 1
+        local out = {}
+        for i, address in ipairs(addresses) do
+            local p = joints[address]:get_LocalPosition()
+            out[(i - 1) * 3 + 1], out[(i - 1) * 3 + 2], out[(i - 1) * 3 + 3] = p.x, p.y, p.z
+        end
+        return out
+    end }
+    local batched = {}
+    Wilds.read(h, batched, 2)
+    local same = h.addresses and #h.addresses == 5
+    for n = 10, 14 do same = same and math.abs((batched[n] or -1) - (plain[n] or -2)) < 1e-9 end
+    check(same and calls == 1 and math.abs(plain[11] - 1) < 1e-9, "Wilds: one plugin call reads the fcParam joints with the same values")
+    sks_native = { joint_positions = function() error("plugin failed") end }
+    local fallback = {}
+    Wilds.read(h, fallback, 2)
+    check(math.abs((fallback[13] or 0) - 2) < 1e-9, "Wilds: a failed plugin call falls back to the per-joint read")
+    -- weights queue for the plugin without strict bounds; a failed call writes them one by one
+    local W = require("ShapeKeySystem_Core.Writer")
+    local m = ARMOR._mesh
+    local sent
+    sks_native = { write_weights = function(address, idx, val, n) sent = {address = address, idx = idx[1], val = val[1], n = n}; return n end }
+    local queued = W.begin_batch(m)
+    local before = WEIGHTS[1]
+    check(queued and W.set_weight(m, 1, 0.75, "JawOpen", queued) and WEIGHTS[1] == before, "Wilds: a write queues for the plugin")
+    W.flush(queued)
+    check(sent and sent.n == 1 and sent.idx == 1 and sent.val == 0.75 and sent.address == m:get_address(), "Wilds: flush sends the queued write in one call")
+    sks_native = { write_weights = function() error("plugin failed") end }
+    queued = W.begin_batch(m)
+    W.set_weight(m, 1, 0.5, "JawOpen", queued); W.flush(queued)
+    check(math.abs((WEIGHTS[1] or 0) - 0.5) < 1e-9, "Wilds: a failed plugin call writes the queued value")
+    WEIGHTS[1] = before
+    sks_native = nil
+    for n = 10, 14 do FC[n] = nil end
+    for _, j in pairs(joints) do j.get_address = nil end
+end
 check(Games.pick("unsupported_test_game") == nil and Games.pick(nil) == nil, "an unknown game picks nothing")
 local Onimusha = Games.pick("onimusha_wots")
 check(Onimusha and Onimusha.raw and Onimusha.bind and Onimusha.read,
