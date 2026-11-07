@@ -157,7 +157,7 @@ local function perf_card(ctx, x, y, w)
     local st = ctx.st
     local a = st.debug.perf or {}
     local details = ctx.state.perf_details == true
-    local h = details and 426 or 200
+    local h = details and 570 or 200
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
@@ -180,7 +180,9 @@ local function perf_card(ctx, x, y, w)
         cy = cy + 32
         D.text_mid("最近 60 次：平均 / 最大 / P95（毫秒）", rx, cy, 22, C.muted, W.small(), rw)
         cy = cy + 24
-        for _, item in ipairs({ { "tick", "完整更新" }, { "scan", "完整扫描" }, { "ui", "面板绘制" },
+        for _, item in ipairs({ { "tick", "完整更新" }, { "sig_check", "签名检查" }, { "cond_sample", "条件采样" },
+            { "scan", "完整扫描" }, { "scan_parts", "扫描·部件" }, { "scan_layout", "扫描·路径" },
+            { "scan_other", "扫描·其余" }, { "scan_rebuild", "扫描·重建" }, { "ui", "面板绘制" },
             { "playback_load", "文件读取" }, { "playback_prepare", "准备分片" },
             { "playback_tick", "播放更新" }, { "raw_inject", "原版注入" } }) do
             local metric = (a.timings or {})[item[1]] or {}

@@ -23,10 +23,22 @@ local P = {}
 P.BINDING_SCHEMA = "sks.binding/1"
 P.SCULPT_SCHEMA = "sks.sculpt/1"
 
+-- 一次扫描内按路径记住读过的绑定文件（含不存在的）：扫描要按部件把同几个位置查好几遍，逐个
+-- 读盘会多花几十毫秒。只在 begin_batch / end_batch 之间生效，扫描之外每次都读盘，玩家在游戏
+-- 运行时改的文件下次扫描就能看到。调用方拿到的是副本。
+local json_cache
+
+function P.begin_batch() json_cache = {} end
+function P.end_batch() json_cache = nil end
+
 local function live_json(path)
-    local data = U.load_json(path)
-    if not data or data.deleted == true then return nil end
-    return data
+    local data = json_cache and json_cache[path]
+    if data == nil then
+        data = U.load_json(path)
+        if not data or data.deleted == true then data = false end
+        if json_cache then json_cache[path] = data end
+    end
+    return data and U.copy(data) or nil
 end
 
 -- model a part belongs to, slot, and the part that represents the model: the adapter's naming
@@ -296,6 +308,7 @@ function P.write_binding(base, data)
     local ok, msg = P.validate_binding(data)
     if not ok then return false, "E_SCHEMA", msg end
     local path, shown = binding_file("user", base)
+    if json_cache then json_cache[path] = nil end
     if not U.save_json(path, data) then return false, "E_IO", "write failed" end
     return true, nil, nil, { path = shown }
 end
@@ -305,7 +318,9 @@ function P.user_binding_exists(base)
 end
 
 function P.tombstone_binding(base)
-    return U.save_json((binding_file("user", base)), { deleted = true })
+    local path = binding_file("user", base)
+    if json_cache then json_cache[path] = nil end
+    return U.save_json(path, { deleted = true })
 end
 
 -- ---------------------------------------------------------------- sculpt presets

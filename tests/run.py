@@ -179,6 +179,7 @@ shutil.copytree(os.path.join(GAME, "data", "ShapeKeySystem", "builtin"), os.path
 L4, G4, _ = boot(data4)
 L4.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())
 L4.execute(open(os.path.join(HERE, "tests_re4r.lua"), encoding="utf-8").read())
+L4.execute(open(os.path.join(HERE, "tests_re4r_conditions.lua"), encoding="utf-8").read())
 data6 = tempfile.mkdtemp(prefix="sks_instances_")
 L6, G6, _ = boot(data6)
 L6.execute(open(os.path.join(HERE, "mock_sks.lua"), encoding="utf-8").read())

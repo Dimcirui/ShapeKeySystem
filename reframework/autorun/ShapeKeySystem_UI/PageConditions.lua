@@ -46,6 +46,13 @@ local function def_of(st, id)
     for _, d in ipairs(st.conditions.defs or {}) do if d.id == id then return d end end
 end
 
+-- 列出的条件：隐藏的旧条件仍能求值、已有规则照常显示，只是不能新选
+local function listed(st)
+    local out = {}
+    for _, d in ipairs(st.conditions.defs or {}) do if not d.hidden then out[#out + 1] = d end end
+    return out
+end
+
 local function visible(y, h)
     local c = D.get_clip()
     return not c or (y + h >= c[2] and y <= c[4])
@@ -158,7 +165,7 @@ end
 local function condition_form(ctx, x, y, w, si, ri)
     local st, s = ctx.st, ctx.state
     local f = s.form
-    local defs = st.conditions.defs or {}
+    local defs = listed(st)
     local labels = {}
     for i, d in ipairs(defs) do labels[i] = d.label end
     f.type_i = f.type_i or 1
@@ -481,12 +488,12 @@ end
 local function live_cols(w) return w >= 640 and 3 or w >= 340 and 2 or 1 end
 
 local function live_height(ctx, w)
-    return 44 + math.ceil(#(ctx.st.conditions.defs or {}) / live_cols(w)) * 22
+    return 44 + math.ceil(#listed(ctx.st) / live_cols(w)) * 22
 end
 
 local function live_section(ctx, x, y, w)
     local st, live = ctx.st, ctx.live
-    local defs = st.conditions.defs or {}
+    local defs = listed(st)
     local cols = live_cols(w)
     local cw = w / cols
     local h = live_height(ctx, w)

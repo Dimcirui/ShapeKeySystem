@@ -343,7 +343,8 @@ function W.text_box(id, x, y, w, h, value, placeholder, on_change, shown)
         if shown and shown ~= "" then D.text_mid(shown, x + 8, y, h, C.text, body(), w - 16)
         else D.text_mid(placeholder or "", x + 8, y, h, C.faint, body(), w - 16) end
     end
-    I.click(x, y, w, h) -- 只消费自绘控件的点击队列；ImGui 仍独立收到鼠标事件。
+    -- 只消费自绘控件的点击队列；ImGui 收到鼠标时自己激活，收不到时由这次点击代为激活。
+    if I.click(x, y, w, h) and registered and I.device_click then TextInput.focus(id) end
 end
 
 -- 可搜索选择框：页面持有搜索状态，布局线程只登记原位 InputText；候选项内联展开。

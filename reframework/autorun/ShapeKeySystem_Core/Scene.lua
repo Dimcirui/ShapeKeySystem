@@ -48,13 +48,22 @@ function S.children_signature(root)
     return table.concat(parts, "|")
 end
 
-function S.runtime_signature(root)
+-- 累计耗时（秒）供调试页按帧统计，由调用方读取后清零
+S.sig_time = 0
+local function runtime_signature(root)
     local cached = root and layouts[root]
     if cached and S.adapter.layout_valid then
         if S.adapter.layout_valid(root, cached.layout) then return cached.signature end
         return "layout changed"
     end
     return S.children_signature(root)
+end
+function S.runtime_signature(root)
+    local t0 = clock()
+    local ok, sig = pcall(runtime_signature, root)
+    S.sig_time = S.sig_time + clock() - t0
+    if not ok then error(sig, 0) end
+    return sig
 end
 
 -- "+added -removed" between two children signatures, for the trail.
@@ -218,6 +227,7 @@ function S.scan(opts)
     local mesh_name_of = {}
     local skipped = 0
     local seen_parents = {}
+    local parts_s, layout_s = 0, 0
     for _, parent in ipairs(order) do
         local face = by_parent[parent]
         local primary = (parent == root)
@@ -227,11 +237,15 @@ function S.scan(opts)
         if psig and S.no_targets[parent] == psig then
             skipped = skipped + 1
         else
+            local tp = clock()
             parts = read_parts(parent, opts.known, face)
+            parts_s = parts_s + clock() - tp
             if #parts == 0 and psig then S.no_targets[parent] = psig end
         end
         if S.adapter.capture_layout and #parts > 0 then
+            local tl = clock()
             local layout = S.adapter.capture_layout(parent, face, parts)
+            layout_s = layout_s + clock() - tl
             layouts[parent] = layout and {layout = layout, signature = psig or sig} or nil
         end
         if #parts > 0 then seen_parents[#seen_parents + 1] = string.format("%s(%d)", S.go_name(parent), #parts) end
@@ -262,7 +276,8 @@ function S.scan(opts)
     -- parts: one entry per part id (bindings, coverage); instances: every mesh found (the same
     -- part worn by the player, the guild card copy, a cutscene copy ...), for the sculpt layer
     return { rigs = rigs, parts = part_list, instances = instances, parents = seen_parents, faces = #faces, skipped = skipped,
-             sig = sig, mesh_name_of = mesh_name_of, ms = (clock() - t0) * 1000 }
+             sig = sig, mesh_name_of = mesh_name_of, ms = (clock() - t0) * 1000,
+             parts_s = parts_s, layout_s = layout_s }
 end
 
 S.build_target = build_target
