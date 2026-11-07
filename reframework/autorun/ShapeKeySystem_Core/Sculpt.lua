@@ -160,6 +160,17 @@ function S.rebuild(parts, owned, presets_of)
         elseif t.addr and warm[t.addr] then t.stable = warm[t.addr] end
     end
     warm = {}
+    -- dynamic keys (other plugins, drivers, mocap, conditional clips, touch) by normalised name
+    for _, t in ipairs(targets) do
+        t.dyn_by_norm, t.dyn_prev = {}, {}
+        for i, item in ipairs(t.items) do
+            if #item.idx > 0 then
+                local name = Ext.norm(item.key.name)
+                local bucket = t.dyn_by_norm[name] or {}
+                bucket[#bucket + 1], t.dyn_by_norm[name] = i, bucket
+            end
+        end
+    end
     if W.adapter.active_sculpt then
         for _, t in ipairs(targets) do
             t.active, t.active_pos, t.pending, t.pending_set = {}, {}, {}, {}
@@ -515,8 +526,12 @@ function S.mark_dirty(name)
     end
 end
 
+-- A dynamic source changed: the lazy mode rewrites only the keys such sources name now or named
+-- on the previous rewrite (a released key goes back to its sculpt value).
 function S.mark_dynamic()
-    if not W.adapter.active_sculpt then S.mark_dirty() end
+    if W.adapter.active_sculpt then return end
+    S.version = S.version + 1
+    for _, t in ipairs(K.targets) do t.dynamic_dirty = true end
 end
 
 -- expression + sculpt on one channel: the sculpt value s is the rest position, the expression
@@ -796,9 +811,38 @@ local function tick_active(preview, eps)
 end
 
 -- returns writes, error string (mesh lost readiness)
+local function write_item(t, item, preview, eps)
+    local last, writes = t.last, 0
+    local w = value_for(item.key, t.id, preview)
+    for _, i in ipairs(item.idx) do
+        local l = last[i]
+        -- first touch of this mesh (or after a rescan dropped our record): take the
+        -- engine's current value, so unchanged channels are not rewritten and a
+        -- value we wrote before the drop is still known for zeroing
+        if l == nil then
+            l = W.read_weight(t.mesh, i) or 0
+            last[i] = l
+        end
+        local active = W.adapter.rewrite_active_weights and (w ~= 0 or l ~= 0)
+        if active or abs(w - l) > eps then
+            if W.set_weight(t.mesh, i, w, item.key.name) then
+                last[i] = w
+                writes = writes + 1
+            elseif not t.refused then
+                -- the adapter's channel check turned the channel down
+                t.refused = true
+                Trail.event("sculpt: %s channel %d (%s) refused by the game adapter", t.id, i, item.key.name)
+            end
+        end
+    end
+    return writes
+end
+
+local lazy_dynamic = {}
 function S.tick(edit_mode, preview, eps)
     if W.adapter.active_sculpt then return tick_active(preview, eps) end
     local writes = 0
+    local names_ready = false
     for _, t in ipairs(K.targets) do
         if t.stable < G.STABLE_FRAMES then
             local ready, why = G.mesh_ready(t.mesh)
@@ -819,34 +863,27 @@ function S.tick(edit_mode, preview, eps)
         elseif not G.mesh_still_ready(t.mesh) then
             return writes, "sculpt mesh no longer ready: " .. t.id
         elseif t.dirty or edit_mode or W.adapter.rewrite_active_weights then
-            local last = t.last
-
-            for _, item in ipairs(t.items) do
-
-                local w = value_for(item.key, t.id, preview)
-                for _, i in ipairs(item.idx) do
-                    local l = last[i]
-                    -- first touch of this mesh (or after a rescan dropped our record): take the
-                    -- engine's current value, so unchanged channels are not rewritten and a
-                    -- value we wrote before the drop is still known for zeroing
-                    if l == nil then
-                        l = W.read_weight(t.mesh, i) or 0
-                        last[i] = l
-                    end
-                    local active = W.adapter.rewrite_active_weights and (w ~= 0 or l ~= 0)
-                    if active or abs(w - l) > eps then
-                        if W.set_weight(t.mesh, i, w, item.key.name) then
-                            last[i] = w
-                            writes = writes + 1
-                        elseif not t.refused then
-                            -- the adapter's channel check turned the channel down
-                            t.refused = true
-                            Trail.event("sculpt: %s channel %d (%s) refused by the game adapter", t.id, i, item.key.name)
-                        end
-                    end
-                end
+            for _, item in ipairs(t.items) do writes = writes + write_item(t, item, preview, eps) end
+            t.dirty, t.dynamic_dirty = false, false
+        elseif t.dynamic_dirty then
+            if not names_ready then
+                names_ready = true
+                for name in pairs(lazy_dynamic) do lazy_dynamic[name] = nil end
+                for name in pairs(Ext.entries) do lazy_dynamic[name] = true end
+                CondExpr.targets(lazy_dynamic)
+                Touch.targets(lazy_dynamic)
             end
-            t.dirty = false
+            local current = {}
+            for name in pairs(lazy_dynamic) do
+                for _, i in ipairs(t.dyn_by_norm[name] or {}) do current[i] = true end
+            end
+            for i in pairs(t.dyn_prev) do current[i] = true end
+            for i in pairs(current) do writes = writes + write_item(t, t.items[i], preview, eps) end
+            local now = {}
+            for name in pairs(lazy_dynamic) do
+                for _, i in ipairs(t.dyn_by_norm[name] or {}) do now[i] = true end
+            end
+            t.dyn_prev, t.dynamic_dirty = now, false
         end
     end
     return writes
