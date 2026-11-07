@@ -674,13 +674,46 @@ static int l_motion_meshes(lua_State *L)
     return 1;
 }
 
+/* motion_curves(motion, {joint index...}) -> {x | false, ...}: the calculated local position's x of
+   each joint (NativeFace.lua reads correction curves as joint translations; a value counts only when
+   x, y and z are all finite) | nil, error */
+static REFrameworkMethodHandle calculated_position;
+static int l_motion_curves(lua_State *L)
+{
+    void *motion = (void *)check_address(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    if (!calculated_position) {
+        REFrameworkTDBHandle tdb = sdk->functions->get_tdb();
+        calculated_position = sdk->tdb->find_method(tdb, "via.motion.Motion", "getCalculatedLocalPosition(System.Int32)");
+    }
+    if (!calculated_position) { lua_pushnil(L); lua_pushstring(L, "getCalculatedLocalPosition missing"); return 2; }
+    if (!managed(motion)) { lua_pushnil(L); lua_pushstring(L, "invalid motion"); return 2; }
+    lua_Integer n = luaL_len(L, 2);
+    lua_createtable(L, (int)n, 0);
+    for (lua_Integer i = 1; i <= n; ++i) {
+        lua_rawgeti(L, 2, i);
+        lua_Integer index = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        void *args[1] = { (void *)(intptr_t)(int32_t)index };
+        Ret r;
+        float v[3];
+        if (call(calculated_position, motion, args, 1, &r)) {
+            memcpy(v, r.bytes, sizeof(v));
+            if (finite(v[0]) && finite(v[1]) && finite(v[2])) { lua_pushnumber(L, v[0]); lua_rawseti(L, -2, i); continue; }
+        }
+        lua_pushboolean(L, 0);
+        lua_rawseti(L, -2, i);
+    }
+    return 1;
+}
+
 static int l_version(lua_State *L) { lua_pushinteger(L, NATIVE_VERSION); return 1; }
 
 static void sks_register(lua_State *L)
 {
     static const luaL_Reg fns[] = { { "version", l_version }, { "pose_bind", l_pose_bind },
         { "pose_free", l_pose_free }, { "pose_read", l_pose_read }, { "write_weights", l_write_weights },
-        { "motion_meshes", l_motion_meshes },
+        { "motion_meshes", l_motion_meshes }, { "motion_curves", l_motion_curves },
         { NULL, NULL } };
     lua_newtable(L);
     luaL_setfuncs(L, fns, 0);

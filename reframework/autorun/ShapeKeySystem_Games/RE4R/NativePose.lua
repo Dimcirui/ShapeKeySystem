@@ -3,7 +3,6 @@
 local Hash = require("ShapeKeySystem_Core.NameHash")
 local Trail = require("ShapeKeySystem_Core.Trail")
 local P = {}
-local clock = os.clock
 local function finite(v) return type(v) == "number" and v == v and math.abs(v) < math.huge end
 local function clamp(v) return math.max(0, math.min(1, v)) end
 local function call(o, method, ...)
@@ -240,53 +239,6 @@ local function read_native(h, controller, specs)
     return result
 end
 
--- largest difference between the native and the Lua read (positions, rotations up to sign)
-local function difference(a, b)
-    local worst, joints = 0, 0
-    local names = {}
-    for name in pairs(a) do names[name] = true end
-    for name in pairs(b) do names[name] = true end
-    for name in pairs(names) do
-        joints = joints + 1
-        local x, y = a[name], b[name]
-        if not x or not y or (x.position == nil) ~= (y.position == nil) or (x.rotation == nil) ~= (y.rotation == nil) then
-            return math.huge, joints
-        end
-        if x.position then
-            for k = 1, 3 do worst = math.max(worst, math.abs(x.position[k] - y.position[k])) end
-        end
-        if x.rotation then
-            local same, flip = 0, 0
-            for k = 1, 4 do
-                same = math.max(same, math.abs(x.rotation[k] - y.rotation[k]))
-                flip = math.max(flip, math.abs(x.rotation[k] + y.rotation[k]))
-            end
-            worst = math.max(worst, math.min(same, flip))
-        end
-    end
-    return worst, joints
-end
-
--- at most every 10 s over all rigs: both paths 8 times each; the difference, the timings and the
--- reads since the last check go to trail.log
-local reads, checked_reads, next_check = 0, 0, 0
-local function compare(h, controller, specs, poses)
-    local t0 = clock()
-    for _ = 1, 8 do pcall(read_native, h, controller, specs) end
-    local t1 = clock()
-    local ok, lua_poses
-    for _ = 1, 8 do ok, lua_poses = pcall(read, h, controller, specs) end
-    local t2 = clock()
-    if not ok then
-        Trail.event("native pose check: Lua read failed (%s)", tostring(lua_poses))
-        return
-    end
-    local diff, joints = difference(poses, lua_poses)
-    Trail.event("native pose check: %d joints, max diff %.3g, native %.3f ms, Lua %.3f ms, %d reads since last check",
-        joints, diff, (t1 - t0) * 1000 / 8, (t2 - t1) * 1000 / 8, reads - checked_reads)
-    checked_reads = reads
-end
-
 function P.read(h, controller, needed)
     local specs = h.specs
     if needed then
@@ -299,15 +251,7 @@ function P.read(h, controller, needed)
     if #specs == 0 then return {} end
     if h.native_id and native() then
         local ok, poses = pcall(read_native, h, controller, specs)
-        if ok then
-            reads = reads + 1
-            local now = clock()
-            if now >= next_check then
-                next_check = now + 10
-                compare(h, controller, specs, poses)
-            end
-            return poses
-        end
+        if ok then return poses end
         -- this rig falls back to the Lua read
         h.native_id = nil
         Trail.event("native pose read failed, using Lua: %s", tostring(poses))
