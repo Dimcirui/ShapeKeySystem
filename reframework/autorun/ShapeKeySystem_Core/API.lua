@@ -1085,6 +1085,11 @@ local function scan_full()
     local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
                              known = (not Writer.M_CNAME or SKS.adapter.hash_names) and known_names() or nil })
     if cfg.enabled and SKS.adapter.prepare_parts then SKS.adapter.prepare_parts(res.instances or res.parts) end
+    -- 扫描分段：查找部件 / 记录部件路径 / 场景其余部分；状态重建在函数末尾记录
+    local rebuild_start = clock()
+    Perf.record("scan_parts", res.parts_s or 0)
+    Perf.record("scan_layout", res.layout_s or 0)
+    Perf.record("scan_other", max(0, res.ms / 1000 - (res.parts_s or 0) - (res.layout_s or 0)))
     -- the same mesh found again keeps its warm-up count and last written values, so periodic
     -- rescans neither pause writing nor rewrite every channel. A mesh that was dropped keeps only
     -- its warm-up: every channel is written again.
@@ -1203,6 +1208,7 @@ local function scan_full()
     end
     Trail.event("scan: %s", state.debug.status)
     C.fire("scan")
+    Perf.record("scan_rebuild", clock() - rebuild_start)
     Perf.record("scan", clock() - scan_start)
 end
 
@@ -1591,7 +1597,9 @@ local function tick()
 
     -- conditional expressions: master hunter in gameplay only
     C.cond_live = not C.menu and (CondExpr.current ~= nil or state.runtime.ui_open or Drivers.wants_cond())
+    local cond_start = clock()
     if C.cond_live then Cnd.sample(f) end
+    Perf.record("cond_sample", clock() - cond_start)
     if CondExpr.update(C.cond_live and CondExpr.current ~= nil) then Sculpt.mark_dynamic() end
     if Touch.update() then Sculpt.mark_dynamic() end
     if state.runtime.ui_open then C.update_cond_live() end
@@ -1659,8 +1667,10 @@ end
 -- 计时覆盖提前返回和延迟保存；游戏动画回调与面板绘制另行计量。
 function SKS.tick()
     local started = clock()
+    Scene.sig_time = 0
     tick()
     Perf.record("tick", clock() - started)
+    Perf.record("sig_check", Scene.sig_time)
     prof.frames = prof.frames + 1
     prof_flush()
 end
