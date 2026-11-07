@@ -19,6 +19,7 @@ local BOOLS = {
     { "is_battle", "get_IsBattle", "战斗状态" },
     { "is_aiming", "get_IsAiming", "瞄准中" },
     { "is_wheel", "get_IsWheel", "站定瞄准或举刀" },
+    { "is_holding", "get_IsHolding", "持械中" },
     { "is_combating", "get_IsCombating", "近战攻击中" },
     { "is_shooting", "get_IsShooting", "射击中" },
     { "is_pull_trigger", "get_IsPullTrigger", "扣动扳机" },
@@ -62,6 +63,12 @@ local vital = { id = "hp_vital", kind = "enum", label = "游戏生命状态", op
     { value = 0, label = "正常（Fine）" }, { value = 2, label = "危险（Danger）" }, { value = 4, label = "死亡（Dead）" },
 } }
 def(vital)
+-- 粗分类取自 PlayerEquipment 的四个布尔，判定顺序即优先级；值写进配置，新增档位只能往后加。
+def({ id = "weapon_kind", kind = "enum", label = "手持武器类型", options = {
+    { value = 0, label = "枪械" }, { value = 1, label = "刀" }, { value = 2, label = "投掷物" },
+    { value = 3, label = "徒手" }, { value = 4, label = "其他" },
+} })
+local WEAPON_FLAGS = { "get_IsEquipGun", "get_IsEquipKnife", "get_IsEquipGrenade", "get_IsBareHands" }
 
 function C.init()
     local ok, fields = pcall(function()
@@ -110,6 +117,15 @@ function C.sample(V)
     if finite(current) then V.dead = current <= 0 end
     local armor = call(call(context, "get_BodyUpdater"), "get_HasArmorMesh")
     if type(armor) == "boolean" then V.has_armor_mesh = armor end
+    -- PlayerEquipment 挂在头部对象上，只能经 HeadUpdater 的字段取到。
+    local head = call(context, "get_HeadUpdater")
+    local fok, equipment = pcall(function() return head and head:get_field("<Equipment>k__BackingField") end)
+    if fok and equipment and sdk.is_managed_object(equipment) then
+        V.weapon_kind = 4
+        for index, method in ipairs(WEAPON_FLAGS) do
+            if call(equipment, method) == true then V.weapon_kind = index - 1; break end
+        end
+    end
     return true
 end
 
