@@ -274,14 +274,22 @@ function W.select(id, x, y, w, h, labels, index, opt)
         if p and p ~= index then return true, p end
         return false, index
     end
-    local ih = 24
-    local n = #labels
+    local ih, hh = 24, 22
+    -- opt.headers[i]: a gray heading above item i (not selectable)
+    local rows, total, index_bottom = {}, 0, ih
+    for i in ipairs(labels) do
+        local head = opt.headers and opt.headers[i]
+        if head then rows[#rows + 1] = { y = total, head = head }; total = total + hh end
+        rows[#rows + 1] = { y = total, i = i }
+        total = total + ih
+        if i == index then index_bottom = total end
+    end
     local sw, sh = D.surface_size()
-    local ph = min(n * ih, 360, max(ih, sh - 66))
+    local ph = min(total, 360, max(ih, sh - 66))
     local py = y + h + 2
     if py + ph > sh - 10 then py = y - ph - 2 end
     py = max(10, min(py, sh - ph - 10))
-    local offset = select_offsets[id] or max(0, (index or 1) * ih - ph)
+    local offset = select_offsets[id] or max(0, index_bottom - ph)
     I.add_overlay(x, py, w, ph)
     local result
     D.defer(function()
@@ -289,15 +297,20 @@ function W.select(id, x, y, w, h, labels, index, opt)
         D.rrect(x, py, w, ph, 3, C.panel2)
         D.outline(x, py, w, ph, 3, 1, C.muted)
         local gutter
-        offset, gutter = selection_scroll(id, x, py, w, ph, n * ih, offset, ih * 3)
+        offset, gutter = selection_scroll(id, x, py, w, ph, total, offset, ih * 3)
         select_offsets[id] = offset
         D.push_clip(x + 1, py, w - gutter - 2, ph)
-        for i, label in ipairs(labels) do
-            local iy = py + (i - 1) * ih - offset
-            if iy + ih > py and iy < py + ph then
+        for _, row in ipairs(rows) do
+            local iy = py + row.y - offset
+            if row.head then
+                if iy + hh > py and iy < py + ph then
+                    D.text_mid(row.head, x + 8, iy + 2, hh, C.faint, small(), w - gutter - 16)
+                end
+            elseif iy + ih > py and iy < py + ph then
+                local i = row.i
                 local hov = I.active == nil and I.hit(x, iy, w - gutter, ih)
                 if hov or i == index then D.rect(x + 1, iy, w - gutter - 2, ih, hov and C.panel3 or C.ink) end
-                D.text_mid(label, x + 8, iy, ih, i == index and C.brass or C.text, body(), w - gutter - 16)
+                D.text_mid(labels[i], x + 8, iy, ih, i == index and C.brass or C.text, body(), w - gutter - 16)
                 if I.active == nil and I.click(x, iy, w - gutter, ih) then result = i end
             end
         end

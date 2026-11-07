@@ -166,12 +166,15 @@ local function condition_form(ctx, x, y, w, si, ri)
     local st, s = ctx.st, ctx.state
     local f = s.form
     local defs = listed(st)
-    local labels = {}
-    for i, d in ipairs(defs) do labels[i] = d.label end
+    local labels, headers = {}, {}
+    for i, d in ipairs(defs) do
+        labels[i] = d.label
+        if d.category and d.category ~= (defs[i - 1] and defs[i - 1].category) then headers[i] = d.category end
+    end
     f.type_i = f.type_i or 1
     local d = defs[f.type_i]
     D.rrect(x, y, w, 40, 3, C.ink); D.outline(x, y, w, 40, 3, 1, C.line)
-    local ch, i = W.select("cf_type", x + 6, y + 6, min(240, w * 0.38), 28, labels, f.type_i)
+    local ch, i = W.select("cf_type", x + 6, y + 6, min(240, w * 0.38), 28, labels, f.type_i, { headers = headers })
     if ch then f.type_i, f.op, f.value, f.band = i, nil, nil, nil; d = defs[i] end
     local bx = x + 12 + min(240, w * 0.38)
     if d and d.kind == "bool" then
@@ -487,8 +490,27 @@ end
 -- ---------------------------------------------------------------- live values
 local function live_cols(w) return w >= 640 and 3 or w >= 340 and 2 or 1 end
 
+-- cells of the live grid: a game that sorts its conditions into categories gets a gray heading
+-- above each one, and each category starts on a new row
+local function live_layout(defs, cols)
+    local cells, row, col, prev = {}, 0, 0, nil
+    for i, d in ipairs(defs) do
+        if d.category and d.category ~= prev then
+            if col > 0 then row, col = row + 1, 0 end
+            cells[#cells + 1] = { head = d.category, row = row }
+            row = row + 1
+        end
+        prev = d.category
+        cells[#cells + 1] = { d = d, row = row, col = col }
+        col = col + 1
+        if col == cols then row, col = row + 1, 0 end
+    end
+    return cells, row + (col > 0 and 1 or 0)
+end
+
 local function live_height(ctx, w)
-    return 44 + math.ceil(#listed(ctx.st) / live_cols(w)) * 22
+    local _, rows = live_layout(listed(ctx.st), live_cols(w))
+    return 44 + rows * 22
 end
 
 local function live_section(ctx, x, y, w)
@@ -502,12 +524,17 @@ local function live_section(ctx, x, y, w)
     if not (live.cond and live.cond.sampled) then
         D.text("（只在游戏中、主角色可操作时读取）", x + 100, y + 13, C.faint, W.small(), w - 112)
     end
-    for i, d in ipairs(defs) do
-        local col, row = (i - 1) % cols, floor((i - 1) / cols)
-        local cx, cy = x + 12 + col * cw, y + 40 + row * 22
-        local v = live.cond and live.cond.values[d.id]
-        D.text(d.label, cx, cy, C.muted, W.small(), cw * 0.62)
-        D.text(live_text(st, live, d.id), cx + cw * 0.64, cy, (v == true) and C.ok or C.text, W.small(), cw * 0.34)
+    for _, cell in ipairs((live_layout(defs, cols))) do
+        local cy = y + 40 + cell.row * 22
+        if cell.head then
+            D.text(cell.head, x + 12, cy + 2, C.faint, W.small(), w - 24)
+        else
+            local d = cell.d
+            local cx = x + 12 + cell.col * cw
+            local v = live.cond and live.cond.values[d.id]
+            D.text(d.label, cx, cy, C.muted, W.small(), cw * 0.62)
+            D.text(live_text(st, live, d.id), cx + cw * 0.64, cy, (v == true) and C.ok or C.text, W.small(), cw * 0.34)
+        end
     end
     return h
 end

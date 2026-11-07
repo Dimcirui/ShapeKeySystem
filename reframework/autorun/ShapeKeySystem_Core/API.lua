@@ -2934,7 +2934,7 @@ function C.build_cond_state()
     local defs = {}
     for i, d in ipairs(Cnd.order) do
         defs[i] = { id = d.id, label = d.label, kind = d.kind, options = d.options, min = d.min, max = d.max,
-                    hidden = d.hidden }
+                    hidden = d.hidden, category = d.category }
     end
     cs.defs = defs
     local b = C.binding
