@@ -691,6 +691,8 @@
   "被束缚": "Grabbed",
   "被抓 / 刚挣脱": "Grabbed / just broke free",
   "捏脸配置「%s」有错误，没有列出：%s": "Sculpt preset \"%s\" has an error and is not listed: %s",
+  "重命名形态键配置组合": "Rename shape key combo",
+  "已有名为「%s」的形态键配置组合": "A shape key combo named \"%s\" already exists",
   "捂伤口": "Holding wound",
   "血量": "HP",
   "战斗与武器": "Combat & weapons",

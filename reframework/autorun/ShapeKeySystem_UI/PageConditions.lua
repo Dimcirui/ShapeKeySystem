@@ -405,6 +405,19 @@ local function clips_section(ctx, x, y, w)
             if clicked then
                 if open then s.open_clip = nil else s.open_clip = id end
             end
+            if W.tbutton("重命名", x + w - 158 - tbw("重命名"), cy + 11) then
+                W.start_text(s, "clip_form", { title = "重命名形态键配置组合", text = id, on_submit = function(name)
+                    if name == "" or name == id then return end
+                    if data.clips[name] then ctx.toast("warn", L.f("已有名为「%s」的形态键配置组合", name)); return end
+                    -- the states that play it follow the new name
+                    edit(ctx, function(d)
+                        d.clips[name], d.clips[id] = d.clips[id], nil
+                        for _, ds in ipairs(d.states) do if ds.clip == id then ds.clip = name end end
+                    end)
+                    if s.open_clip == id then s.open_clip = name end
+                    if s.preview == id then s.preview = name; ctx.call("cond_preview", { clip = name }) end
+                end })
+            end
             local previewing = s.preview == id
             if W.tbutton(previewing and "停止预览" or "预览", x + w - 150, cy + 11, { pressed = previewing }) then
                 s.preview = (not previewing) and id or nil
