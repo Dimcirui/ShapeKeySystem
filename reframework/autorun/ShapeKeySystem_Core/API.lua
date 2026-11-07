@@ -1231,7 +1231,9 @@ local function do_scan()
         end
     end
     C.scan_force = false
+    Presets.begin_batch()
     local ok, err = pcall(scan_full)
+    Presets.end_batch()
     if not ok then C.scan_force = true; error(err) end
     local root = Scene.primary_root()
     C.scan_root_addr = root_address(root)

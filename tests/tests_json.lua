@@ -103,6 +103,20 @@ before = #diagnostics
 check(U.load_json(missing) == nil and #diagnostics == before,
     "binding resolution and later missing probes add no spurious JSON diagnostics")
 
+-- inside a scan batch each binding file is read once; after it, rewritten files are seen again
+loads = {}
+P.begin_batch()
+r = P.resolve_binding("representative")
+local again = P.resolve_binding("own")
+check(r.data.profile == "new-mod" and again.data.profile == "new-mod" and loads[mod_rep] == 1,
+    "a scan batch reads each binding file once")
+again.data.profile = "changed by caller"
+check(P.resolve_binding("representative").data.profile == "new-mod", "callers get a copy of the batched file")
+P.end_batch()
+U.save_json(mod_rep, { profile = "after-batch" })
+check(P.resolve_binding("representative").data.profile == "after-batch",
+    "after the batch a rewritten binding is read again")
+
 U.file_exists, P.adapter = original_exists, original_adapter
 json.load_file, fs.glob, io.open = original_load, original_glob, original_open
 print("JSON FAILS:", failures)
