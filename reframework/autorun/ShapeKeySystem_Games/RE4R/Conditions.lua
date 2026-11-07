@@ -115,8 +115,12 @@ function C.sample(V)
     local status = call(context, "getHitPointVital")
     if finite(status) then V.hp_vital = status end
     if finite(current) then V.dead = current <= 0 end
-    local armor = call(call(context, "get_BodyUpdater"), "get_HasArmorMesh")
+    local body = call(context, "get_BodyUpdater")
+    local armor = call(body, "get_HasArmorMesh")
     if type(armor) == "boolean" then V.has_armor_mesh = armor end
+    -- 普通火焰攻击只挂燃烧特效、不置 IsInBurnDamage；特效编号熄灭后回到 -1。
+    local bok, burn = pcall(function() return body and body:get_field("_CurrentBurnEffectID") end)
+    if bok and type(burn) == "number" and burn >= 0 then V.is_burning = true end
     -- PlayerEquipment 挂在头部对象上，只能经 HeadUpdater 的字段取到。
     local head = call(context, "get_HeadUpdater")
     local fok, equipment = pcall(function() return head and head:get_field("<Equipment>k__BackingField") end)
