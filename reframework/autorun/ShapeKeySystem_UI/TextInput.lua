@@ -3,6 +3,8 @@
 local T = require("ShapeKeySystem_UI.Theme")
 local D = require("ShapeKeySystem_UI.Draw")
 local X = { fields = {}, active = nil }
+-- ImGui 收不到鼠标按键时（RE4R 未开 REF 菜单），由面板的点击代为激活或释放输入框。
+local focus_id, drop_id, claimed = nil, nil, false
 local max, floor = math.max, math.floor
 local FLAGS = 1 | 2 | 4 | 8 | 16 | 32 | 128 | 256 | 4096 -- NoFocusOnAppearing
 
@@ -12,8 +14,16 @@ local function color(c)
 end
 
 -- 每次布局重建可见控件；关闭面板、切页和渲染器重置时丢弃旧矩形。
-function X.clear() X.fields, X.active = {}, nil end
-function X.begin_layout() X.fields = {} end
+function X.clear() X.fields, X.active, focus_id, drop_id = {}, nil, nil, nil end
+function X.begin_layout() X.fields, claimed = {}, false end
+function X.focus(id)
+    claimed = true
+    if X.active ~= id then focus_id = id end
+end
+-- 点在输入框以外：下一帧不提交当前激活的输入框，ImGui 随之清掉它的激活状态。
+function X.blur()
+    if not claimed and X.active then drop_id = X.active end
+end
 function X.remove(id)
     for i = #X.fields, 1, -1 do if X.fields[i].id == id then table.remove(X.fields, i) end end
     if X.active == id then X.active = nil end
@@ -32,6 +42,8 @@ end
 
 -- 单个透明窗口只覆盖原输入框内部；即使 InputText 抛错也归还所有 ImGui 栈资源。
 local function draw_field(f)
+    local focus = focus_id == f.id
+    if focus then focus_id = nil end
     local nv, nc, window, width, font = 0, 0, false, false, false
     local text, active
     local ok, err = pcall(function()
@@ -42,11 +54,13 @@ local function draw_field(f)
         col(0, T.c.text); col(7, 0); col(8, 0); col(9, 0)
         imgui.set_next_window_pos(Vector2f.new(f.x, f.y), 1)
         imgui.set_next_window_size(Vector2f.new(f.w, f.h), 1)
+        if focus and imgui.set_next_window_focus then imgui.set_next_window_focus() end
         local visible = imgui.begin_window("##sks_inline_" .. f.id, nil, FLAGS)
         window = true
         if visible == false then return end
         if imgui.push_font_size then imgui.push_font_size(f.px + 0.0); font = true end
         imgui.push_item_width(f.w + 0.0); width = true
+        if focus and imgui.set_keyboard_focus_here then imgui.set_keyboard_focus_here(0) end
         local _
         _, text = imgui.input_text("##sks_text_" .. f.id, f.text)
         active = imgui.is_item_active()
@@ -75,6 +89,10 @@ end
 -- 输入回调更新页面状态；Enter/Esc 留给 ImGui/输入法，不把选字按键当成保存或取消。
 function X.draw()
     X.active = nil
-    for _, f in ipairs(X.fields) do draw_field(f) end
+    local drop = drop_id
+    drop_id = nil
+    for _, f in ipairs(X.fields) do
+        if f.id ~= drop then draw_field(f) end
+    end
 end
 return X

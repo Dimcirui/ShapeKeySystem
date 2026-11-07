@@ -12,6 +12,7 @@ local Blocker = require("ShapeKeySystem_UI.InputBlocker")
 local I = {
     mx = -1, my = -1,          -- logical mouse position this draw
     down = false, clicked = false, released = false,
+    device_click = false,      -- this draw's click came from the game device, unseen by ImGui
     wheel = 0,                 -- notches this draw (+ = away from the user)
     active = nil,              -- id of the widget holding the mouse (slider drag, window drag)
     in_overlay = false,        -- set while an overlay draws itself
@@ -29,10 +30,15 @@ local function imgui_mouse()
     return nil
 end
 
-local function raw_down()
+local function imgui_down()
     local ok, v = pcall(imgui.is_mouse_down, 0)
-    if ok and v == true then return true end
-    return Blocker.enabled and Blocker.device_left_down() or false
+    return ok and v == true
+end
+
+-- second value: ImGui saw the button itself (RE4R withholds it while the REF menu is closed)
+local function raw_down()
+    if imgui_down() then return true, true end
+    return Blocker.enabled and Blocker.device_left_down() or false, false
 end
 
 -- screen px. While the input blocker runs, the virtual cursor (Blocker.cursor) is used when the
@@ -64,10 +70,10 @@ end
 
 -- every game frame
 function I.capture()
-    local down = raw_down()
+    local down, seen = raw_down()
     if sampled and down and not was_down then
         local x, y = I.raw_mouse()
-        if x >= 0 then q_tail = q_tail + 1; queue[q_tail] = { x, y } end
+        if x >= 0 then q_tail = q_tail + 1; queue[q_tail] = { x, y, seen } end
     end
     if sampled and not down and was_down then
         q_tail = q_tail + 1; queue[q_tail] = false   -- release marker
@@ -82,7 +88,7 @@ end
 function I.reset()
     queue, q_head, q_tail = {}, 1, 0
     sampled, was_down = false, false
-    I.active, I.clicked, I.released = nil, false, false
+    I.active, I.clicked, I.released, I.device_click = nil, false, false, false
     overlays, next_overlays = {}, {}
     wheel_acc = 0
 end
@@ -90,13 +96,14 @@ end
 -- start of each draw
 function I.begin_frame()
     local x, y = I.raw_mouse()
-    I.clicked, I.released = false, false
+    I.clicked, I.released, I.device_click = false, false, false
     local ev = queue[q_head]
     if ev ~= nil then
         queue[q_head] = nil
         q_head = q_head + 1
         if q_head > q_tail then q_head, q_tail = 1, 0 end
-        if ev then I.clicked = true; x, y = ev[1], ev[2] else I.released = true end
+        if ev then I.clicked, I.device_click = true, not ev[3]; x, y = ev[1], ev[2]
+        else I.released = true end
     end
     I.mx, I.my = x / D.S, y / D.S
     I.down = raw_down() or I.clicked
