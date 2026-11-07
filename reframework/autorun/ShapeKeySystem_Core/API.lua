@@ -1647,7 +1647,9 @@ local function update_hold()
     if want then
         local faces = {}
         for _, rig in ipairs(C.rigs) do faces[#faces + 1] = rig.face end
+        local hold_start = clock()
         FaceHold.update(SKS.adapter, faces)
+        Perf.record("face_hold", clock() - hold_start)
     elseif FaceHold.active() then
         FaceHold.release()
     end

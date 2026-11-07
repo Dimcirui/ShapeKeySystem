@@ -372,11 +372,21 @@ function A.prepare_parts(parts)
     end
 end
 
+-- The live view samples every 0.2 s: reuse its handle while the head and the parts stay the same.
+local snapshot_cache
 function A.native_snapshot()
-    if not A.primary_ready() then return nil, "角色头部尚未就绪" end
+    if not A.primary_ready() then snapshot_cache = nil; return nil, "角色头部尚未就绪" end
     local h = head()
-    local result = Signals.snapshot(h, calibrations[actor_of_path(path(h))])
-    result.source = A.signature(A.primary_root())
+    local sig = A.signature(A.primary_root())
+    local calibration = calibrations[actor_of_path(path(h))]
+    local c = snapshot_cache
+    if not (c and c.sig == sig and c.face == h:get_address() and c.calibration == calibration) then
+        c = {sig = sig, face = h:get_address(), calibration = calibration}
+        snapshot_cache = c
+    end
+    local ok, result = pcall(Signals.snapshot, h, calibration, c)
+    if not ok then snapshot_cache = nil; error(result, 0) end
+    result.source = sig
     return result
 end
 
@@ -438,7 +448,7 @@ end
 local lookup
 local absent = {}
 function A.cache_begin() lookup = {} end
-function A.cache_end() lookup = nil end
+function A.cache_end() lookup, snapshot_cache = nil, nil end
 local function memo(fn)
     local bucket = {}
     return function(key, second)

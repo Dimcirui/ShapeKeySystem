@@ -85,7 +85,7 @@ function P.bind(motion, bones)
     for _, spec in pairs(specs) do sorted[#sorted + 1] = spec end
     table.sort(sorted, function(a, b) return a.name < b.name end)
     return {motion = motion, specs = sorted, masks = {}, errors = {}, error_seen = {},
-        native_id = native_bind(sorted), reads = 0}
+        native_id = native_bind(sorted)}
 end
 local function buffers(h)
     if h.info and h.data then return true end
@@ -267,7 +267,9 @@ local function difference(a, b)
     return worst, joints
 end
 
--- every 600 reads: both paths 8 times each, the difference and timings go to trail.log
+-- at most every 10 s over all rigs: both paths 8 times each; the difference, the timings and the
+-- reads since the last check go to trail.log
+local reads, checked_reads, next_check = 0, 0, 0
 local function compare(h, controller, specs, poses)
     local t0 = clock()
     for _ = 1, 8 do pcall(read_native, h, controller, specs) end
@@ -280,8 +282,9 @@ local function compare(h, controller, specs, poses)
         return
     end
     local diff, joints = difference(poses, lua_poses)
-    Trail.event("native pose check: %d joints, max diff %.3g, native %.3f ms, Lua %.3f ms",
-        joints, diff, (t1 - t0) * 1000 / 8, (t2 - t1) * 1000 / 8)
+    Trail.event("native pose check: %d joints, max diff %.3g, native %.3f ms, Lua %.3f ms, %d reads since last check",
+        joints, diff, (t1 - t0) * 1000 / 8, (t2 - t1) * 1000 / 8, reads - checked_reads)
+    checked_reads = reads
 end
 
 function P.read(h, controller, needed)
@@ -297,8 +300,12 @@ function P.read(h, controller, needed)
     if h.native_id and native() then
         local ok, poses = pcall(read_native, h, controller, specs)
         if ok then
-            h.reads = h.reads + 1
-            if h.reads % 600 == 1 then compare(h, controller, specs, poses) end
+            reads = reads + 1
+            local now = clock()
+            if now >= next_check then
+                next_check = now + 10
+                compare(h, controller, specs, poses)
+            end
             return poses
         end
         -- this rig falls back to the Lua read

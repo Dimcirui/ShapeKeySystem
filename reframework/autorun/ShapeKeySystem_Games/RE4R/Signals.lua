@@ -170,9 +170,12 @@ local DIAGNOSTIC_JOINTS = {
 }
 
 -- Snapshots contain numbers and names only; every sample resolves fresh engine references.
-function S.snapshot(face, calibration)
+-- cache (optional): keeps the read-only handle and the channel hashes between snapshots of the
+-- same face; the caller drops it when the parts change
+function S.snapshot(face, calibration, cache)
     local data = calibration or data
-    local h = S.bind(face, {}, data, true)
+    local h = cache and cache.h or S.bind(face, {}, data, true)
+    if cache then cache.h = h end
     local outputs, measured = S.read(h, {}, 1)
     local result = { joints = {}, measurements = {}, taps = {}, outputs = outputs,
         status = {}, calibration = data }
@@ -180,7 +183,8 @@ function S.snapshot(face, calibration)
     for name, value in pairs(measured) do
         if finite(value) then result.measurements[name] = value end
     end
-    local hashes = S.hashes(h.mesh)
+    local hashes = cache and cache.hashes or S.hashes(h.mesh)
+    if cache then cache.hashes = hashes end
     local cn, wc = call(h.mesh, "get_BlendShapeChannelNum"), call(h.mesh, "get_BlendShapeChannelWeightCount")
     local length = call(call(h.mesh, "get_ChannelWeightList"), "get_Length")
     result.buffers = {channels = cn, count = wc, length = length}
