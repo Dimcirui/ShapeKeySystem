@@ -1,6 +1,7 @@
 -- Read facial poses from active animation resources, including joints absent from the mesh.
 -- Each rig owns its query buffers and only requests joints absent from its mesh.
 local Hash = require("ShapeKeySystem_Core.NameHash")
+local Trail = require("ShapeKeySystem_Core.Trail")
 local P = {}
 local function finite(v) return type(v) == "number" and v == v and math.abs(v) < math.huge end
 local function clamp(v) return math.max(0, math.min(1, v)) end
@@ -44,6 +45,36 @@ local function mouth(name)
     return name == "C_Chin" or name == "C_Jaw" or name:find("Lip", 1, true) ~= nil
         or name:find("Mouth", 1, true) ~= nil
 end
+-- ShapeKeySystem_Native.dll (sks_native) runs the same read with far fewer Lua-engine calls.
+-- Rigs are rebound on every scan, so one native binding serves every rig with the same joints.
+local native_ids = {}
+local function native()
+    local n = rawget(_G, "sks_native")
+    return type(n) == "table" and type(n.pose_read) == "function" and n or nil
+end
+local function native_bind(sorted)
+    local n = native()
+    if not n then return nil end
+    local flat = {}
+    for i, spec in ipairs(sorted) do
+        local neutral = spec.neutral
+        if type(neutral) ~= "table" then return nil end
+        for k = 1, 7 do if not finite(neutral[k]) then return nil end end
+        spec.index = i
+        flat[#flat + 1] = spec.hash
+        flat[#flat + 1] = Hash.hash(mirror_name(spec.name))
+        flat[#flat + 1] = (eyelid(spec.name) and 1 or 0) + (mouth(spec.name) and 2 or 0)
+        for k = 1, 7 do flat[#flat + 1] = neutral[k] end
+    end
+    if #flat == 0 then return nil end
+    local key = table.concat(flat, ",")
+    if native_ids[key] == nil then
+        local ok, id = pcall(n.pose_bind, flat)
+        native_ids[key] = ok and id or false
+    end
+    return native_ids[key] or nil
+end
+
 function P.bind(motion, bones)
     local specs = {}
     for _, bone in pairs(bones) do
@@ -52,7 +83,8 @@ function P.bind(motion, bones)
     local sorted = {}
     for _, spec in pairs(specs) do sorted[#sorted + 1] = spec end
     table.sort(sorted, function(a, b) return a.name < b.name end)
-    return {motion = motion, specs = sorted, masks = {}, errors = {}, error_seen = {}}
+    return {motion = motion, specs = sorted, masks = {}, errors = {}, error_seen = {},
+        native_id = native_bind(sorted)}
 end
 local function buffers(h)
     if h.info and h.data then return true end
@@ -183,6 +215,30 @@ local function read(h, controller, specs)
     end
     return result
 end
+local function read_native(h, controller, specs)
+    if not buffers(h) then return {} end
+    local blink = call(controller, "get_Layer_Blink")
+    local lipsync = call(controller, "get_Layer_Lipsync")
+    local selected = h.native_selected or {}
+    h.native_selected = selected
+    for i = #selected, 1, -1 do selected[i] = nil end
+    for i, spec in ipairs(specs) do selected[i] = spec.index end
+    local out, why = native().pose_read(h.native_id, h.motion:get_address(), h.info:get_address(),
+        h.data:get_address(), finite(blink) and blink or -1, finite(lipsync) and lipsync or -1, selected)
+    if not out then error(why or "native pose read failed") end
+    local result = {}
+    for i, spec in ipairs(specs) do
+        local b = (i - 1) * 10
+        if out[b + 1] == 1 then
+            local pose = {source = "animation_resource"}
+            if out[b + 2] == 1 then pose.position = {out[b + 3], out[b + 4], out[b + 5]} end
+            if out[b + 6] == 1 then pose.rotation = {out[b + 7], out[b + 8], out[b + 9], out[b + 10]} end
+            result[spec.name] = pose
+        end
+    end
+    return result
+end
+
 function P.read(h, controller, needed)
     local specs = h.specs
     if needed then
@@ -193,6 +249,13 @@ function P.read(h, controller, needed)
         specs = selected
     end
     if #specs == 0 then return {} end
+    if h.native_id and native() then
+        local ok, poses = pcall(read_native, h, controller, specs)
+        if ok then return poses end
+        -- this rig falls back to the Lua read
+        h.native_id = nil
+        Trail.event("native pose read failed, using Lua: %s", tostring(poses))
+    end
     local ok, poses = pcall(read, h, controller, specs)
     if not ok then
         local why = tostring(poses)

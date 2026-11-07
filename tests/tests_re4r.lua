@@ -245,6 +245,54 @@ check(h.status.jaw_openExtreme=="out_of_bounds", "zero WeightCount blocks native
 count=#CHANNELS; length=0; A.read(h,P,1)
 check(h.status.jaw_openExtreme=="out_of_bounds", "live managed list bounds checked")
 length=#CHANNELS
+-- ShapeKeySystem_Native.dll: batched tap and joint reads give the Lua read's values and states
+do
+    local W = require("ShapeKeySystem_Core.Writer")
+    -- engine joints have addresses; the bind collects them for the plugin
+    local joints, next_address = {}, 0x7000
+    for _, joint in pairs(ARMOR._joints) do
+        if not joint.get_address then
+            next_address = next_address + 0x10
+            local address = next_address
+            joint.get_address = function() return address end
+        end
+        joints[joint:get_address()] = joint
+    end
+    local h = A.bind(ARMOR, {key})
+    local function compare_reads(label)
+        sks_native = nil
+        local plain = {}; A.read(h, plain, 1)
+        local plain_status = {}; for k, v in pairs(h.status) do plain_status[k] = v end
+        sks_native = {
+            tap_weights = function(address, indices)
+                local out = { W.M_CN:call(m), W.limit(m) }
+                for i, idx in ipairs(indices) do
+                    out[i + 2] = idx < out[2] and W.M_GETW:call(m, idx) or false
+                end
+                return out
+            end,
+            joint_poses = function(addresses)
+                local out = {}
+                for i, address in ipairs(addresses) do
+                    local joint = joints[address]
+                    local p, q = joint:call("get_LocalPosition()"), joint:call("get_LocalRotation()")
+                    local row = p and q and { p.x, p.y, p.z, q.x, q.y, q.z, q.w } or { false, false, false, false, false, false, false }
+                    for k = 1, 7 do out[(i - 1) * 7 + k] = row[k] end
+                end
+                return out
+            end,
+        }
+        local batched = {}; A.read(h, batched, 1)
+        local same = true
+        for k, v in pairs(plain) do if math.abs((batched[k] or 0) - v) > 1e-9 then same = false end end
+        for k, v in pairs(plain_status) do if h.status[k] ~= v then same = false end end
+        sks_native = nil
+        check(same, "native batched reads match the Lua read: " .. label)
+    end
+    WEIGHTS[0] = 0.5; compare_reads("in bounds")
+    count = 0; compare_reads("zero weight count"); count = #CHANNELS
+    length = 0; compare_reads("empty managed list"); length = #CHANNELS
+end
 local ok,code,msg=SKS.call("set_profile",{id="synthetic"})
 check(ok,"synthetic exact-name profile selected: "..tostring(msg))
 local function ticks(n) for _=1,n do CB.tick() end end
@@ -341,6 +389,24 @@ check(#diagnostic>1,"existing probe action exposes native read diagnostics")
 local saved_channels={table.unpack(CHANNELS)}
 CHANNELS[1],CHANNELS[5]=CHANNELS[5],CHANNELS[1]
 check(not W.set_weight(m,4,1,"Size"),"native hash remains protected after reordering")
+local batch_check=W.begin_batch(m)
+check(not W.set_weight(m,4,1,"Size",batch_check),"native hash remains protected inside a batch after reordering")
+CHANNELS[1],CHANNELS[5]=CHANNELS[5],CHANNELS[1]
+-- ShapeKeySystem_Native.dll: a batch queues its writes and hands them over in one call
+local plugin_calls={}
+sks_native={write_weights=function(addr,idx,val,n) plugin_calls[#plugin_calls+1]={addr=addr,idx=idx[1],val=val[1],n=n}; return n end}
+local queued=W.begin_batch(m)
+before=#writes
+check(W.set_weight(m,1,0.25,CHANNELS[2],queued) and #writes==before,"a native batch queues its writes")
+W.flush(queued)
+check(#plugin_calls==1 and plugin_calls[1].n==1 and plugin_calls[1].idx==1 and plugin_calls[1].val==0.25
+    and plugin_calls[1].addr==m:get_address(),"flush hands the queued writes to the plugin in one call")
+check(not W.set_weight(m,0,1,native,W.begin_batch(m)),"a native batch still rejects native channels")
+sks_native={write_weights=function() error("plugin failed") end}
+queued=W.begin_batch(m)
+W.set_weight(m,1,0.5,CHANNELS[2],queued); W.flush(queued)
+check(#writes==before+1,"a failed plugin call writes the queued values one by one")
+sks_native=nil
 CHANNELS=saved_channels
 local before_reset=#writes
 CB.reset()

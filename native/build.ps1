@@ -1,6 +1,7 @@
 <#
-Build the native REFramework plugin ShapeKeySystem_Mocap.dll (in-game UDP receiver for 面捕) into
-reframework\plugins\, where deploy.ps1 and package.ps1 pick it up.
+Build the native REFramework plugins into reframework\plugins\, where deploy.ps1 and package.ps1
+pick them up: ShapeKeySystem_Mocap.dll (in-game UDP receiver for 面捕) and ShapeKeySystem_Native.dll
+(engine reads too call-heavy for Lua, RE4R only for now).
 
   build.ps1          build the DLL
   build.ps1 -Test    also build and run the offline test (parsers + Lua table over loopback UDP)
@@ -28,6 +29,12 @@ $dll = Join-Path $out "ShapeKeySystem_Mocap.dll"
 & $Gcc @cflags -shared -o $dll (Join-Path $src "sks_mocap.c") @core -lws2_32 -static -static-libgcc -s
 if ($LASTEXITCODE -ne 0) { throw "DLL build failed" }
 Write-Host "built $dll"
+
+# engine reads that are too call-heavy for Lua (RE4R facial pose); same Lua core, no sockets
+$native = Join-Path $out "ShapeKeySystem_Native.dll"
+& $Gcc @cflags -shared -o $native (Join-Path $here "sks_native\sks_native.c") @core -static -static-libgcc -s
+if ($LASTEXITCODE -ne 0) { throw "native DLL build failed" }
+Write-Host "built $native"
 
 if ($Test) {
     $libs = "lbaselib lcorolib ldblib liolib lmathlib loadlib loslib lstrlib ltablib lutf8lib linit".Split(" ") |

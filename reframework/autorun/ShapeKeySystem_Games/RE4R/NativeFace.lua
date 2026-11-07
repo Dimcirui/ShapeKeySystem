@@ -108,16 +108,29 @@ local function read(h, register, select_bones)
             end
         end
         h.indices, h.count, h.generation, h.next_check = indices, count, generation, now + 2
+        -- the same joints as a list, for ShapeKeySystem_Native.dll
+        local names, list = {}, {}
+        for name, i in pairs(indices) do names[#names + 1] = name; list[#list + 1] = i end
+        h.index_names, h.index_list = names, list
     end
     local out, n = Deform.existing(h.deformer, h.wanted), 0
     for _ in pairs(out) do n = n + 1 end
 
-    for name, i in pairs(h.indices) do
-        if out[name] == nil then
-
-            local v = call(m, "getCalculatedLocalPosition(System.Int32)", i)
-            local value = scalar(v)
-            if value ~= nil then out[name], n = value, n + 1 end
+    local native = rawget(_G, "sks_native")
+    local curves = type(native) == "table" and type(native.motion_curves) == "function" and h.index_list
+        and #h.index_list > 0 and select(2, pcall(native.motion_curves, m:get_address(), h.index_list))
+    if type(curves) == "table" then
+        for k, name in ipairs(h.index_names) do
+            local value = curves[k]
+            if out[name] == nil and finite(value) then out[name], n = value, n + 1 end
+        end
+    else
+        for name, i in pairs(h.indices) do
+            if out[name] == nil then
+                local v = call(m, "getCalculatedLocalPosition(System.Int32)", i)
+                local value = scalar(v)
+                if value ~= nil then out[name], n = value, n + 1 end
+            end
         end
     end
     local inputs, present = Deform.inputs(), 0

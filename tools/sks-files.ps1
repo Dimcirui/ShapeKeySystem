@@ -13,7 +13,8 @@ $owned = @(
     "data\ShapeKeySystem\builtin",
     "data\ShapeKeySystem\faces",
     "images\ShapeKeySystem",
-    "plugins\ShapeKeySystem_Mocap.dll"   # 面捕游戏内接收，由 native\build.ps1 生成
+    "plugins\ShapeKeySystem_Mocap.dll",  # 面捕游戏内接收，由 native\build.ps1 生成
+    "plugins\ShapeKeySystem_Native.dll"  # RE4R 面部姿态等原生读取，由 native\build.ps1 生成
 )
 # 游戏根目录 natives\ 下的文件，相对仓库根目录与游戏根目录；逐个列出，不镜像目录（natives 由许多 mod 共用）
 $ownedNatives = @(

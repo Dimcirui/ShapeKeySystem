@@ -785,6 +785,7 @@ local function tick_active(preview, eps)
                 -- Failed zero writes remain scheduled; a released override also restores its base.
                 activate(t, item_index, keep)
             end
+            W.flush(batch)
             for i = #t.pending, 1, -1 do t.pending[i] = nil end
             for i in pairs(t.pending_set) do t.pending_set[i] = nil end
             t.dynamic, t.next_dynamic = current, t.dynamic
