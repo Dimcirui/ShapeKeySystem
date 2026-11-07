@@ -124,11 +124,11 @@ function A.primary_root()
     end
     return transform(call(ctx, "get_BodyGameObject") or call(ctx, "get_GameObject"))
 end
-function A.is_face(tr)
-    local p = path(tr)
-    -- Head identity follows its actor and mesh slot; replacement rigs may omit individual face joints.
+-- Head identity follows its actor and mesh slot; replacement rigs may omit individual face joints.
+local function face_path(p)
     return actor_of_path(p) ~= nil and p:match("/cha%d%d%d_1[01][_%w]*%.mesh") ~= nil
 end
+function A.is_face(tr) return face_path(path(tr)) end
 function A.primary_ready()
     local h = head()
     return A.primary_root() ~= nil and h ~= nil and A.is_face(h)
@@ -181,6 +181,24 @@ function A.additional_faces()
     local root = A.primary_root()
     if root then
         for _, part in ipairs(A.parts(root)) do owned[part:get_address()] = true end
+    end
+    -- ShapeKeySystem_Native.dll lists every Motion's transform and mesh path in one call
+    local native = rawget(_G, "sks_native")
+    local listed = type(native) == "table" and type(native.motion_meshes) == "function"
+        and select(2, pcall(native.motion_meshes))
+    if type(listed) == "table" then
+        local player_address = player and player:get_address()
+        for i = 1, #listed - 1, 2 do
+            local address, p = listed[i], listed[i + 1]
+            if address ~= player_address and not owned[address] and not seen[address] and face_path(p) then
+                local tr = sdk.to_managed_object(address)
+                if tr then
+                    seen[address] = true
+                    result[#result + 1] = tr
+                end
+            end
+        end
+        return result
     end
     local list = components("via.motion.Motion")
     for i = 0, (list and call(list, "get_Length") or 0) - 1 do
@@ -318,10 +336,16 @@ function A.capture_layout(root, face, parts)
     return layout
 end
 
+-- Every check compares the object addresses along the stored routes; the channel count and the
+-- resource stamp (string work) are compared on every 15th check. Writes check their own bounds,
+-- so a resource swapped in place in between is never written out of range.
+local FULL_LAYOUT_CHECK = 15
 function A.layout_valid(root, layout)
     if object_address(root) ~= layout.root then return false end
     local h = layout.primary and head()
     if layout.primary and object_address(h) ~= layout.head then return false end
+    layout.checks = (layout.checks or 0) + 1
+    local full = layout.checks % FULL_LAYOUT_CHECK == 1
     for _, route in ipairs(layout.routes) do
         local tr = route.anchor == "head" and h or root
         for _, index in ipairs(route.steps) do
@@ -331,8 +355,9 @@ function A.layout_valid(root, layout)
         end
         if object_address(tr) ~= route.transform then return false end
         local m = mesh(tr)
-        if object_address(m) ~= route.mesh or call(m, "get_BlendShapeChannelNum") ~= route.channels
-            or A.channel_stamp(m) ~= route.stamp then return false end
+        if object_address(m) ~= route.mesh then return false end
+        if full and (call(m, "get_BlendShapeChannelNum") ~= route.channels
+            or A.channel_stamp(m) ~= route.stamp) then return false end
     end
     return true
 end

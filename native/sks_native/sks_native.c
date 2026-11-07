@@ -443,6 +443,74 @@ static int64_t mesh_limit(void *mesh)
     return limit < 0 ? -1 : limit;
 }
 
+/* ---------------------------------------------------------------- scene enumeration */
+typedef struct {
+    REFrameworkMethodHandle current_scene, find_components, game_object, transform, get_component;
+    REFrameworkMethodHandle get_mesh, resource_path, length, get_value;
+    void *motion_type, *mesh_type;
+} SceneMethods;
+static SceneMethods SM;
+static int scene_state;
+
+static int resolve_scene_methods(void)
+{
+    if (scene_state) return scene_state;
+    REFrameworkTDBHandle tdb = sdk->functions->get_tdb();
+    SceneMethods m;
+    m.current_scene = sdk->tdb->find_method(tdb, "via.SceneManager", "get_CurrentScene");
+    m.find_components = sdk->tdb->find_method(tdb, "via.Scene", "findComponents(System.Type)");
+    m.game_object = sdk->tdb->find_method(tdb, "via.Component", "get_GameObject");
+    m.transform = sdk->tdb->find_method(tdb, "via.GameObject", "get_Transform");
+    m.get_component = sdk->tdb->find_method(tdb, "via.GameObject", "getComponent(System.Type)");
+    m.get_mesh = sdk->tdb->find_method(tdb, "via.render.Mesh", "getMesh");
+    m.resource_path = sdk->tdb->find_method(tdb, "via.ResourceHolder", "get_ResourcePath");
+    m.length = sdk->tdb->find_method(tdb, "System.Array", "get_Length");
+    m.get_value = sdk->tdb->find_method(tdb, "System.Array", "GetValue(System.Int32)");
+    REFrameworkTypeDefinitionHandle motion = sdk->tdb->find_type(tdb, "via.motion.Motion");
+    REFrameworkTypeDefinitionHandle mesh = sdk->tdb->find_type(tdb, "via.render.Mesh");
+    m.motion_type = motion ? sdk->type_definition->get_runtime_type(motion) : NULL;
+    m.mesh_type = mesh ? sdk->type_definition->get_runtime_type(mesh) : NULL;
+    scene_state = m.current_scene && m.find_components && m.game_object && m.transform && m.get_component
+        && m.get_mesh && m.resource_path && m.length && m.get_value && m.motion_type && m.mesh_type ? 1 : -1;
+    if (scene_state == 1) SM = m;
+    return scene_state;
+}
+
+/* a System.String as UTF-8, lower-case ASCII and '/' separators (RE4R Adapter resource_path()) */
+static void push_path(lua_State *L, void *str)
+{
+    luaL_Buffer b;
+    luaL_buffinit(L, &b);
+    if (managed(str)) {
+        int32_t n = *(const int32_t *)((const uint8_t *)str + 0x10);
+        const uint16_t *w = (const uint16_t *)((const uint8_t *)str + 0x14);
+        if (n > 0 && n <= 1024) {
+            for (int32_t i = 0; i < n; ++i) {
+                uint32_t c = w[i];
+                if (c >= 0xD800 && c <= 0xDBFF && i + 1 < n && w[i + 1] >= 0xDC00 && w[i + 1] <= 0xDFFF) {
+                    c = 0x10000 + ((c - 0xD800) << 10) + (w[i + 1] - 0xDC00);
+                    ++i;
+                }
+                if (c == 0x5C) c = '/';   /* backslash */
+                if (c >= 'A' && c <= 'Z') c += 32;
+                if (c < 0x80) luaL_addchar(&b, (char)c);
+                else if (c < 0x800) { luaL_addchar(&b, (char)(0xC0 | (c >> 6))); luaL_addchar(&b, (char)(0x80 | (c & 0x3F))); }
+                else if (c < 0x10000) {
+                    luaL_addchar(&b, (char)(0xE0 | (c >> 12)));
+                    luaL_addchar(&b, (char)(0x80 | ((c >> 6) & 0x3F)));
+                    luaL_addchar(&b, (char)(0x80 | (c & 0x3F)));
+                } else {
+                    luaL_addchar(&b, (char)(0xF0 | (c >> 18)));
+                    luaL_addchar(&b, (char)(0x80 | ((c >> 12) & 0x3F)));
+                    luaL_addchar(&b, (char)(0x80 | ((c >> 6) & 0x3F)));
+                    luaL_addchar(&b, (char)(0x80 | (c & 0x3F)));
+                }
+            }
+        }
+    }
+    luaL_pushresult(&b);
+}
+
 /* ---------------------------------------------------------------- Lua */
 static uintptr_t check_address(lua_State *L, int i)
 {
@@ -567,12 +635,52 @@ static int l_write_weights(lua_State *L)
     return 1;
 }
 
+/* motion_meshes() -> {transform address, mesh resource path, ...} for every via.motion.Motion in
+   the current scene whose GameObject has a mesh with a resource | nil, error */
+static int l_motion_meshes(lua_State *L)
+{
+    if (resolve_scene_methods() != 1) { lua_pushnil(L); lua_pushstring(L, "scene methods missing"); return 2; }
+    void *manager = sdk->functions->get_native_singleton("via.SceneManager");
+    Ret r;
+    if (!manager || !call0(SM.current_scene, manager, &r) || !r.ptr) {
+        lua_pushnil(L); lua_pushstring(L, "no current scene"); return 2;
+    }
+    void *scene = r.ptr;
+    void *args[1] = { SM.motion_type };
+    if (!call(SM.find_components, scene, args, 1, &r) || !managed(r.ptr)) {
+        lua_pushnil(L); lua_pushstring(L, "findComponents failed"); return 2;
+    }
+    void *list = r.ptr;
+    if (!call0(SM.length, list, &r)) { lua_pushnil(L); lua_pushstring(L, "component list unreadable"); return 2; }
+    int32_t n = (int32_t)r.dword;
+    lua_newtable(L);
+    int k = 1;
+    for (int32_t i = 0; i < n && i < 65536; ++i) {
+        void *index[1] = { (void *)(intptr_t)i };
+        if (!call(SM.get_value, list, index, 1, &r) || !r.ptr) continue;
+        if (!call0(SM.game_object, r.ptr, &r) || !r.ptr) continue;
+        void *go = r.ptr;
+        if (!call0(SM.transform, go, &r) || !r.ptr) continue;
+        void *tr = r.ptr;
+        void *type_arg[1] = { SM.mesh_type };
+        if (!call(SM.get_component, go, type_arg, 1, &r) || !r.ptr) continue;
+        if (!call0(SM.get_mesh, r.ptr, &r) || !r.ptr) continue;
+        if (!call0(SM.resource_path, r.ptr, &r) || !r.ptr) continue;
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)tr);
+        lua_rawseti(L, -2, k++);
+        push_path(L, r.ptr);
+        lua_rawseti(L, -2, k++);
+    }
+    return 1;
+}
+
 static int l_version(lua_State *L) { lua_pushinteger(L, NATIVE_VERSION); return 1; }
 
 static void sks_register(lua_State *L)
 {
     static const luaL_Reg fns[] = { { "version", l_version }, { "pose_bind", l_pose_bind },
         { "pose_free", l_pose_free }, { "pose_read", l_pose_read }, { "write_weights", l_write_weights },
+        { "motion_meshes", l_motion_meshes },
         { NULL, NULL } };
     lua_newtable(L);
     luaL_setfuncs(L, fns, 0);
