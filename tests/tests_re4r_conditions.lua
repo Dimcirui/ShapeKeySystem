@@ -97,9 +97,27 @@ local hidden, shown = {}, {}
 for _, def in ipairs(RC.defs) do if def.hidden then hidden[def.id] = true else shown[def.id] = true end end
 check(hidden.is_aiming and hidden.is_holding and hidden.hp_decreased and Cnd.defs.is_aiming ~= nil,
     "merged booleans are hidden but still defined")
-check(shown.hold_state and shown.hp_change and shown.is_pull_trigger and shown.is_burning and shown.weapon_kind,
-    "merged and independent conditions are listed")
+check(shown.hold_state and shown.hp_change and shown.is_pull_trigger and shown.is_burning and shown.is_grappled and shown.weapon_kind
+    and shown.is_talk_acting and shown.is_slip_through and shown.last_hit_part and shown.chapter and shown.stage_id
+    and shown.is_run_loop and shown.is_paused and shown.dead_type and not shown.is_wounded,
+    "merged and independent conditions are listed; is_wounded is hidden")
 clear()
+
+-- categories as in ArmorVariantManager: every def has one, listed in category order
+do
+    local rank = { ["血量"] = 1, ["战斗与武器"] = 2, ["移动"] = 3, ["受击"] = 4, ["其他"] = 5 }
+    local sorted, all_known, cat = true, true, {}
+    for i, def in ipairs(RC.defs) do
+        cat[def.id] = def.category
+        if not rank[def.category] then all_known = false end
+        local prev = RC.defs[i - 1]
+        if prev and rank[prev.category] and rank[def.category] and rank[prev.category] > rank[def.category] then sorted = false end
+    end
+    check(all_known and sorted, "every condition has a known category, listed in category order")
+    check(RC.defs[1].category == "血量" and cat.is_battle == "战斗与武器" and cat.locomotion == "移动"
+        and cat.is_grappled == "受击" and cat.is_wounded == "受击" and cat.is_paused == "其他" and cat.hp_change == "血量",
+        "categories follow ArmorVariantManager")
+end
 
 -- sampling only the conditions someone reads (the panel closed)
 do
@@ -110,9 +128,45 @@ do
             call = function(_, name) calls[name] = (calls[name] or 0) + 1; return values[name] end }
     end
     local hp = obj({ get_CurrentHitPoint = 800, get_DefaultHitPoint = 1000 })
-    local ctx = obj({ get_IsAiming = false, get_IsWheel = true, get_IsHolding = true, get_IsBattle = true, get_HitPoint = hp })
+    local arm_index = 4
+    local ctx = obj({ get_IsAiming = false, get_IsWheel = true, get_IsHolding = true, get_IsBattle = true, get_HitPoint = hp,
+        get_IsInGrappleDamage = true, get_IsTalkActing = true, get_State = 0x24, get_StateOld = 0x100, get_LastDamageCategory = 0,
+        get_LastDamageSide = 2, get_CurrentStageID = 47410, get_IsArmorCostume = true,
+        get_IsRunLoop = true, get_DeadType = 3, get_BodyUpdater = { get_field = function(_, name)
+            if name == "_CurrentBurnEffectID" then return -1 end
+        end, call = function(_, name) if name == "get_NextAddArmIndex" then return arm_index end end } })
+    local campaign = obj({ get_CurrentChapter = 22300 })
+    local pause, no_player = obj({ ["isPaused()"] = true }), false
+    -- engine enums as static fields: PlayerDefine.State bits, BodyPartsCategory, ChapterID
+    local function enum(t)
+        local fields = {}
+        for name, value in pairs(t) do
+            fields[#fields + 1] = { is_static = function() return true end, get_data = function() return value end,
+                get_name = function() return name end }
+        end
+        return { get_fields = function() return fields end }
+    end
+    local enums = {
+        ["chainsaw.PlayerDefine.State"] = enum({ SlipThrough = 0x4, ParentGimmick = 0x8, BodyDrawOff = 0x20, Jacked = 0x100 }),
+        ["chainsaw.character.BodyPartsCategory"] = enum({ Head = 0, Body = 1, Arms = 2 }),
+        ["chainsaw.ChapterID"] = enum({ Invalid = -1, Chapter1 = 22300 }),
+        ["chainsaw.PlayerDefine.DeadType"] = enum({ None = 0, Normal = 1, Beheaded = 2, BodyCut = 3 }),
+    }
+    local saved_td = sdk.find_type_definition
+    sdk.find_type_definition = function(name) return enums[name] or saved_td(name) end
+    RC.init()
+    sdk.find_type_definition = saved_td
+    local part_def, chapter_def
+    for _, def in ipairs(RC.defs) do
+        if def.id == "last_hit_part" then part_def = def elseif def.id == "chapter" then chapter_def = def end
+    end
+    check(#part_def.options == 3 and part_def.options[1].label == "头（Head）" and part_def.options[3].label == "手臂（Arms）",
+        "last_hit_part options come from BodyPartsCategory, labelled")
+    check(#chapter_def.options == 1 and chapter_def.options[1].value == 22300, "chapter options from ChapterID, Invalid hidden")
     sdk.get_managed_singleton = function(name)
-        if name == "chainsaw.CharacterManager" then return obj({ ["getPlayerContextRef()"] = ctx }) end
+        if name == "chainsaw.CharacterManager" then return obj({ ["getPlayerContextRef()"] = not no_player and ctx or nil }) end
+        if name == "share.PauseManager" then return pause end
+        if name == "chainsaw.CampaignManager" then return campaign end
         return saved(name)
     end
     RC.reset()
@@ -126,6 +180,47 @@ do
     clear(); calls = {}
     RC.sample(V, 3, nil)
     check(V.is_battle == true and V.hp == 800 and calls.get_IsAiming, "without a list every condition is read")
+    clear(); calls = {}
+    RC.sample(V, 4, { is_grappled = true })
+    check(V.is_grappled == true and calls.get_IsInGrappleDamage and not calls.get_IsAiming,
+        "is_grappled reads get_IsInGrappleDamage only")
+    clear(); calls = {}
+    RC.sample(V, 5, { is_slip_through = true, is_parent_gimmick = true, is_body_draw_off = true, is_crouch_switching = true })
+    check(V.is_slip_through == true and V.is_parent_gimmick == false and V.is_body_draw_off == true
+        and V.is_crouch_switching == nil and calls.get_State == 1,
+        "State bits: one get_State read; a bit the enum lacks stays unread")
+    check(not calls.get_StateOld, "StateOld is read only for is_jacked")
+    clear(); calls = {}
+    RC.sample(V, 5, { is_jacked = true })
+    check(V.is_jacked == true and calls.get_StateOld == 1, "is_jacked: the Jacked bit left in StateOld counts")
+    clear(); calls = {}
+    RC.sample(V, 6, { last_hit_part = true, last_hit_side = true, chapter = true, stage_id = true, is_talk_acting = true })
+    check(V.last_hit_part == 0 and V.last_hit_side == 2 and V.chapter == 22300 and V.stage_id == 47410
+        and V.is_talk_acting == true and not calls.get_State, "hit part / side, chapter, stage and talk acting are read")
+    clear(); calls = {}
+    RC.sample(V, 7, { has_armor_mesh = true })
+    check(V.has_armor_mesh == true and calls.get_IsArmorCostume, "no armor mesh but an armor costume: has armor")
+    clear(); calls = {}
+    RC.sample(V, 8, { is_run_loop = true, is_paused = true, dead_type = true })
+    check(V.is_run_loop == true and V.is_paused == true and V.dead_type == 3 and not calls.get_IsRun,
+        "run loop, paused (PauseManager) and death type are read")
+    clear(); calls = {}; no_player = true
+    RC.sample(V, 9, { is_paused = true })
+    check(V.is_paused == true, "is_paused is read without a player")
+    no_player = false
+    clear(); RC.sample(V, 10, { is_wounded = true })
+    check(V.is_wounded == true, "an added arm layer (4): holding a wound")
+    arm_index = -1; clear(); RC.sample(V, 11, { is_wounded = true })
+    check(V.is_wounded == false, "no added arm layer (-1): not holding a wound")
+    for _, idx in ipairs({ 0, 2 }) do
+        arm_index = idx; clear(); RC.sample(V, 12, { is_wounded = true })
+        check(V.is_wounded == false, "arm layer " .. idx .. " (weapon switch / one-hand idle) is not a wound")
+    end
+    arm_index = 5; clear(); RC.sample(V, 13, { is_wounded = true })
+    check(V.is_wounded == true, "arm layer 5 is a wound")
+    local dead_def
+    for _, def in ipairs(RC.defs) do if def.id == "dead_type" then dead_def = def end end
+    check(#dead_def.options == 4 and dead_def.options[4].label == "腰斩（BodyCut）", "dead_type options from DeadType, labelled")
     sdk.get_managed_singleton = saved
     RC.reset(); clear()
 end

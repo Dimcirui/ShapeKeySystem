@@ -14,10 +14,13 @@ local CondExpr = require("ShapeKeySystem_Core.CondExpr")
 local Touch = require("ShapeKeySystem_Core.Touch")
 local NameHash = require("ShapeKeySystem_Core.NameHash")
 local Trail = require("ShapeKeySystem_Core.Trail")
+local Labels = require("ShapeKeySystem_Core.Labels")
 
 local S = {}
 
-S.RANGE = { 0.0, 1.0 }   -- upper end = settings.sculpt_max (S.set_max)
+-- upper end = settings.sculpt_max (S.set_max). It limits only values set by hand (slider, typed);
+-- values from presets, mod defaults and key groups go up to MAX_LIMIT.
+S.RANGE = { 0.0, 1.0 }
 S.MAX_LIMIT = 5.0         -- highest cap the setting accepts (engine stores 2.0 verbatim, measured)
 local UNDO_MAX = 50
 local abs = math.abs
@@ -74,7 +77,7 @@ function S.rebuild(parts, owned, presets_of)
     local keys, by_name, targets = {}, {}, {}
     local seen_part = {}
     local group_source
-    local lo, hi = S.RANGE[1], S.RANGE[2]
+    local lo, hi = S.RANGE[1], S.MAX_LIMIT
     for _, part in ipairs(parts) do
         if not seen_part[part.id] then
             seen_part[part.id] = true
@@ -83,9 +86,14 @@ function S.rebuild(parts, owned, presets_of)
             group_source = group_source or active
             local items = {}
             local item_of = {}
+            -- a "=====XXX=====" channel is a section title for the keys after it, never a key
+            local section
             for i, cn in ipairs(part.names) do
                 local idx = i - 1
-                if cn ~= "" then
+                local sep = cn ~= "" and Labels.separator_title(S.key_of(cn))
+                if sep then
+                    section = sep
+                elseif cn ~= "" then
                     local name = S.key_of(cn)
                     local key = by_name[name]
                     local av = preset_value(active, part.id, name)
@@ -97,8 +105,11 @@ function S.rebuild(parts, owned, presets_of)
                     av = av and U.clamp(av, lo, hi) or dv
                     if not key then
                         local prev = old[name]
+                        -- pos: channel index in its first part, the list order (Blender's key order)
                         key = { name = name, group = part.id, parts = {}, default = dv, preset_value = av,
-                                value = av, overrides = {}, preset_overrides = {}, free = 0, owned = 0 }
+                                value = av, overrides = {}, preset_overrides = {}, free = 0, owned = 0,
+                                pos = idx, section = section or Labels.section_before(name) }
+                        section = nil
                         if prev and prev.touched then
                             key.value, key.touched = prev.value, true
                             for p, v in pairs(prev.overrides) do key.overrides[p] = v end
@@ -135,7 +146,7 @@ function S.rebuild(parts, owned, presets_of)
             local items, item_of = {}, {}
             for i, cn in ipairs(part.names) do
                 local idx = i - 1
-                local key = cn ~= "" and by_name[S.key_of(cn)]
+                local key = cn ~= "" and not Labels.separator_title(S.key_of(cn)) and by_name[S.key_of(cn)]
                 if key and not own[idx] then
                     local it = item_of[key.name]
                     if not it then
@@ -189,6 +200,7 @@ function S.rebuild(parts, owned, presets_of)
     for _, k in ipairs(keys) do k.owner = (k.free == 0) and "expression" or "self" end
     table.sort(keys, function(a, b)
         if a.group ~= b.group then return a.group < b.group end
+        if a.pos ~= b.pos then return a.pos < b.pos end
         return a.name < b.name
     end)
     K.keys, K.by_name, K.targets = keys, by_name, targets
@@ -210,7 +222,8 @@ end
 -- holds the keys of option n at their fixed values (key.held); every other key of the group, and
 -- all of them at 0, are free and show their own values (2026-11-02: before, they went back to the
 -- mod default and could not be edited). Options of one group may share a key with different values
--- (one key, several steps); a key belongs to one group only, so groups never fight each other.
+-- (one key, several steps). A key may be in several groups: the highest group in the list whose
+-- selected option names it sets its value.
 -- Groups belong to the loaded sculpt preset (key_groups); a held key ignores its per-part values.
 -- K.groups = { { name, value = 0..#options, options = { { name, values = { key = value } } } } }
 S.MAX_OPTIONS = 8
@@ -234,9 +247,12 @@ local function index_groups()
                 end
             end
             for n, real in pairs(renamed) do o.values[real], o.values[n] = o.values[n], nil end
+            -- K.member[n]: the groups the key is in, in list order, each with the options naming it
             for n in pairs(o.values) do
-                local m = K.member[n]
-                if not m or m.group ~= g then m = { group = g, options = {} }; K.member[n] = m end
+                local list = K.member[n]
+                if not list then list = {}; K.member[n] = list end
+                local m = list[#list]
+                if not m or m.group ~= g then m = { group = g, options = {} }; list[#list + 1] = m end
                 m.options[i] = true
             end
         end
@@ -247,13 +263,16 @@ end
 -- held at (it stays where it was on screen); undo / redo restore the free values as they were.
 function refresh_held(keep)
     index_groups()
-    local lo, hi = S.RANGE[1], S.RANGE[2]
+    local lo, hi = S.RANGE[1], S.MAX_LIMIT
     local changed = false
     for _, k in ipairs(K.keys) do
         local m = K.member[k.name]
         local v = nil
-        if m and m.options[m.group.value] then
-            v = U.clamp(tonumber(m.group.options[m.group.value].values[k.name]) or 0, lo, hi)
+        for _, g in ipairs(m or {}) do
+            if g.options[g.group.value] then
+                v = U.clamp(tonumber(g.group.options[g.group.value].values[k.name]) or 0, lo, hi)
+                break
+            end
         end
         if keep and not m and k.held ~= nil then
             k.value, k.overrides, k.touched = k.held, {}, true
@@ -273,9 +292,14 @@ function S.effective(k, part)
     return k.value
 end
 
+-- the group holding the key now, else the first group it is in (nil: in no group)
 function S.group_of(name)
     local m = K.member[name]
-    if m then return m.group end
+    if not m then return nil end
+    for _, g in ipairs(m) do
+        if g.options[g.group.value] then return g.group end
+    end
+    return m[1].group
 end
 
 local function find_group(ref)
@@ -371,18 +395,15 @@ function S.option_delete(ref, i)
 end
 
 -- names: keys to put into option i with their fixed value (values[name], else the key's current
--- value when it differs from the default, else 1). A key another group holds is refused:
--- returns false, "E_CONFLICT", name, group name.
+-- value when it differs from the default, else 1). A key may be in other groups too.
 function S.option_assign(ref, i, names, values)
     local g, o, code, msg = find_option(ref, i)
     if not g then return o, code, msg end
     for _, n in ipairs(names) do
         if not K.by_name[n] then return false, "E_NOT_FOUND", "unknown sculpt key: " .. tostring(n) end
-        local m = K.member[n]
-        if m and m.group ~= g then return false, "E_CONFLICT", n, m.group.name end
     end
     group_edit(nil)
-    local lo, hi = S.RANGE[1], S.RANGE[2]
+    local lo, hi = S.RANGE[1], S.MAX_LIMIT
     for _, n in ipairs(names) do
         local k = K.by_name[n]
         local v = values and tonumber(values[n])
@@ -394,8 +415,8 @@ function S.option_assign(ref, i, names, values)
     return true
 end
 
--- the keys leave option i of group ref (ref nil: every option of their group). A key that leaves
--- its group keeps its current value and returns to the key list.
+-- the keys leave option i of group ref (ref nil: every option of every group). A key that leaves
+-- its groups keeps its current value and returns to the key list.
 function S.unassign(names, ref, i)
     local g, o, code, msg
     if ref ~= nil then
@@ -410,7 +431,11 @@ function S.unassign(names, ref, i)
     group_edit(nil)
     for _, n in ipairs(names) do
         if o then o.values[n] = nil
-        else for _, opt in ipairs(K.member[n].group.options) do opt.values[n] = nil end end
+        else
+            for _, m in ipairs(K.member[n]) do
+                for _, opt in ipairs(m.group.options) do opt.values[n] = nil end
+            end
+        end
     end
     S.apply_groups()
     return true
@@ -551,18 +576,10 @@ function S.check_editable(name)
     return nil
 end
 
--- global slider cap: values above it are clamped now (and written on the next tick)
+-- global slider cap for values set by hand; values already above it stay
 function S.set_max(m)
     m = U.clamp(tonumber(m) or 1.0, 1.0, S.MAX_LIMIT) + 0.0   -- settings.json gives the integer 1
     S.RANGE[2] = m
-    for _, k in ipairs(K.keys) do
-        k.value = U.clamp(k.value, S.RANGE[1], m)
-        k.default = U.clamp(k.default, S.RANGE[1], m)
-        k.preset_value = U.clamp(k.preset_value, S.RANGE[1], m)
-        for p, v in pairs(k.overrides) do k.overrides[p] = U.clamp(v, S.RANGE[1], m) end
-        for p, v in pairs(k.preset_overrides) do k.preset_overrides[p] = U.clamp(v, S.RANGE[1], m) end
-    end
-    S.mark_dirty()
     return m
 end
 
@@ -641,7 +658,7 @@ end
 function S.apply_preset(preset)
     S.push_undo(nil)
     K.groups, K.groups_touched = U.copy(preset.key_groups or {}), true
-    local lo, hi = S.RANGE[1], S.RANGE[2]
+    local lo, hi = S.RANGE[1], S.MAX_LIMIT
     for _, k in ipairs(K.keys) do
         do
             local v = lookup(preset.values, k.name)

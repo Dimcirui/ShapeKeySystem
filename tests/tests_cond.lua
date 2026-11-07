@@ -279,6 +279,39 @@ if hd then click(hd) end
 check(Panel.ui.page_state.cond.open_clip == nil and not find("添加形态键"), "13: a combination collapses")
 if hd then click(exact("smile")) end
 check(Panel.ui.page_state.cond.open_clip == "smile", "13: and opens again")
+-- 16: renaming a combination; the states that play it follow the new name
+do
+    local U = require("ShapeKeySystem_Core.Util")
+    local d = U.copy(st.conditions.current.data)
+    d.states[#d.states + 1] = { clip = "smile", rules = {} }
+    d.clips.taken = { values = {}, fade_in = 0.15, fade_out = 0.3 }
+    SKS.call("cond_edit", { data = d }); frame()
+    local function rename(to)
+        local rb
+        for _, dd in ipairs(DRAWS) do
+            -- the 重命名 button on the smile row
+            if dd.s == "重命名" and exact("smile") and math.abs(dd.y - exact("smile").y) < 12 then rb = dd end
+        end
+        if rb then click(rb) end
+        INPUT_EDITS.conditions_clip = to; frame()
+        local ok_btn = exact("确定")
+        if ok_btn then click(ok_btn) end
+        frame(); frame()
+        return rb ~= nil
+    end
+    check(rename("taken"), "16: rename button drawn on the combination row")
+    local clips = st.conditions.current.data.clips
+    check(clips.smile ~= nil and clips.taken ~= nil and #clips.taken.values == 0 and next(clips.taken.values) == nil,
+        "16: a name already in use is refused")
+    rename("grin")
+    local data = st.conditions.current.data
+    check(data.clips.grin ~= nil and data.clips.smile == nil and data.states[#data.states].clip == "grin"
+        and Panel.ui.page_state.cond.open_clip == "grin", "16: renamed; the state and the open row follow")
+    local d2 = U.copy(data)
+    d2.clips.grin, d2.clips.smile, d2.clips.taken = nil, d2.clips.grin, nil
+    d2.states[#d2.states] = nil
+    SKS.call("cond_edit", { data = d2 }); Panel.ui.page_state.cond.open_clip = "smile"; frame()
+end
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
 
 -- remap rule (2026-10-10): a clip never pushes a sculpted key down, and s >= 1 is kept
