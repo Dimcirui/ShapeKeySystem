@@ -212,6 +212,19 @@ function I.install(is_enabled, failed, on_forced)
         return retval
     end)
     if counters.hooks == 0 then live = false; failed("RE4R managed mouse hooks unavailable"); return end
+    -- the game's own cursor gate: answer true while blocking (and until the mouse button is let go
+    -- after closing). With AVM installed both hook it; either one blocking keeps the cursor shown.
+    local gm = sdk.find_type_definition("chainsaw.GuiManager")
+    local m = gm and gm:get_method("isMousePointerDispGui(chainsaw.RenderOutputType, via.hid.GamePadButton)")
+    if m then
+        local ok, e2 = pcall(sdk.hook, m, nil, function(r)
+            if should_block() then forced(); return sdk.to_ptr(true) end
+            return r
+        end)
+        if not ok then failed("isMousePointerDispGui " .. tostring(e2)) end
+    else
+        failed("chainsaw.GuiManager.isMousePointerDispGui")
+    end
     local command_ok, command_error = pcall(function()
         command_type = sdk.find_type_definition("share.hid.Command")
         if not command_type then error("share.hid.Command unavailable") end
