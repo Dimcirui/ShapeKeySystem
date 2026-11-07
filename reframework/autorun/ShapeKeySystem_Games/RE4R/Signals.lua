@@ -69,6 +69,15 @@ function S.bind(face, keys, calibration, read_only)
         count = call(mesh, "get_BlendShapeChannelNum") }
     local hashes = S.hashes(mesh)
     h.joints = B.bind_joints(face, data)
+    -- the joints and crct taps as lists, for one ShapeKeySystem_Native.dll call per read
+    h.joint_names, h.joint_addresses = {}, {}
+    for name, joint in pairs(h.joints) do
+        local ok, address = pcall(joint.get_address, joint)
+        if ok and address then
+            h.joint_names[#h.joint_names + 1] = name
+            h.joint_addresses[#h.joint_addresses + 1] = address
+        end
+    end
     h.face_address = face:get_address()
     local watched = {}
     for name, spec in pairs(data.joints) do watched[#watched + 1] = spec.bone or name end
@@ -78,6 +87,11 @@ function S.bind(face, keys, calibration, read_only)
         for _, name in ipairs(rule.taps or {}) do
             h.taps[name] = hashes[Hash.hash(PREFIX .. name)]
         end
+    end
+    h.tap_names, h.tap_indices = {}, {}
+    for name, idx in pairs(h.taps) do
+        h.tap_names[#h.tap_names + 1] = name
+        h.tap_indices[#h.tap_indices + 1] = idx
     end
     h.read_only = read_only
     return h, #keys
@@ -90,10 +104,24 @@ function S.read(h, P, inv_full)
     local taps = {}
     local motion_values = {}
     local mesh = h.mesh
-    local cn, wc = call(mesh, "get_BlendShapeChannelNum"), call(mesh, "get_BlendShapeChannelWeightCount")
-    local length = call(call(mesh, "get_ChannelWeightList"), "get_Length")
-    local bound = finite(cn) and finite(wc) and finite(length) and cn == h.count
-    local limit = bound and math.min(cn, wc, length) or 0
+    local native = rawget(_G, "sks_native")
+    local prefetched, bound, limit
+    if type(native) == "table" and type(native.tap_weights) == "function" and h.tap_indices then
+        local ok, got = pcall(function() return native.tap_weights(mesh:get_address(), h.tap_indices) end)
+        if ok and type(got) == "table" then
+            local cn, max = got[1], got[2]
+            bound = finite(cn) and finite(max) and cn == h.count
+            limit = bound and max or 0
+            prefetched = {}
+            for k, name in ipairs(h.tap_names) do prefetched[name] = got[k + 2] end
+        end
+    end
+    if not prefetched then
+        local cn, wc = call(mesh, "get_BlendShapeChannelNum"), call(mesh, "get_BlendShapeChannelWeightCount")
+        local length = call(call(mesh, "get_ChannelWeightList"), "get_Length")
+        bound = finite(cn) and finite(wc) and finite(length) and cn == h.count
+        limit = bound and math.min(cn, wc, length) or 0
+    end
     local function source(rule)
         local value
         for _, name in ipairs(rule.taps) do
@@ -104,7 +132,8 @@ function S.read(h, P, inv_full)
                     if not bound then state = "bounds_unavailable"
                     elseif idx >= limit then state = "out_of_bounds"
                     else
-                        v = call(mesh, "getBlendShapeChannelWeightParam", idx)
+                        if prefetched then v = prefetched[name] or nil
+                        else v = call(mesh, "getBlendShapeChannelWeightParam", idx) end
                         state = finite(v) and "ok" or "read_failed"
                     end
                 end
@@ -138,6 +167,24 @@ function S.read(h, P, inv_full)
     motion_values = NativeFace.read(h.animation, not h.read_only, select_bones)
     h.motion_values = motion_values
     local sample_bone = B.sampler(h.joints)
+    -- ShapeKeySystem_Native.dll reads every calibrated joint in one call
+    if type(native) == "table" and type(native.joint_poses) == "function" and h.joint_addresses then
+        local ok, flat = pcall(native.joint_poses, h.joint_addresses)
+        if ok and type(flat) == "table" then
+            local poses = {}
+            for i, name in ipairs(h.joint_names) do
+                local b = (i - 1) * 7
+                if finite(flat[b + 1]) then
+                    poses[name] = { {x = flat[b + 1], y = flat[b + 2], z = flat[b + 3]},
+                        {x = flat[b + 4], y = flat[b + 5], z = flat[b + 6], w = flat[b + 7]} }
+                end
+            end
+            sample_bone = function(name)
+                local pose = poses[name]
+                if pose then return pose[1], pose[2] end
+            end
+        end
+    end
     local actual = {}
     local function real_sample(name)
         if not h.joints[name] then return end

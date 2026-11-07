@@ -346,6 +346,24 @@ function A.layout_valid(root, layout)
     if layout.primary and object_address(h) ~= layout.head then return false end
     layout.checks = (layout.checks or 0) + 1
     local full = layout.checks % FULL_LAYOUT_CHECK == 1
+    -- ShapeKeySystem_Native.dll walks the routes and compares the addresses in one call
+    local native = rawget(_G, "sks_native")
+    if not full and type(native) == "table" and type(native.layout_walk) == "function" then
+        local flat = layout.native_routes
+        if not flat then
+            flat = {}
+            for _, route in ipairs(layout.routes) do
+                flat[#flat + 1] = route.anchor == "head" and 1 or 0
+                flat[#flat + 1] = #route.steps
+                for _, index in ipairs(route.steps) do flat[#flat + 1] = index end
+                flat[#flat + 1] = route.transform
+                flat[#flat + 1] = route.mesh
+            end
+            layout.native_routes = flat
+        end
+        local ok, same = pcall(native.layout_walk, layout.root, layout.primary and layout.head or 0, flat)
+        if ok and type(same) == "boolean" then return same end
+    end
     for _, route in ipairs(layout.routes) do
         local tr = route.anchor == "head" and h or root
         for _, index in ipairs(route.steps) do

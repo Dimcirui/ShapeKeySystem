@@ -707,6 +707,126 @@ static int l_motion_curves(lua_State *L)
     return 1;
 }
 
+/* ---------------------------------------------------------------- per-frame reads */
+typedef struct {
+    REFrameworkMethodHandle local_position, local_rotation, weight, child, next;
+} ReadMethods;
+static ReadMethods RM;
+static int read_state;
+
+static int resolve_read_methods(void)
+{
+    if (read_state) return read_state;
+    REFrameworkTDBHandle tdb = sdk->functions->get_tdb();
+    ReadMethods m;
+    m.local_position = sdk->tdb->find_method(tdb, "via.Joint", "get_LocalPosition");
+    m.local_rotation = sdk->tdb->find_method(tdb, "via.Joint", "get_LocalRotation");
+    m.weight = sdk->tdb->find_method(tdb, "via.render.Mesh", "getBlendShapeChannelWeightParam(System.UInt64)");
+    m.child = sdk->tdb->find_method(tdb, "via.Transform", "get_Child");
+    m.next = sdk->tdb->find_method(tdb, "via.Transform", "get_Next");
+    read_state = m.local_position && m.local_rotation && m.weight && m.child && m.next ? 1 : -1;
+    if (read_state == 1) RM = m;
+    return read_state;
+}
+
+/* joint_poses({joint...}) -> {px, py, pz, qx, qy, qz, qw, ...}; a joint that cannot be read
+   gives false in all seven slots (BoneSignals.sampler) | nil, error */
+static int l_joint_poses(lua_State *L)
+{
+    luaL_checktype(L, 1, LUA_TTABLE);
+    if (resolve_read_methods() != 1) { lua_pushnil(L); lua_pushstring(L, "joint methods missing"); return 2; }
+    lua_Integer n = luaL_len(L, 1);
+    lua_createtable(L, (int)(n * 7), 0);
+    for (lua_Integer i = 1; i <= n; ++i) {
+        lua_rawgeti(L, 1, i);
+        void *joint = (void *)(uintptr_t)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        float p[3], q[4];
+        Ret r;
+        bool ok = managed(joint) && call0(RM.local_position, joint, &r);
+        if (ok) memcpy(p, r.bytes, sizeof(p));
+        ok = ok && call0(RM.local_rotation, joint, &r);
+        if (ok) memcpy(q, r.bytes, sizeof(q));
+        for (int k = 0; k < 7; ++k) {
+            if (ok) lua_pushnumber(L, k < 3 ? p[k] : q[k - 3]); else lua_pushboolean(L, 0);
+            lua_rawseti(L, -2, (i - 1) * 7 + k + 1);
+        }
+    }
+    return 1;
+}
+
+/* tap_weights(mesh, {channel index...}) -> {channel count | false, limit | false, weight | false, ...};
+   channels at or above the limit are not read | nil, error */
+static int l_tap_weights(lua_State *L)
+{
+    void *mesh = (void *)check_address(L, 1);
+    luaL_checktype(L, 2, LUA_TTABLE);
+    if (resolve_mesh_methods() != 1 || resolve_read_methods() != 1) {
+        lua_pushnil(L); lua_pushstring(L, "mesh methods missing"); return 2;
+    }
+    if (!managed(mesh)) { lua_pushnil(L); lua_pushstring(L, "invalid mesh"); return 2; }
+    lua_Integer n = luaL_len(L, 2);
+    lua_createtable(L, (int)n + 2, 0);
+    Ret r;
+    if (call0(MM.channels, mesh, &r)) lua_pushinteger(L, (int32_t)r.dword); else lua_pushboolean(L, 0);
+    lua_rawseti(L, -2, 1);
+    int64_t limit = mesh_limit(mesh);
+    if (limit >= 0) lua_pushinteger(L, limit); else lua_pushboolean(L, 0);
+    lua_rawseti(L, -2, 2);
+    for (lua_Integer i = 1; i <= n; ++i) {
+        lua_rawgeti(L, 2, i);
+        lua_Integer idx = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+        bool ok = false;
+        if (idx >= 0 && idx < limit) {
+            void *args[1] = { (void *)(uintptr_t)idx };
+            ok = call(RM.weight, mesh, args, 1, &r) && finite(r.d);
+        }
+        if (ok) lua_pushnumber(L, r.d); else lua_pushboolean(L, 0);
+        lua_rawseti(L, -2, i + 2);
+    }
+    return 1;
+}
+
+/* layout_walk(root, head, {anchor, step count, steps..., transform, mesh, ...}) -> true when every
+   route still reaches the same transform and mesh (anchor 1 = head, 0 = root) | false | nil, error */
+static int l_layout_walk(lua_State *L)
+{
+    void *root = (void *)check_address(L, 1);
+    void *head = (void *)(uintptr_t)luaL_optinteger(L, 2, 0);
+    luaL_checktype(L, 3, LUA_TTABLE);
+    if (resolve_read_methods() != 1 || resolve_scene_methods() != 1) {
+        lua_pushnil(L); lua_pushstring(L, "transform methods missing"); return 2;
+    }
+    lua_Integer len = luaL_len(L, 3), at = 1;
+#define NEXT_VALUE(out) do { lua_rawgeti(L, 3, at++); out = lua_tointeger(L, -1); lua_pop(L, 1); } while (0)
+    while (at <= len) {
+        lua_Integer anchor, steps, want_transform, want_mesh;
+        NEXT_VALUE(anchor);
+        NEXT_VALUE(steps);
+        void *tr = anchor == 1 ? head : root;
+        for (lua_Integer s = 0; s < steps; ++s) {
+            lua_Integer index;
+            NEXT_VALUE(index);
+            Ret r;
+            if (!tr || !call0(RM.child, tr, &r)) tr = NULL; else tr = r.ptr;
+            for (lua_Integer k = 0; tr && k < index; ++k) tr = call0(RM.next, tr, &r) ? r.ptr : NULL;
+        }
+        NEXT_VALUE(want_transform);
+        NEXT_VALUE(want_mesh);
+        Ret r;
+        if (!tr || (lua_Integer)(uintptr_t)tr != want_transform) { lua_pushboolean(L, 0); return 1; }
+        if (!call0(SM.game_object, tr, &r) || !r.ptr) { lua_pushboolean(L, 0); return 1; }
+        void *type_arg[1] = { SM.mesh_type };
+        if (!call(SM.get_component, r.ptr, type_arg, 1, &r) || (lua_Integer)(uintptr_t)r.ptr != want_mesh) {
+            lua_pushboolean(L, 0); return 1;
+        }
+    }
+#undef NEXT_VALUE
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static int l_version(lua_State *L) { lua_pushinteger(L, NATIVE_VERSION); return 1; }
 
 static void sks_register(lua_State *L)
@@ -714,6 +834,7 @@ static void sks_register(lua_State *L)
     static const luaL_Reg fns[] = { { "version", l_version }, { "pose_bind", l_pose_bind },
         { "pose_free", l_pose_free }, { "pose_read", l_pose_read }, { "write_weights", l_write_weights },
         { "motion_meshes", l_motion_meshes }, { "motion_curves", l_motion_curves },
+        { "joint_poses", l_joint_poses }, { "tap_weights", l_tap_weights }, { "layout_walk", l_layout_walk },
         { NULL, NULL } };
     lua_newtable(L);
     luaL_setfuncs(L, fns, 0);

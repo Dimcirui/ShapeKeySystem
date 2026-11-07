@@ -245,6 +245,54 @@ check(h.status.jaw_openExtreme=="out_of_bounds", "zero WeightCount blocks native
 count=#CHANNELS; length=0; A.read(h,P,1)
 check(h.status.jaw_openExtreme=="out_of_bounds", "live managed list bounds checked")
 length=#CHANNELS
+-- ShapeKeySystem_Native.dll: batched tap and joint reads give the Lua read's values and states
+do
+    local W = require("ShapeKeySystem_Core.Writer")
+    -- engine joints have addresses; the bind collects them for the plugin
+    local joints, next_address = {}, 0x7000
+    for _, joint in pairs(ARMOR._joints) do
+        if not joint.get_address then
+            next_address = next_address + 0x10
+            local address = next_address
+            joint.get_address = function() return address end
+        end
+        joints[joint:get_address()] = joint
+    end
+    local h = A.bind(ARMOR, {key})
+    local function compare_reads(label)
+        sks_native = nil
+        local plain = {}; A.read(h, plain, 1)
+        local plain_status = {}; for k, v in pairs(h.status) do plain_status[k] = v end
+        sks_native = {
+            tap_weights = function(address, indices)
+                local out = { W.M_CN:call(m), W.limit(m) }
+                for i, idx in ipairs(indices) do
+                    out[i + 2] = idx < out[2] and W.M_GETW:call(m, idx) or false
+                end
+                return out
+            end,
+            joint_poses = function(addresses)
+                local out = {}
+                for i, address in ipairs(addresses) do
+                    local joint = joints[address]
+                    local p, q = joint:call("get_LocalPosition()"), joint:call("get_LocalRotation()")
+                    local row = p and q and { p.x, p.y, p.z, q.x, q.y, q.z, q.w } or { false, false, false, false, false, false, false }
+                    for k = 1, 7 do out[(i - 1) * 7 + k] = row[k] end
+                end
+                return out
+            end,
+        }
+        local batched = {}; A.read(h, batched, 1)
+        local same = true
+        for k, v in pairs(plain) do if math.abs((batched[k] or 0) - v) > 1e-9 then same = false end end
+        for k, v in pairs(plain_status) do if h.status[k] ~= v then same = false end end
+        sks_native = nil
+        check(same, "native batched reads match the Lua read: " .. label)
+    end
+    WEIGHTS[0] = 0.5; compare_reads("in bounds")
+    count = 0; compare_reads("zero weight count"); count = #CHANNELS
+    length = 0; compare_reads("empty managed list"); length = #CHANNELS
+end
 local ok,code,msg=SKS.call("set_profile",{id="synthetic"})
 check(ok,"synthetic exact-name profile selected: "..tostring(msg))
 local function ticks(n) for _=1,n do CB.tick() end end
