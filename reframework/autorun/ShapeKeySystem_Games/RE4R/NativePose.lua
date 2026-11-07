@@ -1,7 +1,9 @@
 -- Read facial poses from active animation resources, including joints absent from the mesh.
 -- Each rig owns its query buffers and only requests joints absent from its mesh.
 local Hash = require("ShapeKeySystem_Core.NameHash")
+local Trail = require("ShapeKeySystem_Core.Trail")
 local P = {}
+local clock = os.clock
 local function finite(v) return type(v) == "number" and v == v and math.abs(v) < math.huge end
 local function clamp(v) return math.max(0, math.min(1, v)) end
 local function call(o, method, ...)
@@ -44,6 +46,36 @@ local function mouth(name)
     return name == "C_Chin" or name == "C_Jaw" or name:find("Lip", 1, true) ~= nil
         or name:find("Mouth", 1, true) ~= nil
 end
+-- ShapeKeySystem_Native.dll (sks_native) runs the same read with far fewer Lua-engine calls.
+-- Rigs are rebound on every scan, so one native binding serves every rig with the same joints.
+local native_ids = {}
+local function native()
+    local n = rawget(_G, "sks_native")
+    return type(n) == "table" and type(n.pose_read) == "function" and n or nil
+end
+local function native_bind(sorted)
+    local n = native()
+    if not n then return nil end
+    local flat = {}
+    for i, spec in ipairs(sorted) do
+        local neutral = spec.neutral
+        if type(neutral) ~= "table" then return nil end
+        for k = 1, 7 do if not finite(neutral[k]) then return nil end end
+        spec.index = i
+        flat[#flat + 1] = spec.hash
+        flat[#flat + 1] = Hash.hash(mirror_name(spec.name))
+        flat[#flat + 1] = (eyelid(spec.name) and 1 or 0) + (mouth(spec.name) and 2 or 0)
+        for k = 1, 7 do flat[#flat + 1] = neutral[k] end
+    end
+    if #flat == 0 then return nil end
+    local key = table.concat(flat, ",")
+    if native_ids[key] == nil then
+        local ok, id = pcall(n.pose_bind, flat)
+        native_ids[key] = ok and id or false
+    end
+    return native_ids[key] or nil
+end
+
 function P.bind(motion, bones)
     local specs = {}
     for _, bone in pairs(bones) do
@@ -52,7 +84,8 @@ function P.bind(motion, bones)
     local sorted = {}
     for _, spec in pairs(specs) do sorted[#sorted + 1] = spec end
     table.sort(sorted, function(a, b) return a.name < b.name end)
-    return {motion = motion, specs = sorted, masks = {}, errors = {}, error_seen = {}}
+    return {motion = motion, specs = sorted, masks = {}, errors = {}, error_seen = {},
+        native_id = native_bind(sorted), reads = 0}
 end
 local function buffers(h)
     if h.info and h.data then return true end
@@ -183,6 +216,74 @@ local function read(h, controller, specs)
     end
     return result
 end
+local function read_native(h, controller, specs)
+    if not buffers(h) then return {} end
+    local blink = call(controller, "get_Layer_Blink")
+    local lipsync = call(controller, "get_Layer_Lipsync")
+    local selected = h.native_selected or {}
+    h.native_selected = selected
+    for i = #selected, 1, -1 do selected[i] = nil end
+    for i, spec in ipairs(specs) do selected[i] = spec.index end
+    local out, why = native().pose_read(h.native_id, h.motion:get_address(), h.info:get_address(),
+        h.data:get_address(), finite(blink) and blink or -1, finite(lipsync) and lipsync or -1, selected)
+    if not out then error(why or "native pose read failed") end
+    local result = {}
+    for i, spec in ipairs(specs) do
+        local b = (i - 1) * 10
+        if out[b + 1] == 1 then
+            local pose = {source = "animation_resource"}
+            if out[b + 2] == 1 then pose.position = {out[b + 3], out[b + 4], out[b + 5]} end
+            if out[b + 6] == 1 then pose.rotation = {out[b + 7], out[b + 8], out[b + 9], out[b + 10]} end
+            result[spec.name] = pose
+        end
+    end
+    return result
+end
+
+-- largest difference between the native and the Lua read (positions, rotations up to sign)
+local function difference(a, b)
+    local worst, joints = 0, 0
+    local names = {}
+    for name in pairs(a) do names[name] = true end
+    for name in pairs(b) do names[name] = true end
+    for name in pairs(names) do
+        joints = joints + 1
+        local x, y = a[name], b[name]
+        if not x or not y or (x.position == nil) ~= (y.position == nil) or (x.rotation == nil) ~= (y.rotation == nil) then
+            return math.huge, joints
+        end
+        if x.position then
+            for k = 1, 3 do worst = math.max(worst, math.abs(x.position[k] - y.position[k])) end
+        end
+        if x.rotation then
+            local same, flip = 0, 0
+            for k = 1, 4 do
+                same = math.max(same, math.abs(x.rotation[k] - y.rotation[k]))
+                flip = math.max(flip, math.abs(x.rotation[k] + y.rotation[k]))
+            end
+            worst = math.max(worst, math.min(same, flip))
+        end
+    end
+    return worst, joints
+end
+
+-- every 600 reads: both paths 8 times each, the difference and timings go to trail.log
+local function compare(h, controller, specs, poses)
+    local t0 = clock()
+    for _ = 1, 8 do pcall(read_native, h, controller, specs) end
+    local t1 = clock()
+    local ok, lua_poses
+    for _ = 1, 8 do ok, lua_poses = pcall(read, h, controller, specs) end
+    local t2 = clock()
+    if not ok then
+        Trail.event("native pose check: Lua read failed (%s)", tostring(lua_poses))
+        return
+    end
+    local diff, joints = difference(poses, lua_poses)
+    Trail.event("native pose check: %d joints, max diff %.3g, native %.3f ms, Lua %.3f ms",
+        joints, diff, (t1 - t0) * 1000 / 8, (t2 - t1) * 1000 / 8)
+end
+
 function P.read(h, controller, needed)
     local specs = h.specs
     if needed then
@@ -193,6 +294,17 @@ function P.read(h, controller, needed)
         specs = selected
     end
     if #specs == 0 then return {} end
+    if h.native_id and native() then
+        local ok, poses = pcall(read_native, h, controller, specs)
+        if ok then
+            h.reads = h.reads + 1
+            if h.reads % 600 == 1 then compare(h, controller, specs, poses) end
+            return poses
+        end
+        -- this rig falls back to the Lua read
+        h.native_id = nil
+        Trail.event("native pose read failed, using Lua: %s", tostring(poses))
+    end
     local ok, poses = pcall(read, h, controller, specs)
     if not ok then
         local why = tostring(poses)
