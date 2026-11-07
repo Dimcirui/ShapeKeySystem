@@ -19,8 +19,18 @@ local C = T.c
 local max, min, floor = math.max, math.min, math.floor
 
 local SOURCE = { user = "用户", mods = "mod 自带" }
-local STATUS = { active = { "生效中", C.ok }, outranked = { "命中，但被上面的独占状态压着", C.warn }, idle = { "未命中", C.faint },
-    off = { "已停用", C.faint } }
+-- each status has its own text, colour and marker shape, so neither colour nor text alone tells them apart
+local STATUS = { active = { "生效", C.ok, "dot" }, outranked = { "被覆盖", C.error, "tri" },
+    idle = { "未命中", C.faint, "ring" }, off = { "已停用", C.faint, "square" } }
+local MARK_W = 14
+
+-- status marker centred at (cx, cy): ● active, ▲ outranked, ○ idle, ■ off
+local function status_mark(shape, cx, cy, color)
+    if shape == "dot" then D.fill_circle(cx, cy, 4, color)
+    elseif shape == "tri" then D.quad(cx, cy - 4.5, cx + 5, cy + 4, cx - 5, cy + 4, cx, cy - 4.5, color)
+    elseif shape == "ring" then D.outline(cx - 4, cy - 4, 8, 8, 4, 1.5, color)
+    else D.rect(cx - 3.5, cy - 3.5, 7, 7, color) end
+end
 local UNBOUND = "-"
 local NUM_OPS = { "<=", "<", ">=", ">", "==" }
 local ENUM_OPS = { "==", "~=" }
@@ -232,6 +242,7 @@ local function states_section(ctx, x, y, w)
     local clip_labels = { UNBOUND }
     for k, id in ipairs(clip_ids) do clip_labels[k + 1] = id end
     local status = live.cond and live.cond.status or {}
+    local status_by = live.cond and live.cond.status_by or {}
     s.closed = s.closed or {}
     for si, state in ipairs(data.states) do
         -- states start collapsed; only an explicit false keeps one open
@@ -251,8 +262,11 @@ local function states_section(ctx, x, y, w)
             local ch, i = W.select("st_clip" .. si, x + 38, cy + 8, min(200, w * 0.3), 28, clip_labels, ci, { placeholder = state.clip })
             if ch then edit(ctx, function(d) d.states[si].clip = i == 1 and "" or clip_ids[i - 1] end) end
             local stx = STATUS[status[si] or (state.clip == "" and "off" or "idle")]
+            local by = status[si] == "outranked" and status_by[si] and data.states[status_by[si]]
+            local stext = by and L.f("被「%s」覆盖", by.clip) or stx[1]
             local chx = x + 48 + min(200, w * 0.3)
-            local chw = W.chip(stx[1], chx, cy + 13, stx[2])
+            status_mark(stx[3], chx + 5, cy + 22, stx[2])
+            local chw = MARK_W + W.chip(stext, chx + MARK_W, cy + 13, stx[2])
             local bx = x + w - 10
             if closed then
                 -- the summary stops before the move / delete buttons drawn right to left below

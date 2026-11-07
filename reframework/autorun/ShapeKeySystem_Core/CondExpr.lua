@@ -38,6 +38,7 @@ local hold_until = setmetatable({}, { __mode = "k" })   -- rule table -> os.cloc
 E.playing = nil         -- clip id of the highest playing state (or the preview)
 E.playing_set = {}      -- clip ids playing now, highest state first
 E.status = {}           -- per state index: "active" | "outranked" | "idle" | "off"
+E.status_by = {}        -- per outranked state index: index of the exclusive state above it
 E.animating = false     -- some weight is moving (sculpt keys need rewriting)
 local last_clock = nil
 local slot_cache, slot_cache_for = nil, nil
@@ -221,8 +222,10 @@ function E.update(live)
     for i = #set, 1, -1 do set[i] = nil end
     local status = E.status
     for i in pairs(status) do status[i] = nil end
+    local status_by = E.status_by
+    for i in pairs(status_by) do status_by[i] = nil end
     if data and live then
-        local stopped = false   -- an exclusive state above matched
+        local stopped = false   -- index of the exclusive state above that matched
         for i, s in ipairs(data.states) do
             local hit = false
             if s.clip == "" then
@@ -234,8 +237,8 @@ function E.update(live)
                 if hit and not stopped then
                     status[i] = "active"
                     if not want_of[s.clip] and data.clips[s.clip] then want_of[s.clip] = true; set[#set + 1] = s.clip end
-                    if s.exclusive then stopped = true end
-                elseif hit then status[i] = "outranked"
+                    if s.exclusive then stopped = i end
+                elseif hit then status[i], status_by[i] = "outranked", stopped
                 else status[i] = "idle" end
             end
         end

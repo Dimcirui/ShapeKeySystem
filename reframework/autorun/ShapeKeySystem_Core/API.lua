@@ -2902,13 +2902,15 @@ function C.build_cond_state()
 end
 
 -- live values for the panel (only while it is open)
-live.cond = { values = {}, status = {}, playing = nil, alpha = {}, sampled = false }
+live.cond = { values = {}, status = {}, status_by = {}, playing = nil, alpha = {}, sampled = false }
 function C.update_cond_live()
     local lc = live.cond
     for k in pairs(lc.values) do lc.values[k] = nil end
     for k, v in pairs(Cnd.V) do lc.values[k] = v end
     for k in pairs(lc.status) do lc.status[k] = nil end
     for k, v in pairs(CondExpr.status) do lc.status[k] = v end
+    for k in pairs(lc.status_by) do lc.status_by[k] = nil end
+    for k, v in pairs(CondExpr.status_by) do lc.status_by[k] = v end
     lc.playing = CondExpr.playing
     lc.playing_set = lc.playing_set or {}
     for k in pairs(lc.playing_set) do lc.playing_set[k] = nil end
