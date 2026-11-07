@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.16.0"
+V.number = "1.17.0"
 V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka, Moon"
 
 V.history = {
+    { version = "1.17.0", notes = "合成条件新增任一阶段选项；荒野与 RE4R 每帧开销进一步降低" },
     { version = "1.16.0", notes = "RE4R 新增持械、武器类型和合成条件，每帧开销大幅降低" },
     { version = "1.15.1", notes = "REFramework 菜单里可以弹出可视化界面" },
     { version = "1.15.0", notes = "新增导出为 mod 和多套驱动配置；鬼武者支持表情镜和条件" },
