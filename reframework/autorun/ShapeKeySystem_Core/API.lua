@@ -2890,7 +2890,8 @@ function C.build_cond_state()
                            data = U.copy(cur.data) } or nil
     local defs = {}
     for i, d in ipairs(Cnd.order) do
-        defs[i] = { id = d.id, label = d.label, kind = d.kind, options = d.options, min = d.min, max = d.max }
+        defs[i] = { id = d.id, label = d.label, kind = d.kind, options = d.options, min = d.min, max = d.max,
+                    hidden = d.hidden }
     end
     cs.defs = defs
     local b = C.binding

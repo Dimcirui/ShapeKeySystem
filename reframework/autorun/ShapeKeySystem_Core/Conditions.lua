@@ -72,7 +72,13 @@ function C.sample(frame)
     else
         last_hp, last_max = nil, nil
     end
+    if game.derive then game.derive(V) end
     return true
+end
+
+-- 载入的规则里旧条件 id 改写成适配器给出的等价条件（就地修改）
+function C.migrate(cond)
+    return game and game.migrate and game.migrate(cond) or false
 end
 
 -- ---------------------------------------------------------------- evaluation

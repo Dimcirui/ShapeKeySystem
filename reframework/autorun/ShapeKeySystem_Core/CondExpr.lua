@@ -88,6 +88,7 @@ local function normalize(d)
         s.rules = type(s.rules) == "table" and s.rules or {}
         for _, r in ipairs(s.rules) do
             r.conditions = type(r.conditions) == "table" and r.conditions or {}
+            for _, c in ipairs(r.conditions) do Cnd.migrate(c) end
             r.logic = (r.logic == "OR") and "OR" or "AND"
             r.hold = tonumber(r.hold) or 0
         end
