@@ -212,7 +212,9 @@ check(kw and kw.range[2] == 2, "cap 2: slider range follows")
 SKS.call("set_sculpt_key", { name = "Waist_thin", value = 3 }); ticks(1)
 check(math.abs(WEIGHTS[i_waist] - 2.0) < 1e-6, "clamped to the 0..2 range")
 SKS.call("set_setting", { key = "sculpt_max", value = 1.5 }); ticks(1)
-check(math.abs(WEIGHTS[i_waist] - 1.5) < 1e-6, "lowering the cap clamps existing values")
+check(math.abs(WEIGHTS[i_waist] - 2.0) < 1e-6, "lowering the cap keeps existing values")
+SKS.call("set_sculpt_key", { name = "Waist_thin", value = 3 }); ticks(1)
+check(math.abs(WEIGHTS[i_waist] - 1.5) < 1e-6, "a value set by hand stops at the lowered cap")
 SKS.call("set_setting", { key = "sculpt_max", value = 2 }); ticks(1)
 SKS.call("set_sculpt_key", { name = "Waist_thin", value = 3 }); ticks(1)
 check(st.sculpt.dirty and st.sculpt.can_undo, "dirty + undo available")
@@ -273,6 +275,16 @@ SKS.call("sculpt_undo"); ticks(1)
 check(math.abs(WEIGHTS[i_waist] - 0.25) < 1e-6, "loading is one undo step")
 ok, code = SKS.call("load_sculpt", { name = "nope" })
 check(not ok and code == "E_NOT_FOUND", "unknown preset -> E_NOT_FOUND")
+-- the slider cap limits values set by hand only: a preset and mod defaults may go above it
+SKS.call("set_setting", { key = "sculpt_max", value = 1 }); ticks(1)
+SKS.call("load_sculpt", { name = "Slim" }); ticks(1)
+check(math.abs(WEIGHTS[i_waist] - 1.2) < 1e-6, "cap 1: a preset value of 1.2 is written as 1.2")
+check(math.abs(WEIGHTS[i_other] - 1.5) < 1e-6, "cap 1: the mod default 1.5 is written as 1.5")
+SKS.call("set_sculpt_key", { name = "Waist_thin", value = 3 }); ticks(1)
+check(math.abs(WEIGHTS[i_waist] - 1.0) < 1e-6, "cap 1: a value set by hand stops at 1")
+SKS.call("sculpt_undo"); SKS.call("sculpt_undo"); ticks(1)
+check(math.abs(WEIGHTS[i_waist] - 0.25) < 1e-6, "undo back to before the load")
+SKS.call("set_setting", { key = "sculpt_max", value = 2 }); ticks(1)
 
 -- key groups: an integer switches between sets of keys with fixed values; 0 = the keys' own values
 do
@@ -290,10 +302,17 @@ do
     ok = SKS.call("key_group_assign", { group = "体型", option = 2, names = { "Other" }, values = { Other = 0.3 } })
     local ok2 = SKS.call("key_group_assign", { group = "体型", option = 2, names = { "Waist_thin" }, values = { Waist_thin = 0.5 } })
     check(ok and ok2, "options of one group share a key with their own values")
+    -- a key may be in two groups: the higher group whose selected option names it wins
     SKS.call("key_group_new", { name = "眼" }); SKS.call("key_group_option_add", { group = "眼", name = "x" })
-    local _, c3, m3 = SKS.call("key_group_assign", { group = "眼", option = 1, names = { "Other" } })
-    check(c3 == "E_CONFLICT" and tostring(m3):find("体型", 1, true), "a key of another group is refused and that group named")
-    SKS.call("key_group_delete", { group = "眼" })
+    local ok3 = SKS.call("key_group_assign", { group = "眼", option = 1, names = { "Other" }, values = { Other = 0.2 } })
+    SKS.call("key_group_set", { group = "眼", value = 1 }); ticks(1)
+    check(ok3 and math.abs(WEIGHTS[i_other] - 0.2) < 1e-6 and key("Other").held_by.group == "眼",
+        "a key in two groups: only the lower group selects it, so that group holds it")
+    SKS.call("key_group_set", { group = "体型", value = 2 }); ticks(1)
+    check(math.abs(WEIGHTS[i_other] - 0.3) < 1e-6 and key("Other").held_by.group == "体型",
+        "both groups select it: the higher group wins")
+    SKS.call("key_group_set", { group = "体型", value = 0 })
+    SKS.call("key_group_delete", { group = "眼" }); ticks(1)
     SKS.call("key_group_set", { group = "体型", value = 1 }); ticks(1)
     check(math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6 and math.abs(WEIGHTS[i_other] - 1.5) < 1e-6, "value 1: option 1 on, the other option's keys at their default")
     SKS.call("key_group_set", { group = 1, value = 2 }); ticks(1)
@@ -341,7 +360,20 @@ do
     SKS.call("sculpt_scan"); ticks(3)
     local twice = false
     for _, e in ipairs(st.presets.sculpt) do if e.name == "Twice" then twice = true end end
-    check(not twice, "a preset with a key in two groups is rejected")
+    check(twice, "a preset with a key in two groups loads")
+    -- an invalid preset is left out with a warning, not silently
+    dump("user\\sculpt\\Broken.json", { schema = "sks.sculpt/1", name = "Broken", key_groups = {
+        { name = "a", value = 5, options = { { name = "x", values = { Other = 1 } } } } } })
+    SKS.call("sculpt_scan"); ticks(3)
+    local broken, warned = false, 0
+    for _, e in ipairs(st.presets.sculpt) do if e.name == "Broken" then broken = true end end
+    for _, n in ipairs(st.runtime.notices) do if n.level == "warn" and n.text:find("Broken", 1, true) then warned = warned + 1 end end
+    check(not broken and warned == 1, "an invalid preset is not listed and a warning names it")
+    SKS.call("sculpt_scan"); ticks(3)
+    warned = 0
+    for _, n in ipairs(st.runtime.notices) do if n.level == "warn" and n.text:find("Broken", 1, true) then warned = warned + 1 end end
+    check(warned == 1, "the same error is reported once")
+    dump("user\\sculpt\\Broken.json", { deleted = true })
     dump("user\\sculpt\\Twice.json", { schema = "sks.sculpt/1", name = "Twice", key_groups = {
         { name = "a", value = 2, options = { { name = "x", values = { Other = 1 } }, { name = "y", values = { Other = 0.4 } } } } } })
     SKS.call("sculpt_scan"); ticks(3)

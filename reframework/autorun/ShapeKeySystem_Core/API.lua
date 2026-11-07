@@ -220,6 +220,19 @@ local function notice(level, text)
     return notice_seq
 end
 
+-- sculpt presets left out of the list as invalid: one warning per file and reason
+local reported_sculpt = {}
+local function load_sculpt_presets()
+    Presets.load_sculpt()
+    for _, e in ipairs(Presets.sculpt_errors or {}) do
+        local tag = e.path .. "|" .. tostring(e.msg)
+        if not reported_sculpt[tag] then
+            reported_sculpt[tag] = true
+            notice("warn", I18n.f("捏脸配置「%s」有错误，没有列出：%s", e.id or e.path, tostring(e.msg)))
+        end
+    end
+end
+
 local function save_soon() C.save_at = C.frame + 60 end
 -- gains as last saved: each save trails the gains that changed (a slider drag saves once, ~1 s
 -- after it stops)
@@ -690,7 +703,7 @@ local function build_sculpt_state()
                     default = k.default, overrides = held_by and {} or o, owner = k.owner,
                     locked = held_by ~= nil, mixed = k.owner == "expression", in_preset = k.in_preset == true,
                     in_group = kg ~= nil, key_group = kg and kg.name or nil, held_by = held_by,
-                    range = { Sculpt.RANGE[1], Sculpt.RANGE[2] } }
+                    range = { Sculpt.RANGE[1], Sculpt.RANGE[2] }, section = k.section }
         local g = gi[k.group]
         if not g then
             local name, slot = part_name(k.group)
@@ -2192,7 +2205,7 @@ local function scanned()
 end
 
 function cmds.sculpt_scan()
-    Presets.load_sculpt()
+    load_sculpt_presets()
     request_rescan(1)
     return true
 end
@@ -2784,7 +2797,7 @@ function SKS.init(adapter)
         for _, k in ipairs(Profile.signal_keys(s)) do C.dict_params[#C.dict_params + 1] = k end
     end
     Profile.load_all()
-    Presets.load_sculpt()
+    load_sculpt_presets()
     CondExpr.load_all()
     if cfg.conditions ~= "" then CondExpr.select(cfg.conditions) end
     build_settings_state(); build_eyes_state(); build_presets_state(); build_procedural_state()

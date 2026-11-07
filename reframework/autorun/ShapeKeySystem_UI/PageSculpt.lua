@@ -414,8 +414,12 @@ function Page.draw(ctx, x, y, w)
     local hide_np = s.hide_unpreset == true and any_preset
     for _, g in ipairs(sc.groups or {}) do
         local rows = {}
+        -- section titles (display only): shown above the first listed key of the section, not
+        -- while searching
+        local section, shown_section = nil, nil
         for _, i in ipairs(g.key_indices) do
             local k = sc.keys[i]
+            if k.section then section = k.section end
             local mod = abs(k.value - (k.default or 0)) > 1e-6
             -- a search finds every key, whatever is hidden
             local ok
@@ -426,19 +430,34 @@ function Page.draw(ctx, x, y, w)
                     and not (s.hide_held and k.held_by)
             end
             ok = ok and (not s.only_modified or mod)
-            if ok then rows[#rows + 1] = k end
+            if ok then
+                if filter == "" and section and section ~= shown_section then
+                    rows[#rows + 1] = { head = section }
+                    shown_section = section
+                end
+                rows[#rows + 1] = k
+            end
         end
-        if #rows > 0 then
+        local nkeys = 0
+        for _, k in ipairs(rows) do if not k.head then nkeys = nkeys + 1 end end
+        if nkeys > 0 then
             local open = not s.collapsed[g.key] or filter ~= ""
             -- a named part keeps its id next to the count (binding files are named by it)
-            local stat = g.name ~= g.key and L.f("%s · %d 项", g.key, #rows) or L.f("%d 项", #rows)
+            local stat = g.name ~= g.key and L.f("%s · %d 项", g.key, nkeys) or L.f("%d 项", nkeys)
             local clicked, hh = W.header(g.name, x, cy, w, open, stat)
             if clicked then s.collapsed[g.key] = open end
             cy = cy + hh + 2
             if open then
-                for _, k in ipairs(rows) do cy = cy + key_row(ctx, k, x, cy, w) end
+                for _, k in ipairs(rows) do
+                    if k.head then
+                        D.text(k.head, x + 12, cy + 6, C.faint, W.small(), w - 24)
+                        cy = cy + 24
+                    else
+                        cy = cy + key_row(ctx, k, x, cy, w)
+                    end
+                end
             end
-            shown = shown + #rows
+            shown = shown + nkeys
         end
     end
     if shown == 0 then D.text("没有匹配的形态键。", x, cy + 4, C.muted, W.body()); cy = cy + 30 end

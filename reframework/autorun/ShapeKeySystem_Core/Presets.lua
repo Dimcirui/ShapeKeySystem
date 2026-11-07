@@ -135,12 +135,12 @@ function P.validate_binding(d)
 end
 
 -- key groups of a sculpt preset (Sculpt.lua "key groups"); empty tables come back from REFramework's
--- json as null. Options of one group may share a key; a key belongs to one group only.
+-- json as null. Options of one group may share a key, and so may groups (the higher one wins).
 P.MAX_KEY_OPTIONS = 8
 local function check_key_groups(groups)
     if groups == nil then return true end
     if type(groups) ~= "table" then return false, "key_groups must be a list" end
-    local names, owner = {}, {}
+    local names = {}
     for gi, g in ipairs(groups) do
         if type(g) ~= "table" or type(g.name) ~= "string" or g.name == "" then return false, "key_groups[" .. gi .. "] needs a name" end
         if names[g.name] then return false, "key group named twice: " .. g.name end
@@ -154,10 +154,6 @@ local function check_key_groups(groups)
         for oi, o in ipairs(options) do
             if type(o) ~= "table" or type(o.name) ~= "string" then return false, "key group " .. g.name .. ": option " .. oi .. " needs a name" end
             local ok, msg = check_values(o.values, "key group " .. g.name .. "." .. o.name); if not ok then return false, msg end
-            for key in pairs(o.values or {}) do
-                if owner[key] and owner[key] ~= g.name then return false, "key " .. tostring(key) .. " is in two key groups" end
-                owner[key] = g.name
-            end
         end
     end
     return true
@@ -333,8 +329,9 @@ local function glob(rx)
     return ok and type(files) == "table" and files or {}
 end
 
+-- P.sculpt_errors: { path, id, msg } of the files left out of the list because they are invalid
 function P.load_sculpt()
-    local list = {}
+    local list, errors = {}, {}
     for _, source in ipairs({ "user", "mods" }) do
         local found = {}
         for _, p in ipairs(glob("ShapeKeySystem\\\\" .. source .. "\\\\sculpt\\\\[^\\\\]+\\.json")) do
@@ -350,7 +347,12 @@ function P.load_sculpt()
         end)
         for _, f in ipairs(found) do
             local data = live_json(f.path)
-            if data and P.validate_sculpt(data) then
+            local valid, why = false, nil
+            if data then valid, why = P.validate_sculpt(data) end
+            if data and not valid then
+                errors[#errors + 1] = { path = f.path, id = f.path:match("([^\\/]+)%.json$"), msg = why }
+            end
+            if valid then
                 local base = f.path:match("([^\\/]+)%.json$")
                 local target = data.target or {}
                 list[#list + 1] = {
@@ -362,7 +364,7 @@ function P.load_sculpt()
             end
         end
     end
-    P.sculpt_list = list
+    P.sculpt_list, P.sculpt_errors = list, errors
     return list
 end
 
