@@ -99,8 +99,8 @@ check(hidden.is_aiming and hidden.is_holding and hidden.hp_decreased and Cnd.def
     "merged booleans are hidden but still defined")
 check(shown.hold_state and shown.hp_change and shown.is_pull_trigger and shown.is_burning and shown.is_grappled and shown.weapon_kind
     and shown.is_talk_acting and shown.is_slip_through and shown.last_hit_part and shown.chapter and shown.stage_id
-    and shown.is_run_loop and shown.is_paused and shown.dead_type and not shown.is_wounded,
-    "merged and independent conditions are listed; is_wounded is hidden")
+    and shown.is_run_loop and shown.is_paused and shown.dead_type and not shown.is_wounded and shown.jack_kind and not shown.is_jacked,
+    "merged and independent conditions are listed; is_wounded and is_jacked are hidden")
 clear()
 
 -- categories as in ArmorVariantManager: every def has one, listed in category order
@@ -129,12 +129,50 @@ do
     end
     local hp = obj({ get_CurrentHitPoint = 800, get_DefaultHitPoint = 1000 })
     local arm_index = 4
+    -- MotionFsm2 node of layer 1 and the motion names of the body's layers (top layer last)
+    local fsm_node, layer_names = "Idle", { "cha0_idle", nil }
+    local fsm = { call = function(_, name, layer)
+        calls[name] = (calls[name] or 0) + 1
+        if name == "getCurrentNodeName(System.UInt32)" and layer == 1 then return fsm_node end
+    end }
+    local go = { call = function(_, name, t)
+        if name == "getComponent(System.Type)" and t == "via.motion.MotionFsm2" then return fsm end
+    end }
+    -- motion info: the track name hashes of each motion id
+    local tracks = { [7] = { 0x12345678, 0xF18A8050 }, [8] = { 0x12345678 } }
+    local layer_ids, info_reads = {}, 0
+    local info = { id = nil, call = function(self, name, t)
+        if name == "get_TracksCount" then return #(tracks[self.id] or {}) end
+        if name == "getTracksNameHash(System.UInt32)" then return tracks[self.id][t + 1] end
+    end }
+    local saved_create = sdk.create_instance
+    sdk.create_instance = function(name) if name == "via.motion.MotionInfo" then return info end end
+    local motion = { call = function(_, name, i, id, out)
+        if name == "getLayerCount" then return #layer_names end
+        if name == "getMotionInfo(System.UInt32, System.UInt32, via.motion.MotionInfo)" then
+            info_reads = info_reads + 1; out.id = id; return tracks[id] ~= nil
+        end
+        if name == "getLayer" then
+            return { call = function(_, m)
+                if m == "get_HighestWeightMotionNode" then
+                    return { call = function(_, n)
+                        if n == "get_MotionName" then return layer_names[i + 1] end
+                        if n == "get_MotionBankID" then return 0 end
+                        if n == "get_MotionID" then return layer_ids[i + 1] or 0 end
+                    end }
+                end
+            end }
+        end
+    end }
     local ctx = obj({ get_IsAiming = false, get_IsWheel = true, get_IsHolding = true, get_IsBattle = true, get_HitPoint = hp,
-        get_IsInGrappleDamage = true, get_IsTalkActing = true, get_State = 0x24, get_StateOld = 0x100, get_LastDamageCategory = 0,
+        get_IsInGrappleDamage = true, get_IsTalkActing = true, get_State = 0x24, get_BodyGameObject = go, get_LastDamageCategory = 0,
         get_LastDamageSide = 2, get_CurrentStageID = 47410, get_IsArmorCostume = true,
         get_IsRunLoop = true, get_DeadType = 3, get_BodyUpdater = { get_field = function(_, name)
             if name == "_CurrentBurnEffectID" then return -1 end
-        end, call = function(_, name) if name == "get_NextAddArmIndex" then return arm_index end end } })
+        end, call = function(_, name)
+            if name == "get_NextAddArmIndex" then return arm_index end
+            if name == "get_Motion" then return motion end
+        end } })
     local campaign = obj({ get_CurrentChapter = 22300 })
     local pause, no_player = obj({ ["isPaused()"] = true }), false
     -- engine enums as static fields: PlayerDefine.State bits, BodyPartsCategory, ChapterID
@@ -189,10 +227,63 @@ do
     check(V.is_slip_through == true and V.is_parent_gimmick == false and V.is_body_draw_off == true
         and V.is_crouch_switching == nil and calls.get_State == 1,
         "State bits: one get_State read; a bit the enum lacks stays unread")
-    check(not calls.get_StateOld, "StateOld is read only for is_jacked")
-    clear(); calls = {}
-    RC.sample(V, 5, { is_jacked = true })
-    check(V.is_jacked == true and calls.get_StateOld == 1, "is_jacked: the Jacked bit left in StateOld counts")
+    check(not calls["getCurrentNodeName(System.UInt32)"], "the motion FSM is read only for the paired action")
+    clear(); RC.sample(V, 5, { is_jacked = true, jack_kind = true })
+    check(V.is_jacked == false and V.jack_kind == 0, "not in a Jacked node: no paired action")
+    local function jack(node, names)
+        fsm_node, layer_names = node, names
+        clear(); RC.sample(V, 5, { is_jacked = true, jack_kind = true })
+        return V.jack_kind
+    end
+    check(jack("Jacked.Hold", { "cha0_idle", "chc0_jack_pl_0th_com_0051_hold_B_start" }) == 1 and V.is_jacked == true,
+        "a jack motion with hold: grabbed")
+    check(jack("Jacked.Hold", { "chc0_jack_pl_0th_com_0070_hold_escape", "cha0_idle" }) == 2,
+        "hold and escape: breaking free (found below the top layer)")
+    check(jack("Jacked.Hold", { "cha0_idle" }) == 2, "no jack motion name this frame: the last kind stays")
+    check(jack("Idle", { "cha0_idle" }) == 0, "leaving the Jacked node resets the kind")
+    check(jack("Jacked", { "cha0_idle" }) == 3, "no name after none: other")
+    check(jack("Jacked", { "cha0_enemy_0002_escape_B_VerC" }) == 3, "an enemy motion without hold: other")
+    fsm_node, layer_names = "Idle", { "cha0_idle" }
+    -- invincibility source: an invincible track on any layer's motion, else other
+    local invincible = false
+    ctx.call = (function(base) return function(self, name, ...)
+        if name == "get_IsInvincible" then return invincible end
+        return base(self, name, ...)
+    end end)(ctx.call)
+    local function source(names, ids)
+        layer_names, layer_ids = names, ids
+        clear(); RC.sample(V, 14, { invincible_source = true })
+        return V.invincible_source
+    end
+    check(source({ "cha0_idle" }, { 8 }) == 0 and info_reads == 0, "not invincible: 0, no motion read")
+    invincible = true
+    check(source({ "cha0_idle", "cha0_enemy_0002_escape_B_VerC" }, { 8, 7 }) == 1,
+        "an invincible track on one layer: from the motion")
+    check(source({ "chc0_jack_pl_0th_com_0070_hold_escape" }, { 8 }) == 2, "no invincible track: other")
+    local reads = info_reads
+    check(source({ "cha0_idle", "cha0_enemy_0002_escape_B_VerC" }, { 8, 7 }) == 1 and info_reads == reads,
+        "results are kept per motion name")
+    check(source({ "unknown_motion" }, { 99 }) == 2 and source({ "unknown_motion" }, { 7 }) == 1,
+        "a motion whose info is unreadable is not cached")
+    invincible = false
+    sdk.create_instance = saved_create
+    -- dodge motion: any layer's motion name matches one of the dodge patterns
+    local function dodge(names)
+        layer_names = names
+        clear(); RC.sample(V, 15, { is_dodge_motion = true })
+        return V.is_dodge_motion
+    end
+    local dodges = { "cha0_enemy_0002_escape_B_VerC", "cha0_general_0331_step_B", "ch0_970_DODGE",
+        "cha0_window_jumpoff_end", "cha0_window_Jumpout", "chi2_copy_geneal_dodge_F" }
+    local all = true
+    for _, n in ipairs(dodges) do if dodge({ "cha0_idle", n }) ~= true then all = false end end
+    check(all, "dodge motions on any layer count")
+    check(dodge({ "chc0_jack_pl_0th_com_0070_hold_escape" }) == false and dodge({ "cha0_stepup_1m" }) == false
+        and dodge({ "cha0_jog_loop" }) == false, "a grab escape, a step-up and jogging are not dodges")
+    check(RC.defs and (function() for _, d in ipairs(RC.defs) do
+        if d.id == "is_dodge_motion" then return d.category == "战斗与武器" and not d.hidden end end end)(),
+        "is_dodge_motion is listed under 战斗与武器")
+    fsm_node, layer_names, layer_ids = "Idle", { "cha0_idle" }, {}
     clear(); calls = {}
     RC.sample(V, 6, { last_hit_part = true, last_hit_side = true, chapter = true, stage_id = true, is_talk_acting = true })
     check(V.last_hit_part == 0 and V.last_hit_side == 2 and V.chapter == 22300 and V.stage_id == 47410
