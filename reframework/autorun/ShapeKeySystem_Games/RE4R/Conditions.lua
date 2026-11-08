@@ -4,10 +4,11 @@
 -- a changed player identity clears the HP baseline without retaining engine references.
 local C = { defs = {} }
 local last_context
+local jack_last = 0
 
-local function call(object, method)
+local function call(object, method, ...)
     if not object then return nil end
-    local ok, value = pcall(object.call, object, method)
+    local ok, value = pcall(object.call, object, method, ...)
     if ok then return value end
 end
 
@@ -63,14 +64,12 @@ local BOOLS = {
     { "is_invincible", "get_IsInvincible", "无敌状态" },
 }
 
--- get_State() 是 chainsaw.PlayerDefine.State 的位集，位值在 C.init 里从枚举取。
--- 第四项为真时也看 get_StateOld()：被抓和挣脱反击期间 Jacked 位只留在 StateOld 里
+-- get_State() 是 chainsaw.PlayerDefine.State 的位集，位值在 C.init 里从枚举取
 local STATE_BITS = {
     { "is_slip_through", "SlipThrough", "钻过缝隙" },
     { "is_parent_gimmick", "ParentGimmick", "附着机关" },
     { "is_crouch_switching", "CrouchSwitching", "蹲起切换" },
     { "is_body_draw_off", "BodyDrawOff", "身体隐藏" },
-    { "is_jacked", "Jacked", "被抓 / 刚挣脱", true },
 }
 local state_bit = {}
 
@@ -121,6 +120,7 @@ local CATEGORY = {
     is_slip_through = "移动", is_parent_gimmick = "移动", is_crouch_switching = "移动",
     is_run_start = "移动", is_run_loop = "移动", is_run_turn = "移动", is_idle = "移动",
     hit = "受击", is_damaging = "受击", is_upper_body_damage = "受击", is_burning = "受击", is_grappled = "受击", is_jacked = "受击",
+    jack_kind = "受击", invincible_source = "受击",
     is_invincible = "受击", is_wounded = "受击", last_hit_part = "受击", last_hit_side = "受击", dead_type = "受击",
     is_talk_acting = "其他", is_wireless_call = "其他", is_event_locked = "其他", is_restriction_all = "其他",
     is_body_draw_off = "其他", chapter = "其他", stage_id = "其他", is_paused = "其他", has_armor_mesh = "其他",
@@ -138,6 +138,24 @@ for _, row in ipairs(STATE_BITS) do def({ id = row[1], kind = "bool", label = ro
 -- 挨打那一两帧会闪回 -1，配合保持时间使用。0 是切武器的一帧，2 是部分武器的单手待机，都不算。
 -- 没捂伤口时也读到过 4，信号不可靠：照常求值（已用它的配置不受影响），但不在列表里显示
 def({ id = "is_wounded", kind = "bool", label = "捂伤口", hidden = true })
+-- 敌人驱动、双方同步播放的动作（被抓、挣脱反击、横扫后空翻闪避等）：身体 MotionFsm2 第 1 层的
+-- 当前节点名以 Jacked 开头。State / StateOld 的 Jacked 位不可用：StateOld 一直残留，闪避也有。
+-- 与「联动动作类型」不是「无」等价：照常求值（已用它的配置不受影响），但不在列表里显示
+def({ id = "is_jacked", kind = "bool", label = "敌人联动动作（QTE）", hidden = true })
+-- 联动动作的类型取自动作名，取值与 ArmorVariantManager 相同，发布后不改
+def({ id = "jack_kind", kind = "enum", label = "联动动作类型", options = {
+    { value = 0, label = "无" }, { value = 1, label = "被抓" }, { value = 2, label = "挣脱反击" },
+    { value = 3, label = "其它（如横扫闪避）" },
+} })
+-- 无敌来自动作本身的无敌轨道（闪避、被打飞等），还是来自别处（挣脱反击的无敌在状态机节点上）；
+-- 取值与 ArmorVariantManager 相同
+def({ id = "invincible_source", kind = "enum", label = "无敌来源", options = {
+    { value = 0, label = "不无敌" }, { value = 1, label = "动作自带（闪避、被打飞等）" },
+    { value = 2, label = "其它（挣脱反击等）" },
+} })
+-- 闪避动作：按动作名认。IsDodging 在横扫后空翻时全程为假，闪避模组也只借用现成动作，
+-- 所以看名字；真的跳窗也算
+def({ id = "is_dodge_motion", kind = "bool", label = "闪避动作" })
 -- 暂停时人物状态冻结；不依赖人物，没有玩家时也读
 def({ id = "is_paused", kind = "bool", label = "游戏暂停" })
 def({ id = "hp_pct", kind = "number", label = "血量 %", min = 0, max = 100 })
@@ -246,7 +264,81 @@ function C.init()
     end
 end
 
-function C.reset() last_context = nil end
+function C.reset() last_context, jack_last = nil, 0 end
+
+-- 身体 MotionFsm2 第 1 层的当前节点名（读不到为 nil）
+local function jack_node(context)
+    local go = call(context, "get_BodyGameObject")
+    local ok, fsm_type = pcall(sdk.typeof, "via.motion.MotionFsm2")
+    local fsm = ok and fsm_type and call(go, "getComponent(System.Type)", fsm_type)
+    local node = call(fsm, "getCurrentNodeName(System.UInt32)", 1)
+    if type(node) == "string" then return node end
+end
+
+-- 动作是否带无敌轨道：轨道名哈希 = murmur3_32(UTF-16LE 类型全名, 种子 0xFFFFFFFF)，
+-- 这里是 chainsaw.PlayerInvincibleTracks。按动作名缓存，读不到轨道时不缓存
+local INVINCIBLE_TRACK = 0xF18A8050
+local invincible_track = {}
+local motion_info
+local function has_invincible_track(motion, node)
+    local name = call(node, "get_MotionName")
+    if type(name) ~= "string" then return false end
+    local hit = invincible_track[name]
+    if hit ~= nil then return hit end
+    if not motion_info then
+        local ok, info = pcall(sdk.create_instance, "via.motion.MotionInfo")
+        if not ok or not info then return false end
+        local rok, kept = pcall(info.add_ref, info)
+        motion_info = rok and kept or info
+    end
+    local bank, id = call(node, "get_MotionBankID"), call(node, "get_MotionID")
+    if not finite(bank) or not finite(id) then return false end
+    if call(motion, "getMotionInfo(System.UInt32, System.UInt32, via.motion.MotionInfo)", bank, id, motion_info) ~= true then
+        return false
+    end
+    local n = call(motion_info, "get_TracksCount")
+    if not finite(n) then return false end
+    hit = false
+    for t = 0, n - 1 do
+        local h = call(motion_info, "getTracksNameHash(System.UInt32)", t)
+        if finite(h) and math.tointeger(h) and math.tointeger(h) & 0xFFFFFFFF == INVINCIBLE_TRACK then
+            hit = true
+            break
+        end
+    end
+    invincible_track[name] = hit
+    return hit
+end
+
+-- 动作名（小写后）匹配其一即为闪避动作，与 ArmorVariantManager 相同。按动作名缓存
+local DODGE_PATTERNS = { "_enemy_%d+_escape_", "_general_033%d_step_", "dodge", "window_jumpoff_end",
+    "window_jumpout", "^chi2.*step" }
+local dodge_motion = {}
+local function is_dodge_name(name)
+    local hit = dodge_motion[name]
+    if hit ~= nil then return hit end
+    local lower = name:lower()
+    hit = false
+    for _, p in ipairs(DODGE_PATTERNS) do
+        if lower:find(p) then hit = true; break end
+    end
+    dodge_motion[name] = hit
+    return hit
+end
+
+-- 从最高的动作层往下，第一个名字含 _jack_ 或 _enemy_ 的动作
+local function jack_motion_name(body)
+    local motion = call(body, "get_Motion")
+    local n = call(motion, "getLayerCount")
+    if not finite(n) then return nil end
+    for i = n - 1, 0, -1 do
+        local node = call(call(motion, "getLayer", i), "get_HighestWeightMotionNode")
+        local name = call(node, "get_MotionName")
+        if type(name) == "string" and (name:find("_jack_", 1, true) or name:find("_enemy_", 1, true)) then
+            return name
+        end
+    end
+end
 
 -- 采样和 Core 的血量推导之后调用：由旧布尔算出合成条件。
 function C.derive(V)
@@ -312,7 +404,59 @@ function C.sample(V, _, wanted)
         local status = call(context, "getHitPointVital")
         if finite(status) then V.hp_vital = status end
     end
-    local body = (want("has_armor_mesh") or want("is_burning") or want("is_wounded")) and call(context, "get_BodyUpdater")
+    local body = (want("has_armor_mesh") or want("is_burning") or want("is_wounded") or want("jack_kind")
+        or want("invincible_source") or want("is_dodge_motion")) and call(context, "get_BodyUpdater")
+    -- 任一动作层的动作是闪避动作
+    if want("is_dodge_motion") then
+        local motion = call(body, "get_Motion")
+        local n = call(motion, "getLayerCount")
+        if finite(n) then
+            local dodge = false
+            for i = 0, n - 1 do
+                local name = call(call(call(motion, "getLayer", i), "get_HighestWeightMotionNode"), "get_MotionName")
+                if type(name) == "string" and is_dodge_name(name) then dodge = true; break end
+            end
+            V.is_dodge_motion = dodge
+        end
+    end
+    -- 无敌时任一动作层带无敌轨道为「动作自带」，否则为「其它」
+    if want("invincible_source") then
+        local invincible = call(context, "get_IsInvincible")
+        if invincible == false then
+            V.invincible_source = 0
+        elseif invincible == true then
+            local motion = call(body, "get_Motion")
+            local n = call(motion, "getLayerCount")
+            local from_motion = false
+            for i = 0, (finite(n) and n or 0) - 1 do
+                local node = call(call(motion, "getLayer", i), "get_HighestWeightMotionNode")
+                if node and has_invincible_track(motion, node) then from_motion = true; break end
+            end
+            V.invincible_source = from_motion and 1 or 2
+        end
+    end
+    -- 联动动作类型：动作名含 hold 为被抓，再含 escape 为挣脱反击，其余为其它；
+    -- 这一帧取不到动作名时沿用上一个类型，上一个是「无」时算其它
+    if want("is_jacked") or want("jack_kind") then
+        local node = jack_node(context)
+        if node then
+            local jacked = node:sub(1, 6) == "Jacked"
+            V.is_jacked = jacked
+            if want("jack_kind") then
+                if not jacked then
+                    jack_last = 0
+                else
+                    local name = jack_motion_name(body)
+                    if name then
+                        jack_last = name:find("hold", 1, true) and (name:find("escape", 1, true) and 2 or 1) or 3
+                    elseif jack_last == 0 then
+                        jack_last = 3
+                    end
+                end
+                V.jack_kind = jack_last
+            end
+        end
+    end
     if want("is_wounded") then
         local arm = call(body, "get_NextAddArmIndex")
         if finite(arm) then V.is_wounded = arm == 4 or arm == 5 end
@@ -331,7 +475,7 @@ function C.sample(V, _, wanted)
         local bok, burn = pcall(function() return body and body:get_field("_CurrentBurnEffectID") end)
         if bok and type(burn) == "number" and burn >= 0 then V.is_burning = true end
     end
-    local state, old
+    local state
     for _, row in ipairs(STATE_BITS) do
         local bit = state_bit[row[2]]
         if bit and want(row[1]) then
@@ -339,12 +483,7 @@ function C.sample(V, _, wanted)
                 local raw = call(context, "get_State")
                 state = type(raw) == "number" and math.tointeger(raw) or false
             end
-            if row[4] and old == nil then
-                local raw = call(context, "get_StateOld")
-                old = type(raw) == "number" and math.tointeger(raw) or false
-            end
-            local bits = row[4] and (state or 0) | (old or 0) or state
-            if state or (row[4] and old) then V[row[1]] = bits & bit ~= 0 end
+            if state then V[row[1]] = state & bit ~= 0 end
         end
     end
     if want("last_hit_part") then
