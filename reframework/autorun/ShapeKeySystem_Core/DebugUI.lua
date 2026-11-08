@@ -341,6 +341,10 @@ function D.draw()
         if changed then call("set_setting", { key = "periodic_scan_sec", value = v }) end
         changed, v = imgui.slider_float(L.tr("写入阈值"), se.write_epsilon, 0, 0.01, "%.4f")
         if changed then call("set_setting", { key = "write_epsilon", value = v }) end
+        changed, v = imgui.slider_int(L.tr("表情更新间隔（帧）"), se.expression_interval or 1, 1, 4)
+        if changed then call("set_setting", { key = "expression_interval", value = v }) end
+        changed, v = imgui.slider_int(L.tr("其他角色表情间隔（帧）"), se.actor_expression_interval or 1, 1, 4)
+        if changed then call("set_setting", { key = "actor_expression_interval", value = v }) end
         changed, v = imgui.checkbox(L.tr("截断到 0..1"), se.clamp)
         if changed then call("set_setting", { key = "clamp", value = v }) end
         if se.scene_search_available ~= false then

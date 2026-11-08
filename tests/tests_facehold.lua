@@ -100,8 +100,25 @@ check(st.settings.expression_enabled == true and st.settings.hold_face_bones == 
 SKS.call("set_setting", { key = "expression_enabled", value = false }); ticks(3)
 local off = snap()
 check(same(off, base), "expression off leaves only what the other layers write")
+local X = require("ShapeKeySystem_Core.Expression")
+local real_read, real_compute, reads = X.read, X.compute, 0
+X.read = function(...) reads = reads + 1; return real_read(...) end
+X.compute = function(...) reads = reads + 1; return real_compute(...) end
+ticks(3)
+X.read, X.compute = real_read, real_compute
+check(reads == 0 and same(snap(), base), "expression off skips face reads and profile evaluation")
+local cok = SKS.call("calibrate_eye_neutral", {})
+check(cok == false, "eye neutral calibration refuses stale angles while expression is off")
 SKS.call("set_setting", { key = "expression_enabled", value = true }); ticks(3)
 check(same(snap(), on), "expression on restores the weights")
+SKS.call("set_setting", { key = "expression_interval", value = 2.4 })
+check(st.settings.expression_interval == 2, "the expression interval is stored as a whole number of frames")
+reads = 0
+X.read = function(...) reads = reads + 1; return real_read(...) end
+ticks(4)
+X.read = real_read
+check(reads == 2 and same(snap(), on), "interval 2 reads every other frame and keeps the weights in between")
+SKS.call("set_setting", { key = "expression_interval", value = 1 })
 SKS.call("set_setting", { key = "hold_face_bones", value = true }); ticks(5)
 check(not H.capturing() and same(snap(), on) and st.settings.hold_status ~= "",
     "hold on a face without readable bones keeps driving and reports why")

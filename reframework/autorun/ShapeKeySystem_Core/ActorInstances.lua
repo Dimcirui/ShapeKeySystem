@@ -279,17 +279,26 @@ local function has_work(rig)
     return false
 end
 
-local function drive(rig, options)
+-- index: the rig's place in `rigs`; rigs update on staggered frames when the interval is above 1.
+local function drive(rig, options, index)
     if not has_work(rig) then return true end
     if not valid(rig) then return false end
-    for key in pairs(rig.P) do rig.P[key] = nil end
-    X.read(rig, rig.P, options.inv_full, false, rig.eye_settings, rig.use_eyes)
-    local smoothing = rig.expression.smoothing
-    local alpha = smoothing > 0 and 1 - math.min(smoothing, 1) * 0.9 or 1
-    X.compute(rig.prog, rig, rig.P, rig.gains, rig.forced, options.clamp, alpha,
-        rig.eye_settings.full_deg.yaw, rig.eye_settings.full_deg.pitch)
     local out = rig.W
-    if options.expression_enabled == false then
+    -- 关闭表情时跳过读取和计算，只写零；驱动值和捏脸仍照常写入。
+    -- 间隔大于 1 时仅在轮到的帧读取和计算，其余帧沿用 `rig.W`。
+    local interval = math.max(1, math.floor(options.expression_interval or 1))
+    local update = interval == 1 or (frame + index) % interval == 0 or (rig.prog.n > 0 and rig.W[1] == nil)
+    if options.expression_enabled ~= false then
+        if update then
+            for key in pairs(rig.P) do rig.P[key] = nil end
+            X.read(rig, rig.P, options.inv_full, false, rig.eye_settings, rig.use_eyes)
+            local smoothing = rig.expression.smoothing
+            local alpha = smoothing > 0 and 1 - math.min(smoothing, 1) * 0.9 or 1
+            if interval > 1 and alpha < 1 then alpha = 1 - (1 - alpha) ^ interval end
+            X.compute(rig.prog, rig, rig.P, rig.gains, rig.forced, options.clamp, alpha,
+                rig.eye_settings.full_deg.yaw, rig.eye_settings.full_deg.pitch)
+        end
+    else
         rig.O = rig.O or {}
         for slot = 1, rig.prog.n do rig.O[slot] = 0 end
         out = rig.O
@@ -376,7 +385,7 @@ function M.tick(current_frame, options)
         if not scanned then M.release("实例扫描中断"); M.state.errors = {tostring(why)}; return end
     end
     for i = #rigs, 1, -1 do
-        local driven, alive = pcall(drive, rigs[i], options)
+        local driven, alive = pcall(drive, rigs[i], options, i)
         if not driven or not alive then
             if not driven then M.state.errors[#M.state.errors+1] = tostring(alive) end
             table.remove(rigs, i)
