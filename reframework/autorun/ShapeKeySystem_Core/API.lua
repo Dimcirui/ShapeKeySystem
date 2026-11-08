@@ -59,6 +59,8 @@ local DEFAULTS = {
     -- off: the game's expression no longer reaches the shape keys (sculpt, conditions, touch and
     -- other plugins still do)
     expression_enabled = true,
+    -- 表情每 N 帧读取和计算一次（主角色 / 其他角色），其余帧沿用上次的权重
+    expression_interval = 1, actor_expression_interval = 1,
     -- hold the face's expression bones at the neutral pose so only the shape keys show expression
     hold_face_bones = false,
     -- sculpt slider upper end, for every key (1 = the authored shape; 2 = exaggerated)
@@ -384,7 +386,7 @@ local function build_settings_state()
     local st = state.settings
     for _, k in ipairs({ "hotkey", "hotkey_combo", "hotkey_mod", "ui_scale", "language", "scene_search_always", "periodic_scan_sec",
                          "write_epsilon", "clamp", "cutscene_drive", "sculpt_max", "face_style", "ui_backend",
-                         "translate_keys", "expression_enabled", "hold_face_bones", "font_scale", "block_input" }) do st[k] = cfg[k] end
+                         "translate_keys", "expression_enabled", "expression_interval", "actor_expression_interval", "hold_face_bones", "font_scale", "block_input" }) do st[k] = cfg[k] end
     st.hold_available = SKS.adapter.expression_joints ~= nil and SKS.adapter.face_layers ~= nil
     st.hold_status = FaceHold.status
     st.scene_search_available = SKS.adapter.scene_search ~= false
@@ -1297,12 +1299,21 @@ function link_base_keys()
     end
 end
 
-local function drive(rig, primary)
+-- index: the rig's place in `C.rigs`; rigs update on staggered frames when the interval is above 1.
+local function drive(rig, primary, index)
     local prog = C.prog
     local t0 = clock()
     local P = primary and C.P or C.Pbuf
-    X.read(rig, P, C.inv_full, primary and C.want_signals and state.runtime.ui_open, cfg.eyes, rig.use_eyes)
-    if primary then Mocap.drive_signals(rig, P, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch) end
+    local expr_on = cfg.expression_enabled ~= false
+    -- 关闭表情时不读取面部、不计算 Profile：输出全为零，`rig.W` 保留关闭前的值供重新开启时平滑。
+    -- 间隔大于 1 时仅在轮到的帧读取和计算，其余帧沿用 `rig.W`；`rig.W` 被清空或播放跳转后立即更新。
+    local interval = math.floor(tonumber(cfg.expression_interval) or 1)
+    local update = expr_on and (interval <= 1 or (C.frame + index) % interval == 0
+        or (prog.n > 0 and rig.W[1] == nil) or (rig.primary and rig.playback_epoch ~= Playback.epoch))
+    if update then
+        X.read(rig, P, C.inv_full, primary and C.want_signals and state.runtime.ui_open, cfg.eyes, rig.use_eyes)
+        if primary then Mocap.drive_signals(rig, P, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch) end
+    end
     -- 播放、循环和跳转改变 `Playback.epoch`，主角色不得沿用此前的平滑缓存。
     if rig.primary and rig.playback_epoch ~= Playback.epoch then
         rig.W, rig.V, rig.playback_epoch = {}, {}, Playback.epoch
@@ -1319,14 +1330,17 @@ local function drive(rig, primary)
         end
     end
     local t1 = clock()
-    Playback.apply(rig, P, C.inv_full, cfg.eyes)
-    local s = cfg.expression.smoothing
-    local alpha = (s > 0) and (1 - min(s, 1) * 0.9) or 1
-    X.compute(prog, rig, P, C.gains, C.forced, cfg.clamp, alpha, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch)
+    if update then
+        Playback.apply(rig, P, C.inv_full, cfg.eyes)
+        local s = cfg.expression.smoothing
+        local alpha = (s > 0) and (1 - min(s, 1) * 0.9) or 1
+        -- 每次更新补上间隔内的平滑步数，平滑时长不随间隔变化
+        if interval > 1 and alpha < 1 then alpha = 1 - (1 - alpha) ^ interval end
+        X.compute(prog, rig, P, C.gains, C.forced, cfg.clamp, alpha, cfg.eyes.full_deg.yaw, cfg.eyes.full_deg.pitch)
+    end
     -- conditional clips and other plugins change a copy of the expression weights: rig.W is also
     -- the smoothing state of the next frame and must stay the pure expression
     local out, ext_skip = rig.W, nil
-    local expr_on = cfg.expression_enabled ~= false
     local cond_on = rig.primary and C.cond_live and CondExpr.any()
     local touch_on = Touch.any()
     if not expr_on or cond_on or touch_on or Ext.any() then
@@ -1571,7 +1585,7 @@ local function tick()
     local fallback_expression, fallback_eyes = fallback_tuning()
     ActorInstances.tick(f, { enabled = cfg.enabled, cutscene_drive = cfg.cutscene_drive,
         profile = cfg.profile, expression = fallback_expression, eyes = fallback_eyes,
-        expression_enabled = cfg.expression_enabled,
+        expression_enabled = cfg.expression_enabled, expression_interval = cfg.actor_expression_interval,
         inv_full = C.inv_full, clamp = cfg.clamp, epsilon = cfg.write_epsilon, known = known_names() })
     -- menu mode (player not set up: title screen, save select, loading) drives whatever hunters
     -- the scene holds; entering or leaving it lets go of everything (the player is being built)
@@ -1648,7 +1662,7 @@ local function tick()
         -- frame's weights instead
         if not FaceHold.capturing() then
             for i, rig in ipairs(C.rigs) do
-                local ok, err = pcall(drive, rig, i == 1)
+                local ok, err = pcall(drive, rig, i == 1, i)
                 if not ok or err then
                     drop_rigs(string.format("%s: %s", rig.label, tostring(err)), QUICK_RESCAN)
                     break
@@ -1748,6 +1762,7 @@ local SETTING_TYPES = {
     cutscene_drive = "boolean", sculpt_max = { 1, Sculpt.MAX_LIMIT }, face_style = "string",
     ui_backend = "string", translate_keys = "boolean",
     expression_enabled = "boolean", hold_face_bones = "boolean",
+    expression_interval = { 1, 4 }, actor_expression_interval = { 1, 4 },
     font_scale = { 0.8, 1.6 }, block_input = "boolean",
     hotkey_combo = "boolean", hotkey_mod = "string",
 }
@@ -1765,6 +1780,7 @@ function cmds.set_setting(a)
     if a.key == "hotkey_mod" and not HOTKEY_MODS[v] then return false, "E_BAD_ARGS", "hotkey_mod: Ctrl / Shift / Alt" end
     if a.key == "ui_backend" and not UI_BACKENDS[v] then return false, "E_BAD_ARGS", "ui_backend: auto / d2d / imgui" end
     if a.key == "language" and not I18n.set(v) then return false, "E_BAD_ARGS", "language: zh / en" end
+    if a.key == "expression_interval" or a.key == "actor_expression_interval" then v = math.floor(v + 0.5) end
     if a.key == "window" then v = { x = tonumber(v.x) or 0, y = tonumber(v.y) or 0, w = tonumber(v.w) or 900, h = tonumber(v.h) or 640 } end
     cfg[a.key] = v
     if a.key == "scene_search_always" or a.key == "periodic_scan_sec" then request_rescan(1) end
@@ -2046,6 +2062,8 @@ end
 function cmds.calibrate_eye_neutral()
     local rig = C.rigs[1]
     if not rig then return false, "E_NOT_FOUND", "no driven rig" end
+    -- 关闭表情时不读取眼球角度，`rig.angles` 停在关闭前的值。
+    if cfg.expression_enabled == false then return false, "E_BAD_ARGS", "请先开启表情驱动" end
     local e = cfg.eyes
     local iy, ip = e.invert.yaw and -1 or 1, e.invert.pitch and -1 or 1
     for _, s in ipairs({ "L", "R" }) do

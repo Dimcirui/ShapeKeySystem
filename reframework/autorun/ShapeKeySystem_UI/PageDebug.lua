@@ -121,7 +121,7 @@ end
 local function sks_settings_card(ctx, x, y, w)
     local se = ctx.st.settings
     local scene_search = se.scene_search_available ~= false
-    local c, h = card(x, y, w, "SKS 设置", 3, scene_search and 2 or 1)
+    local c, h = card(x, y, w, "SKS 设置", 5, scene_search and 2 or 1)
     c.row("捏脸滑块上限", function(sx, sw)
         local ch, v = W.slider("sculpt_max", sx, c.y, min(320, sw), 28, se.sculpt_max or 1, 1, 5, { step = 0.1, fmt = "%.1f" })
         if ch then setting(ctx, "sculpt_max", v) end
@@ -134,6 +134,15 @@ local function sks_settings_card(ctx, x, y, w)
         local ch, v = W.slider("eps", sx, c.y, min(320, sw), 28, se.write_epsilon or 0.001, 0, 0.01, { step = 0.0005, fmt = "%.4f", value_w = 56 })
         if ch then setting(ctx, "write_epsilon", v) end
     end)
+    for _, row in ipairs({ { "expression_interval", "表情更新间隔（帧）", "主角色每隔几帧读取一次游戏表情，数值越大开销越低" },
+        { "actor_expression_interval", "其他角色表情间隔（帧）", "其他角色每隔几帧读取一次游戏表情，数值越大开销越低" } }) do
+        local ry = c.y
+        c.row(row[2], function(sx, sw)
+            local ch, v = W.slider(row[1], sx, c.y, min(320, sw), 28, se[row[1]] or 1, 1, 4, { step = 1, fmt = "%.0f" })
+            if ch then setting(ctx, row[1], v) end
+        end)
+        W.tooltip(row[3], c.x, ry, 150, 28)
+    end
     local bx = c.x
     local c1, v1, w1 = W.toggle("权重截断到 0..1", bx, c.y, se.clamp ~= false)
     if c1 then setting(ctx, "clamp", v1) end

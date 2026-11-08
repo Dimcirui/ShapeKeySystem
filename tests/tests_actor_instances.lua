@@ -155,13 +155,27 @@ Presets.load_sculpt()
 M.release("sculpt preset")
 for frame = 446, 520 do M.tick(frame, options) end
 check(math.abs((b.mesh.values[3] or 0) - .6) < 1e-6, "a sculpt preset's target part does not limit which parts it reaches")
+local real_read, reads = X.read, 0
+X.read = function(...) reads = reads + 1; return real_read(...) end
+for frame = 521, 524 do M.tick(frame, options) end
+local every = reads
+local before = a.mesh.values[0]
+reads, options.expression_interval = 0, 2
+for frame = 525, 528 do M.tick(frame, options) end
+check(every > 0 and reads * 2 == every and a.mesh.values[0] == before,
+    "actor interval 2 halves face reads and keeps the weights in between")
+reads, options.expression_interval = 0, nil
+options.expression_enabled = false
+for frame = 529, 531 do M.tick(frame, options) end
+X.read, options.expression_enabled = real_read, nil
+check(reads == 0 and (a.mesh.values[0] or 0) == 0, "expression off skips actor face reads and writes zero")
 adapter.actor_of = nil
 options.enabled = false
-M.tick(521, options)
+M.tick(532, options)
 check(a.mesh.values[0] == 0 and b.mesh.values[0] == 0, "disable clears only valid owned weights in update")
 check(#M.state.instances == 0, "disable releases independent instances")
 M.init({id = "other_game"})
-M.tick(522, options)
+M.tick(533, options)
 check(#M.state.instances == 0, "adapters without the capability do not scan or drive extra actors")
 print("ACTOR INSTANCE ASSERTIONS:", assertions)
 print("ACTOR INSTANCE FAILS:", 0)
