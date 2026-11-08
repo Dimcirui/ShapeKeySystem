@@ -1,12 +1,8 @@
-# 未发布
-
-<!-- 下一版的发布说明。写法见 docs/writing/release_guideline.md，流程见 docs/writing/version_guideline.md。
-     每条一行：- **对象**：一句话结论。定版时删掉空的小节，标题改为 # ShapeKeySystem X.Y.Z。 -->
-
-## ⚠️ 不兼容变更
+# ShapeKeySystem 1.18.0
 
 ## 新增
 
+- **发布包**：附带可选的「界面美化前置 REFramework D2D」：装上后面板用 d2d 绘制并显示面部图，不装时面板用 ImGui 绘制
 - **捏脸**：形态键列表可以分段：网格里 `=====XXX=====` 形式的分隔键，或 names 文件的 `sections`，显示为灰字标题，不再当作形态键
 - **键组**：同一个形态键可以放进多个键组，列表里靠上的键组优先生效
 - **形态键配置组合**：可以重命名，用到它的条件状态跟着改名

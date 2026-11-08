@@ -3,9 +3,11 @@
 
   ShapeKeySystem/   modinfo.ini、screenshot.jpg（有预览图时）、reframework/ 与 natives/（文件清单见 sks-files.ps1）
   REF-IME/          modinfo.ini（AddonFor=ShapeKeySystem）、reframework/plugins/REF-IME.dll
+  REFramework D2D/  可选前置（给了 -D2dZip 时）：modinfo.ini、cover.png、reframework-d2d 的 lua 与 dll
 
   package.ps1                                         从 REF-IME 最新 Release 下载并校验 SHA256
   package.ps1 -RefImeZip <zip> -RefImeVersion <tag>   用本地 Release zip，不联网；-RefImeSha256 可选
+  -D2dZip <zip> -D2dVersion <版本>                     附带 reframework-d2d（zip 里只能有 autorun 的 lua 和 plugins 的 dll）
 
 主包版本取自 Version.lua 的 V.number，REF-IME 版本取自其 Release tag。
 
@@ -17,6 +19,9 @@ param(
     [string]$RefImeZip,
     [string]$RefImeVersion,
     [string]$RefImeSha256,
+    [string]$D2dZip,
+    [string]$D2dVersion,
+    [string]$D2dCover = (Join-Path (Split-Path -Parent $PSScriptRoot) "docs\images\d2d-cover.png"),
     [switch]$KeepComments
 )
 $ErrorActionPreference = "Stop"
@@ -82,6 +87,27 @@ try {
         [IO.Compression.ZipFileExtensions]::ExtractToFile($entries[0], $imeDll)
     } finally { $src.Dispose() }
 
+    # reframework-d2d：面板的 d2d 绘制后端，不装时面板用 ImGui
+    $d2dFiles = @{}
+    if ($D2dZip) {
+        if (-not $D2dVersion) { throw "-D2dVersion is required with -D2dZip" }
+        if (-not (Test-Path -LiteralPath $D2dCover -PathType Leaf)) { throw "d2d cover not found: $D2dCover" }
+        $expect = @("reframework/autorun/reframework-d2d.lua", "reframework/plugins/reframework-d2d.dll")
+        $src = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $D2dZip).Path)
+        try {
+            $entries = @($src.Entries | Where-Object { $_.Name -ne "" })
+            $names = @($entries | ForEach-Object { $_.FullName } | Sort-Object)
+            if (($names -join "|") -ne ($expect -join "|")) {
+                throw "Unexpected reframework-d2d ZIP layout: $($names -join ', ')"
+            }
+            foreach ($e in $entries) {
+                $dest = Join-Path $temp ("d2d-" + $e.Name)
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($e, $dest)
+                $d2dFiles[$e.FullName] = $dest
+            }
+        } finally { $src.Dispose() }
+    }
+
     $files = @{}
     foreach ($rel in $owned) {
         $found = Get-Files $repo $rel
@@ -135,10 +161,25 @@ try {
     Add-Bytes "REF-IME/modinfo.ini" (Write-ModInfo $info)
     Add-File "REF-IME/reframework/plugins/REF-IME.dll" $imeDll
 
+    if ($d2dFiles.Count -gt 0) {
+        $info = [ordered]@{
+            name = "界面美化前置 REFramework D2D"
+            version = $D2dVersion
+            author = "cursey"
+            description = "Direct2D drawing for REFramework panels. Optional: without it ShapeKeySystem draws its panel with ImGui and the basic page shows no face map."
+            screenshot = "cover.png"
+            AddonFor = "ShapeKeySystem"
+        }
+        Add-Bytes "REFramework D2D/modinfo.ini" (Write-ModInfo $info)
+        Add-File "REFramework D2D/cover.png" $D2dCover
+        foreach ($k in ($d2dFiles.Keys | Sort-Object)) { Add-File ("REFramework D2D/" + $k) $d2dFiles[$k] }
+    }
+
     $zip.Dispose(); $zip = $null
     $stream.Dispose(); $stream = $null
     Move-Item -LiteralPath $partial -Destination $out -Force
-    Write-Host "ShapeKeySystem $version + REF-IME $imeVersion ($($files.Count) files): $out"
+    $extra = if ($d2dFiles.Count -gt 0) { " + REFramework D2D $D2dVersion" } else { "" }
+    Write-Host "ShapeKeySystem $version + REF-IME $imeVersion$extra ($($files.Count) files): $out"
 } finally {
     if ($zip) { $zip.Dispose() }
     if ($stream) { $stream.Dispose() }
