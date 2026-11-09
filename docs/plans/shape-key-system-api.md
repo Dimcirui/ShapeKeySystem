@@ -507,9 +507,14 @@ mods/ch03_012_001/sculpt/Airi_b865a681.json
 - 撤销是否扩展到表情增益和映射编辑（目前只覆盖捏脸）。
 - 多语言文本由界面层负责还是后端返回 key：建议后端只返回 key 和参数，界面负责翻译。
 
-## 11. 给其他插件的公开接口 `ShapeKeySystemAPI`（2026-10-10，v1.0）
+## 11. 给其他插件的公开接口 `ShapeKeySystemAPI`（2026-10-10 v1.0，2026-11-09 v1.1）
 
 其他 REFramework Lua 插件可以通过这个接口控制形态键。实现在 `ShapeKeySystem_Core/External.lua` 和 `API.lua` 末尾。
+
+接口有两种写法，按用途选择：
+
+- **外部值**（`set` / `release`，11.1 ~ 11.4）：插件直接给出数值，盖过表情和捏脸，用户不能微调。适合每帧变化的效果（呼吸、物理、动画）。
+- **选择捏脸配置和键组选项**（`select_sculpt` / `select_group_option`，11.6，v1.1 起）：插件只说明"现在用哪一套"，数值仍存在 SKS 的捏脸配置里，用户可以在面板里继续调整。适合换装、造型切换。
 
 ### 11.1 规则
 - **覆盖**：外部插件设置的值会盖过表情和捏脸，优先级为 外部 > 表情 > 捏脸。多个插件控制同一个键时，最后设置的生效。
@@ -518,13 +523,14 @@ mods/ch03_012_001/sculpt/Airi_b865a681.json
 - **写入安全**：外部插件的值和表情、捏脸一样，都走同一套保护（网格稳定后才写入、过场 / 换装时先放手）。接口本身不调用任何引擎函数，可以在任意回调里调用。
 - **用户优先**：面板上会把这些键标成"由 某某 控制"，用户随时可以"收回"（调试页有"全部收回"）。收回后，如果插件继续 `set`，值会重新生效。
 - **键名**：不区分大小写，忽略 `_`、`-`、`.` 和空格。可以用网格里的形态键名（去掉 `blendShape1.` 前缀和 `_LODn` 后缀），也可以用表情配置里的标准名（例如 ARKit 的 `jawOpen`），或者别名表里的写法。
+- **角色**：外部值只作用于当前编辑的角色（多角色游戏里标题栏所选的角色，见「多角色编辑」），不分部件。其他角色不读取外部值；需要按角色区分时用 11.6 的选择接口。
 
 ### 11.2 获取接口
 REFramework 只在脚本加载阶段能 `require` 到模块，各插件的加载顺序也不确定，所以接口以全局变量的形式提供：
 
 ```lua
 local function on_sks(api)
-    -- api.version == "1.0"
+    -- api.version："1.0" 只有 11.3 的函数；"1.1" 起有 11.6 的函数
 end
 if ShapeKeySystemAPI then
     on_sks(ShapeKeySystemAPI)
@@ -546,6 +552,7 @@ end
 | `api.get(name)` | `value, controller` | 当前（或即将写入的）值；`controller` 为 `"external:<owner>"` / `"expression"` / `"sculpt"`，不认识的键返回 nil |
 | `api.channels()` | list | 身上所有形态键（按名字合并）：`{name, parts, value, controller, expression}` |
 | `api.on("scan", fn)` | id | 每次扫描（换装、重新扫描）后调用 `fn()` |
+| `api.on("selection", fn)` | id | v1.1：选择在当前编辑的角色上生效后调用 `fn(info)`，见 11.6 |
 | `api.off(id)` | — | 移除监听 |
 | `api.is_ready()` | bool | 已经扫描到形态键 |
 
@@ -565,6 +572,64 @@ end)
 
 ### 11.5 面板命令
 用户收回控制：`external_release {owner?, name?}`（两个都不填 = 全部收回）。状态：`state.external = {rev, held = {{name, owner, value}}, by_norm}`。
+
+### 11.6 选择捏脸配置和键组选项（v1.1）
+
+插件为某个角色选择一份捏脸配置，或选择某个键组的选项。效果等同于用户在面板里点「加载」或切换键组：写入的是捏脸层，不是外部值，面板不显示"由某某控制"，用户可以继续调整、保存或撤销。
+
+#### 规则
+
+- **按角色**：每个角色各有一份选择，用 `opts.actor` 指定，省略时为当前编辑的角色。捏脸配置和键组都属于整个角色，不提供按部件限定；某个部件需要不同的数值时，写在配置文件的按部件单独值（`overrides`）里。
+- **角色标识**：`api.actors()` 列出的 `id`，是"人"而不是场景对象：同一个人的玩家本体、过场副本、鉴赏模型共用一个标识（RE4R：`"leon"`、`"ada"`）。只有一个角色的游戏（荒野等）标识为 `""`，`opts.actor` 省略或填 `""`。SKS 不驱动的角色（RE4R 的阿什莉等）返回 `E_NOT_FOUND`。插件手里只有场景对象时，用 `api.actor_of(x)` 换成标识（见下表）。
+- **当前编辑的角色**：选择立即加载到捏脸层（键还没扫描到时，等扫描到后加载）。加载后的状态算作"已保存"，面板不显示未保存，也不妨碍切换编辑的角色。新网格稍后才出现时（先切换、后加载网格），新出现的键直接取所选配置的值；用户在这之间没有改动时仍算作已保存。
+- **其他角色**：所选配置代替这个角色绑定里的配置，所选选项代替配置里保存的选项，在这个角色下一次扫描时生效（约 1 秒内）。这个角色之后成为编辑的角色时，选择再加载一次到捏脸层。
+- **先调用、后生效**：任何时候都可以调用，不需要等网格加载。角色不在场、还没扫描、或网格正在更换时，选择先记下，角色或网格出现后生效。返回值里的 `applied` 只说明这次调用是否已经加载到捏脸层，`false` 不是错误。
+- **配置和选项的顺序**：选择配置会清掉这个角色之前选过的键组选项（新配置带来它自己的键组）。同时选配置和选项时，先调用 `select_sculpt` 再调用 `select_group_option`；排队时也按这个顺序生效。
+- **重复选择**：选择和当前相同的配置或选项时什么都不做，用户在这之后的调整保留；`opts.force = true` 时重新加载。所以插件可以放心地在接口重新出现时重发全部选择。
+- **用户的调整**：用户在面板里调整数值时，选择保持不变。用户自己加载别的配置、把配置另存为别的名字时，这个角色的选择作废；重新加载所选的同一份配置时只作废键组选项的选择；用户手动切换、改名或删除某个键组，或者「重置全部」「全部归零」时，相应的键组选项选择作废。作废后插件下一次选择照常生效。保存到所选的同一份配置时选择保留。
+- **覆盖未保存的修改**：插件选择新配置时，用户在当前编辑的角色上未保存的修改被替换，面板提示一次，撤销一步可以找回。只切换键组选项时不替换其他修改。
+- **重置与重载**：选择只存在内存里。SKS 脚本重置或游戏重启后全部清空，插件需要在接口重新出现时（`ShapeKeySystemAPI_pending` 回调，或发现 `ShapeKeySystemAPI` 换成了新的表）重发当前选择。插件自己重置后重发也没有副作用（见「重复选择」）。
+- **和外部值的关系**：选择改的是捏脸值，外部值、驱动、条件表情照样能盖过它。
+
+#### 函数
+
+| 函数 | 返回 | 说明 |
+|---|---|---|
+| `api.select_sculpt(owner, name, opts?)` | `ok, err, msg, res` | 为角色选择捏脸配置。`name`：配置名（或文件名）；`opts.actor`、`opts.force`；`opts.folder`：模型文件夹，省略时先找这个角色自己的模型文件夹，再找通用配置，最后找任意文件夹。哪里都没有这个名字时返回 `E_NOT_FOUND`。`res = {applied, unchanged?}` |
+| `api.select_group_option(owner, group, option, opts?)` | `ok, err, msg, res` | 为角色选择键组选项。`group`：键组名或从 1 开始的序号；`option`：选项名、从 1 开始的序号，或 `0`（不选，组里的键回到自己的值）。当前编辑的角色已扫描时，键组或选项不存在返回 `E_NOT_FOUND`；其他情况在生效时检查，失败时记在 `on("selection")` 的 `errors` 里，其他角色忽略不存在的键组 |
+| `api.clear_selection(owner, opts?)` | `ok` | 结束这个插件对 `opts.actor` 的选择（省略 = 这个插件的全部选择）。其他角色立即回到绑定里的配置；当前编辑的角色在选择之后没被改过时回到绑定里的配置（没有绑定时回到 mod 默认值），被改过时保留屏幕上的数值 |
+| `api.selection(opts?)` | table / nil | 角色当前的选择：`{owner, sculpt, folder, groups = {[group] = option}, pending}`；`pending = true` 表示还在排队 |
+| `api.actors()` | list | SKS 能驱动的角色：`{id, name, player, edited, present, folder}`。`edited`：正在编辑；`present`：在场景里；`folder`：这个角色在场时它的模型文件夹，用来筛选 `sculpt_presets` |
+| `api.actor_of(x)` | id / nil | 把场景对象换成角色标识。`x` 可以是：角色标识；部件 ID 或网格路径（适配器能从中认出人时，RE4R：`"cha000_10"`、`"/Character/cha800/10/cha800_10.mesh"`）；角色根节点、头部或根节点下任一部件的 GameObject / Transform（角色需要在场景里）。认不出返回 nil；只有一个角色的游戏总是返回 `""` |
+| `api.sculpt_presets(folder?)` | list | 可选的捏脸配置：`{name, folder, source, key_groups}`，`folder` 为 nil 表示通用配置，`source` 为 `"user"` / `"mods"`，同名同文件夹时只列用户的。给出 `folder` 时只列这个模型文件夹和通用配置。`key_groups` 格式同下 |
+| `api.key_groups(opts?)` | list / nil, err | 角色当前的键组：`{name, value, options = {选项名}}`，`value` 为生效的选项序号（0 = 不选）。角色还没扫描时返回 `nil, "E_NOT_SCANNED"`。`opts.sculpt`（可带 `opts.folder`）：改为列出这份配置保存的键组 |
+
+`owner`：插件名（1~64 字符），用来区分谁的选择和显示提示。同一个角色只保留最后一次选择的 `owner`。
+
+`on("selection", fn)`：选择在当前编辑的角色上生效后调用 `fn(info)`，`info = {actor, owner, sculpt, groups = {[键组名] = 选项序号}, errors = {{code, msg}}}`；`sculpt` 为这次加载的配置名，只切换选项时为 nil。其他角色生效时不调用。
+
+错误码：`E_BAD_ARGS`（参数类型不对）、`E_NOT_FOUND`（配置、键组、选项或角色不存在）、`E_NOT_SCANNED`（`key_groups` 查询的角色还没扫描）。
+
+#### 例子
+
+```lua
+-- 造型切换时：为造型所属的角色选择 SKS 配置和键组选项
+local function apply_look(api, actor, look)
+    if not api.select_sculpt then return end              -- SKS 早于 1.1
+    if look.sks_sculpt then
+        api.select_sculpt("ArmorVariantManager", look.sks_sculpt, { actor = actor })
+    end
+    for group, option in pairs(look.sks_groups or {}) do
+        api.select_group_option("ArmorVariantManager", group, option, { actor = actor })
+    end
+end
+
+-- 编辑界面的下拉：角色的模型文件夹里的配置和通用配置，以及每份配置的键组
+local api = ShapeKeySystemAPI
+for _, a in ipairs(api.actors()) do
+    local list = api.sculpt_presets(a.folder)   -- folder 为 nil 时列出全部
+end
+```
 
 ## 12. 条件表情（2026-10-10）
 
@@ -753,7 +818,7 @@ Core 的 `Procedural.lua` 有三个生成器：眨眼（`blink.L` / `blink.R`）
 
 `state.scene.additional` 提供 `rev`、`instances`、`errors` 与释放时的 `reason`。实例行包含角色标识、显示名、Profile、绑定、通道数、就绪状态、眼睛参数、增益及提示，不暴露引擎对象。
 
-当前面板与外部 API 编辑主角色；额外角色按自己的模型绑定驱动。RE4R 绑定可用 `eyes.neutral.L/R.yaw/pitch` 保存对应角色的眼睛中立位。
+当前面板与外部值编辑主角色；额外角色按自己的模型绑定驱动，其他插件用 `select_sculpt` / `select_group_option` 为某个角色做的选择代替绑定里的配置和选项（11.6）。RE4R 绑定可用 `eyes.neutral.L/R.yaw/pitch` 保存对应角色的眼睛中立位。
 
 ## 面捕
 
