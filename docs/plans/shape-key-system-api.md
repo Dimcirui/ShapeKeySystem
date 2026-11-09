@@ -577,16 +577,22 @@ end)
 
 插件为某个角色选择一份捏脸配置，或选择某个键组的选项。效果等同于用户在面板里点「加载」或切换键组：写入的是捏脸层，不是外部值，面板不显示"由某某控制"，用户可以继续调整、保存或撤销。
 
+捏脸配置相当于一个角色的一份完整设定，通常由用户和模型绑定决定；插件一般只选键组选项（例如换装插件的状态组对应 SKS 的键组），让选项跟着角色走，不管当前是哪份配置。`select_sculpt` 用于需要直接指定整份配置的插件。
+
 #### 规则
 
 - **按角色**：每个角色各有一份选择，用 `opts.actor` 指定，省略时为当前编辑的角色。捏脸配置和键组都属于整个角色，不提供按部件限定；某个部件需要不同的数值时，写在配置文件的按部件单独值（`overrides`）里。
 - **角色标识**：`api.actors()` 列出的 `id`，是"人"而不是场景对象：同一个人的玩家本体、过场副本、鉴赏模型共用一个标识（RE4R：`"leon"`、`"ada"`）。只有一个角色的游戏（荒野等）标识为 `""`，`opts.actor` 省略或填 `""`。SKS 不驱动的角色（RE4R 的阿什莉等）返回 `E_NOT_FOUND`。插件手里只有场景对象时，用 `api.actor_of(x)` 换成标识（见下表）。
 - **当前编辑的角色**：选择立即加载到捏脸层（键还没扫描到时，等扫描到后加载）。加载后的状态算作"已保存"，面板不显示未保存，也不妨碍切换编辑的角色。新网格稍后才出现时（先切换、后加载网格），新出现的键直接取所选配置的值；用户在这之间没有改动时仍算作已保存。
-- **其他角色**：所选配置代替这个角色绑定里的配置，所选选项代替配置里保存的选项，在这个角色下一次扫描时生效（约 1 秒内）。这个角色之后成为编辑的角色时，选择再加载一次到捏脸层。
+- **键组选项跟着角色走**：选项按键组名记住，套到这个角色当前生效的配置上，不论配置是插件选的、用户手动加载的，还是模型绑定换的。当前配置里没有这个键组时先跳过，选择保留，换到有这个键组的配置时再生效。
+- **其他角色**：所选配置代替这个角色绑定里的配置，所选选项按键组名代替配置里保存的选项，在这个角色下一次扫描时生效（约 1 秒内）。这个角色之后成为编辑的角色时，选择再加载一次到捏脸层。
 - **先调用、后生效**：任何时候都可以调用，不需要等网格加载。角色不在场、还没扫描、或网格正在更换时，选择先记下，角色或网格出现后生效。返回值里的 `applied` 只说明这次调用是否已经加载到捏脸层，`false` 不是错误。
-- **配置和选项的顺序**：选择配置会清掉这个角色之前选过的键组选项（新配置带来它自己的键组）。同时选配置和选项时，先调用 `select_sculpt` 再调用 `select_group_option`；排队时也按这个顺序生效。
+- **配置和选项的顺序**：`select_sculpt` 会清掉这个角色之前选过的键组选项（插件指定的整份配置带来它自己的键组）。同时选配置和选项时，先调用 `select_sculpt` 再调用 `select_group_option`；排队时也按这个顺序生效。
 - **重复选择**：选择和当前相同的配置或选项时什么都不做，用户在这之后的调整保留；`opts.force = true` 时重新加载。所以插件可以放心地在接口重新出现时重发全部选择。
-- **用户的调整**：用户在面板里调整数值时，选择保持不变。用户自己加载别的配置、把配置另存为别的名字时，这个角色的选择作废；重新加载所选的同一份配置时只作废键组选项的选择；用户手动切换、改名或删除某个键组，或者「重置全部」「全部归零」时，相应的键组选项选择作废。作废后插件下一次选择照常生效。保存到所选的同一份配置时选择保留。
+- **用户的调整**：
+  - 用户在面板里调整数值时，选择保持不变。
+  - 用户自己加载别的配置、把配置另存为别的名字，或者模型绑定换了配置时，`select_sculpt` 选的配置作废，键组选项的选择保留并套到新配置上。重新加载或保存到所选的同一份配置时，配置的选择也保留。
+  - 只有用户在面板里手动切换、改名或删除某个键组，或者「重置全部」「全部归零」时，相应键组的选项选择才作废，直到插件下一次选择这个键组。
 - **覆盖未保存的修改**：插件选择新配置时，用户在当前编辑的角色上未保存的修改被替换，面板提示一次，撤销一步可以找回。只切换键组选项时不替换其他修改。
 - **重置与重载**：选择只存在内存里。SKS 脚本重置或游戏重启后全部清空，插件需要在接口重新出现时（`ShapeKeySystemAPI_pending` 回调，或发现 `ShapeKeySystemAPI` 换成了新的表）重发当前选择。插件自己重置后重发也没有副作用（见「重复选择」）。
 - **和外部值的关系**：选择改的是捏脸值，外部值、驱动、条件表情照样能盖过它。
@@ -596,38 +602,41 @@ end)
 | 函数 | 返回 | 说明 |
 |---|---|---|
 | `api.select_sculpt(owner, name, opts?)` | `ok, err, msg, res` | 为角色选择捏脸配置。`name`：配置名（或文件名）；`opts.actor`、`opts.force`；`opts.folder`：模型文件夹，省略时先找这个角色自己的模型文件夹，再找通用配置，最后找任意文件夹。哪里都没有这个名字时返回 `E_NOT_FOUND`。`res = {applied, unchanged?}` |
-| `api.select_group_option(owner, group, option, opts?)` | `ok, err, msg, res` | 为角色选择键组选项。`group`：键组名或从 1 开始的序号；`option`：选项名、从 1 开始的序号，或 `0`（不选，组里的键回到自己的值）。当前编辑的角色已扫描时，键组或选项不存在返回 `E_NOT_FOUND`；其他情况在生效时检查，失败时记在 `on("selection")` 的 `errors` 里，其他角色忽略不存在的键组 |
-| `api.clear_selection(owner, opts?)` | `ok` | 结束这个插件对 `opts.actor` 的选择（省略 = 这个插件的全部选择）。其他角色立即回到绑定里的配置；当前编辑的角色在选择之后没被改过时回到绑定里的配置（没有绑定时回到 mod 默认值），被改过时保留屏幕上的数值 |
-| `api.selection(opts?)` | table / nil | 角色当前的选择：`{owner, sculpt, folder, groups = {[group] = option}, pending}`；`pending = true` 表示还在排队 |
-| `api.actors()` | list | SKS 能驱动的角色：`{id, name, player, edited, present, folder}`。`edited`：正在编辑；`present`：在场景里；`folder`：这个角色在场时它的模型文件夹，用来筛选 `sculpt_presets` |
+| `api.select_group_option(owner, group, option, opts?)` | `ok, err, msg, res` | 为角色选择键组选项。`group`：键组名，或从 1 开始的序号（只在当前编辑的角色已扫描时可靠：会换成键组名记住；跨配置请用名字）；`option`：选项名、从 1 开始的序号，或 `0`（不选，组里的键回到自己的值）。当前编辑的角色已扫描时，键组或选项不存在返回 `E_NOT_FOUND`；其他情况在套用时检查，跳过的键组记在 `on("selection")` 的 `errors` 和 `selection().skipped` 里 |
+| `api.clear_selection(owner, opts?)` | `ok` | 结束这个插件对 `opts.actor` 的选择（省略 = 这个插件的全部选择）。其他角色立即回到绑定里的配置和选项。当前编辑的角色：只有键组选项的选择时，这些键组回到当前配置保存的选项；有 `select_sculpt` 的选择时，选择之后没被改过就回到绑定里的配置（没有绑定时回到 mod 默认值），被改过就保留屏幕上的数值 |
+| `api.selection(opts?)` | table / nil | 角色当前的选择：`{owner, sculpt, folder, groups = {[group] = option}, pending, skipped}`；`pending = true` 表示还在排队；`skipped`：当前编辑的角色的配置里没有、暂时跳过的键组名 |
+| `api.actors()` | list | SKS 能驱动的角色：`{id, name, player, edited, present, folder}`。`edited`：正在编辑；`present`：在场景里；`folder`：这个角色的模型文件夹（在场时取它穿的模型，不在场时取适配器按标识给出的模型，RE4R 与标识相同；没有时为 nil），用来筛选 `sculpt_presets` |
 | `api.actor_of(x)` | id / nil | 把场景对象换成角色标识。`x` 可以是：角色标识；部件 ID 或网格路径（适配器能从中认出人时，RE4R：`"cha000_10"`、`"/Character/cha800/10/cha800_10.mesh"`）；角色根节点、头部或根节点下任一部件的 GameObject / Transform（角色需要在场景里）。认不出返回 nil；只有一个角色的游戏总是返回 `""` |
-| `api.sculpt_presets(folder?)` | list | 可选的捏脸配置：`{name, folder, source, key_groups}`，`folder` 为 nil 表示通用配置，`source` 为 `"user"` / `"mods"`，同名同文件夹时只列用户的。给出 `folder` 时只列这个模型文件夹和通用配置。`key_groups` 格式同下 |
+| `api.sculpt_presets(folder?)` | list | 可选的捏脸配置：`{name, folder, source, key_groups}`，`folder` 为 nil 表示通用配置，`source` 为 `"user"` / `"mods"`，同名同文件夹时只列用户的。给出 `folder` 时只列这个模型文件夹和通用配置。读的是配置文件，任何角色、在不在场都能查；编辑界面要列出某个角色可选的键组时，取这里各配置 `key_groups` 的并集。`key_groups` 格式同下 |
 | `api.key_groups(opts?)` | list / nil, err | 角色当前的键组：`{name, value, options = {选项名}}`，`value` 为生效的选项序号（0 = 不选）。角色还没扫描时返回 `nil, "E_NOT_SCANNED"`。`opts.sculpt`（可带 `opts.folder`）：改为列出这份配置保存的键组 |
 
 `owner`：插件名（1~64 字符），用来区分谁的选择和显示提示。同一个角色只保留最后一次选择的 `owner`。
 
-`on("selection", fn)`：选择在当前编辑的角色上生效后调用 `fn(info)`，`info = {actor, owner, sculpt, groups = {[键组名] = 选项序号}, errors = {{code, msg}}}`；`sculpt` 为这次加载的配置名，只切换选项时为 nil。其他角色生效时不调用。
+`on("selection", fn)`：选择在当前编辑的角色上生效后调用 `fn(info)`，`info = {actor, owner, sculpt, config, groups = {[键组名] = 选项序号}, errors = {{code, msg, group?}}}`。`sculpt` 为这次由 `select_sculpt` 加载的配置名，否则为 nil；`config` 为当前生效的配置名；`groups` 为这次套用上的选项；`errors` 里带 `group` 的项是当前配置里没有、被跳过的键组。插件新做了选择、配置换了（包括键组选项跟着套到新配置上）、或者套用结果（生效的选项、跳过的键组）有变化时调用；结果不变的重新扫描不调用。其他角色生效时不调用。
 
 错误码：`E_BAD_ARGS`（参数类型不对）、`E_NOT_FOUND`（配置、键组、选项或角色不存在）、`E_NOT_SCANNED`（`key_groups` 查询的角色还没扫描）。
 
 #### 例子
 
 ```lua
--- 造型切换时：为造型所属的角色选择 SKS 配置和键组选项
-local function apply_look(api, actor, look)
-    if not api.select_sculpt then return end              -- SKS 早于 1.1
-    if look.sks_sculpt then
-        api.select_sculpt("ArmorVariantManager", look.sks_sculpt, { actor = actor })
-    end
-    for group, option in pairs(look.sks_groups or {}) do
-        api.select_group_option("ArmorVariantManager", group, option, { actor = actor })
-    end
+-- 状态组切换时：为所属角色选择 SKS 键组选项（按名字，跟着角色走，不管当前配置）
+local function apply_state(api, actor, group, option)
+    if not api.select_group_option then return end        -- SKS 早于 1.1
+    api.select_group_option("ArmorVariantManager", group, option, { actor = actor })
 end
 
--- 编辑界面的下拉：角色的模型文件夹里的配置和通用配置，以及每份配置的键组
-local api = ShapeKeySystemAPI
-for _, a in ipairs(api.actors()) do
-    local list = api.sculpt_presets(a.folder)   -- folder 为 nil 时列出全部
+-- 编辑界面的下拉：某个角色所有可选配置里键组和选项的并集
+local function group_choices(api, actor)
+    local folder
+    for _, a in ipairs(api.actors()) do if a.id == actor then folder = a.folder end end
+    local union, order = {}, {}
+    for _, preset in ipairs(api.sculpt_presets(folder)) do   -- folder 为 nil 时列出全部
+        for _, g in ipairs(preset.key_groups) do
+            if not union[g.name] then union[g.name] = {}; order[#order + 1] = g.name end
+            for _, o in ipairs(g.options) do union[g.name][o] = true end
+        end
+    end
+    return order, union
 end
 ```
 
