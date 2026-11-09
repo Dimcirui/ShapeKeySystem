@@ -114,4 +114,40 @@ end
 
 function M.has(id) return groups[id] ~= nil end
 
+-- The character a scene object belongs to (public API): a GameObject or Transform of the
+-- character's root, its head, or a part under that root. Faces are those of the last refresh.
+local function try_call(o, method)
+    local ok, r = pcall(function() return o:call(method) end)
+    return ok and r or nil
+end
+
+function M.object_actor(obj)
+    if not M.enabled() or obj == nil then return nil end
+    local tr = try_call(obj, "get_Transform") or obj
+    -- every node from each face up to its character root
+    local owner = {}
+    for id, e in pairs(groups) do
+        for _, face in ipairs(e.faces) do
+            local ok, root = pcall(adapter.face_root or function() end, face)
+            local stop = ok and root and address(root) or nil
+            local node = face
+            for _ = 1, 8 do
+                if not node then break end
+                local a = address(node)
+                owner[a] = owner[a] or id
+                if a == stop then break end
+                node = try_call(node, "get_Parent")
+            end
+        end
+    end
+    local node = tr
+    for _ = 1, 8 do
+        if not node then break end
+        local id = owner[address(node)]
+        if id then return id end
+        node = try_call(node, "get_Parent")
+    end
+    return nil
+end
+
 return M

@@ -18,6 +18,9 @@ local Drivers = require("ShapeKeySystem_Core.Drivers")
 local Ext = require("ShapeKeySystem_Core.External")
 local M = { state = { rev = 0, instances = {}, errors = {} } }
 M.faces = nil   -- function returning the faces to drive (API sets it with Core/Actors.lua)
+-- function(actor) -> the sculpt config / key group options another plugin picked for that character
+-- ({sculpt, folder, groups = {[group] = option}}) or nil; replaces the binding's choice here
+M.selection = nil
 local adapter, rigs, frame, next_scan = nil, {}, 0, 0
 local auto_profiles, auto_registry, auto_count = {}, nil, 0
 
@@ -100,12 +103,38 @@ local function preset_values(preset, part, values)
     for name, value in pairs(preset.overrides[part.id] or {}) do values[Sculpt.key_of(name)] = value end
 end
 
--- the binding's preset; a part of another model takes its own mod's preset for keys the binding's
--- preset does not name, like Sculpt.rebuild for the edited character
-local function sculpt_values(part, binding, parts)
+-- The character's sculpt config: the one another plugin picked (M.selection), else the binding's.
+-- Its key groups come with the options in effect (the picked ones over the saved ones).
+local function sculpt_preset(binding, parts, sel)
     local data = binding and binding.data or {}
+    local preset
+    if sel and sel.sculpt then
+        local primary = Presets.primary_part(parts)
+        local folder = sel.folder or (binding and binding.folder) or (primary and Presets.folder_of(primary.id))
+        preset = Presets.find_sculpt(sel.sculpt, folder, nil, sel.folder == nil)
+    end
+    preset = preset or Presets.find_sculpt(data.sculpt, binding and binding.folder)
+    local groups = U.copy(preset and preset.key_groups or {})
+    for ref, option in pairs(sel and sel.groups or {}) do
+        local g, i = Sculpt.resolve_option(groups, ref, option)
+        if g then g.value = i end
+    end
+    return preset, groups
+end
+
+-- the fixed values of the selected options; the first group in the list naming a key wins
+local function held_values(groups, values)
+    for i = #groups, 1, -1 do
+        local g = groups[i]
+        local o = g.options[g.value]
+        for name, value in pairs(o and o.values or {}) do values[Sculpt.key_of(name)] = tonumber(value) or 0 end
+    end
+end
+
+-- the character's preset; a part of another model takes its own mod's preset for keys that preset
+-- does not name, like Sculpt.rebuild for the edited character
+local function sculpt_values(part, binding, parts, preset, groups)
     local values = {}
-    local preset = Presets.find_sculpt(data.sculpt, binding and binding.folder)
     -- `target` names the part the preset was made on, not the only part it applies to
     if preset then preset_values(preset, part, values) end
     if binding and Presets.folder_of(part.id) ~= Presets.folder_of(binding.part) then
@@ -117,6 +146,7 @@ local function sculpt_values(part, binding, parts)
             for k, v in pairs(own) do if values[k] == nil then values[k] = v end end
         end
     end
+    held_values(groups, values)
     return values
 end
 
@@ -156,8 +186,10 @@ local function build(raw, options, old)
     local program, _, why = Profile.compile(resolved, {})
     if not program then error(why, 0) end
     local e, eyes, gains = tuning(program, binding, options)
+    local actor = adapter.actor_of and adapter.actor_of(raw.face) or nil
+    local sel = actor and M.selection and M.selection(actor) or nil
     local token = raw.psig .. U.signature({profile = id, binding = binding and binding.data,
-        bindings = bindings, expression = e, eyes = eyes}) .. tostring(Profile.registry) .. tostring(Presets.sculpt_list)
+        bindings = bindings, expression = e, eyes = eyes, sel = sel}) .. tostring(Profile.registry) .. tostring(Presets.sculpt_list)
     if old and old.token == token then return old end
     raw.token, raw.prog, raw.binding, raw.bindings = token, program, binding, bindings
     raw.warnings = warnings
@@ -165,11 +197,18 @@ local function build(raw, options, old)
     raw.P, raw.W, raw.V, raw.forced = {}, {}, {}, {}
     local index = Names.build_index(program.names, resolved.aliases, resolved.channels)
     raw.index, raw.driven = index, {}
-    raw.actor = adapter.actor_of and adapter.actor_of(raw.face) or nil
+    raw.actor = actor
+    local preset, groups = sculpt_preset(binding, raw.parts, sel)
+    raw.key_groups = groups
+    raw.folder = binding and binding.folder
+    if not raw.folder then
+        local primary = Presets.primary_part(raw.parts)
+        raw.folder = primary and Presets.folder_of(primary.id) or nil
+    end
     raw.targets, raw.manual = {}, {}
     local slots = {}
     for _, part in ipairs(raw.parts) do
-        local base = sculpt_values(part, binding, raw.parts)
+        local base = sculpt_values(part, binding, raw.parts, preset, groups)
         local target = Scene.build_target(part, index, 1, {})
         local owned = {}
         if target then
@@ -393,6 +432,16 @@ function M.tick(current_frame, options)
         end
     end
     if frame % 15 == 0 then publish() end
+end
+
+-- the next tick scans again (a selection changed); rigs whose token is unchanged are kept
+function M.refresh_soon() next_scan = math.min(next_scan, frame + 1) end
+
+-- the first rig of a character: its key groups (options in effect) and model folder
+function M.actor_info(actor)
+    for _, rig in ipairs(rigs) do
+        if rig.actor == actor then return { key_groups = rig.key_groups, folder = rig.folder } end
+    end
 end
 
 function M.prepare()

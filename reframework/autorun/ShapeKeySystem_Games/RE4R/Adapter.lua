@@ -165,6 +165,11 @@ end
 
 -- the person a head belongs to (Core/Actors.lua): "leon" / "ada"
 function A.actor_of(face) return actor_of_path(path(face)) end
+-- every person `actor_of` can return, and the person of a part ID or mesh path (public API)
+A.actor_ids = { "leon", "ada" }
+function A.actor_of_part(p)
+    return type(p) == "string" and actor_of_path((p:lower():gsub("\\", "/"))) or nil
+end
 
 -- components of a type in the current scene, or nil
 local function components(type_name)

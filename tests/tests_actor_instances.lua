@@ -155,6 +155,37 @@ Presets.load_sculpt()
 M.release("sculpt preset")
 for frame = 446, 520 do M.tick(frame, options) end
 check(math.abs((b.mesh.values[3] or 0) - .6) < 1e-6, "a sculpt preset's target part does not limit which parts it reaches")
+-- another plugin's pick (M.selection) replaces the binding's config for that character only,
+-- with its key groups: the picked option over the saved one, the first group naming a key wins
+json.dump_file("ShapeKeySystem/user/ada/sculpt/picked.json", {schema = "sks.sculpt/1", name = "picked",
+    values = {B_size = .2}, key_groups = {
+        {name = "G", value = 1, options = {{name = "big", values = {B_size = .9}}, {name = "mid", values = {B_size = .5}}}},
+        {name = "Low", value = 1, options = {{name = "on", values = {B_size = .1}}}}}})
+Presets.load_sculpt()
+local sel = {sculpt = "picked", groups = {Low = 0}}
+M.selection = function(actor) return actor == "ada" and sel or nil end
+local leon_size = a.mesh.values[3]
+local f = 1000
+local function run(n) for _ = 1, n do f = f + 1; M.tick(f, options) end end
+M.refresh_soon(); run(80)
+check(math.abs((b.mesh.values[3] or 0) - .9) < 1e-6 and a.mesh.values[3] == leon_size,
+    "a picked config and its saved key group option reach only that character")
+sel = {sculpt = "picked", groups = {G = "mid", Low = 0}}
+M.refresh_soon(); run(80)
+check(math.abs((b.mesh.values[3] or 0) - .5) < 1e-6, "a picked option by name replaces the saved one")
+sel = {sculpt = "picked", groups = {G = 0, Low = 1}}
+M.refresh_soon(); run(80)
+check(math.abs((b.mesh.values[3] or 0) - .1) < 1e-6, "option 0 frees the key; another group's option still holds it")
+sel = {sculpt = "picked", groups = {G = 1, Low = 1}}
+M.refresh_soon(); run(80)
+check(math.abs((b.mesh.values[3] or 0) - .9) < 1e-6, "the first group naming a key wins")
+local info = M.actor_info("ada")
+check(info and info.folder == "ada" and info.key_groups[1].value == 1 and info.key_groups[2].value == 1,
+    "actor_info lists the character's folder and the options in effect")
+sel = nil
+M.refresh_soon(); run(80)
+check(math.abs((b.mesh.values[3] or 0) - .6) < 1e-6, "without a pick the binding's config comes back")
+M.selection = nil
 local real_read, reads = X.read, 0
 X.read = function(...) reads = reads + 1; return real_read(...) end
 for frame = 521, 524 do M.tick(frame, options) end
