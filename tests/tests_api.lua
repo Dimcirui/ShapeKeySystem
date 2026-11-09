@@ -150,6 +150,10 @@ do
             { name = "on", values = { [key2] = 0.8 } }, { name = "half", values = { [key2] = 0.4 } } } } } })
     json.dump_file("ShapeKeySystem/user/sculpt/api_b.json", { schema = "sks.sculpt/1", name = "API_B",
         values = { [self_key] = 0.6 } })
+    json.dump_file("ShapeKeySystem/user/sculpt/api_c.json", { schema = "sks.sculpt/1", name = "API_C",
+        values = { [self_key] = 0.5, [key2] = 0 },
+        key_groups = { { name = "G", value = 0, options = {
+            { name = "half", values = { [key2] = 0.5 } }, { name = "on", values = { [key2] = 0.7 } } } } } })
     Presets.load_sculpt()
     local listed
     for _, e in ipairs(api.sculpt_presets()) do if e.name == "API_A" then listed = e end end
@@ -188,7 +192,8 @@ do
     api.select_group_option("AVM", 1, 1); ticks(3)
     check(math.abs(WEIGHTS[k2] - 0.8) < 1e-6, "group and option by index")
     local sel = api.selection()
-    check(sel and sel.sculpt == "API_A" and sel.groups[1] == 1 and not sel.pending, "selection() reports the pick")
+    check(sel and sel.sculpt == "API_A" and sel.groups.G == 1 and sel.groups[1] == nil and not sel.pending,
+        "selection() reports the pick, kept by group name")
 
     -- the same pick again keeps the user's edits; force loads it again
     local okc, _, _, rc = api.select_sculpt("AVM", "API_A")
@@ -204,12 +209,45 @@ do
     SKS.call("key_group_set", { group = "G", value = 0 })
     sel = api.selection()
     check(sel and sel.sculpt == "API_A" and sel.groups.G == nil, "switching a key group by hand drops that group's pick")
+    -- option picks follow the character into other configs by group name
     api.select_group_option("AVM", "G", "on")
-    SKS.call("load_sculpt", { name = "API_A" })
+    local ev2 = {}
+    local id2 = api.on("selection", function(info) ev2[#ev2 + 1] = info end)
+    SKS.call("load_sculpt", { name = "API_A" }); ticks(3)
     sel = api.selection()
-    check(sel and sel.sculpt == "API_A" and next(sel.groups) == nil, "loading the picked config by hand keeps it, drops the option picks")
-    SKS.call("load_sculpt", { name = "API_B" })
-    check(api.selection() == nil, "loading another config by hand drops the pick")
+    check(sel and sel.sculpt == "API_A" and sel.groups.G == "on" and math.abs(WEIGHTS[k2] - 0.8) < 1e-6,
+        "loading the picked config by hand keeps the config and option picks")
+    SKS.call("load_sculpt", { name = "API_C" }); ticks(3)
+    sel = api.selection()
+    check(sel and sel.sculpt == nil and sel.groups.G == "on", "loading another config by hand ends the config pick, keeps the option pick")
+    check(math.abs(WEIGHTS[k2] - 0.7) < 1e-6 and api.key_groups()[1].value == 2, "the option pick is applied to the new config's group by name")
+    check(ev2[#ev2] and ev2[#ev2].config == "API_C" and #ev2[#ev2].errors == 0, "on('selection') reports the apply in the new config")
+    local n_ev = #ev2
+    SKS.call("load_sculpt", { name = "API_B" }); ticks(3)
+    sel = api.selection()
+    check(sel and sel.groups.G == "on" and sel.skipped[1] == "G", "a config without the group: the pick is skipped and kept")
+    check(#ev2 == n_ev + 1 and ev2[#ev2].errors[1] and ev2[#ev2].errors[1].group == "G", "the skipped group is reported in errors")
+    SKS.call("load_sculpt", { name = "API_A" }); ticks(3)
+    check(math.abs(WEIGHTS[k2] - 0.8) < 1e-6 and #api.selection().skipped == 0, "back to a config with the group: the pick applies again")
+    n_ev = #ev2
+    SKS.call("rescan"); ticks(4)
+    check(#ev2 == n_ev, "a rescan does not report the same state again")
+    SKS.call("save_sculpt", { name = "API_D", general = true })
+    check(api.selection() and api.selection().groups.G == "on", "saving under another name keeps the option pick")
+    SKS.call("load_sculpt", { name = "API_A" })
+    api.clear_selection("AVM"); ticks(3)
+    check(api.selection() == nil and api.key_groups()[1].value == 0 and math.abs(WEIGHTS[k2]) < 1e-6,
+        "clear_selection of option picks: the groups go back to the config's saved option")
+    -- the binding brings another config (groups no one edited): the pick follows by name
+    api.select_group_option("AVM", "G", "on")
+    Sculpt.K.groups_touched = false
+    local okb, _, _, bres = SKS.call("bind_config", { kind = "sculpt", name = "API_C" }); ticks(4)
+    check(okb and api.key_groups()[1].options[1] == "half" and api.key_groups()[1].value == 2 and math.abs(WEIGHTS[k2] - 0.7) < 1e-6,
+        "a config the binding brings gets the option pick by name")
+    Presets.tombstone_binding(bres.base or Presets.binding_base(st.scene.parts[1].id))
+    api.clear_selection("AVM")
+    SKS.call("rescan"); ticks(4)
+    api.off(id2)
 
     -- before the scan: queued, applied once the keys are there
     local keys = Sculpt.K.keys

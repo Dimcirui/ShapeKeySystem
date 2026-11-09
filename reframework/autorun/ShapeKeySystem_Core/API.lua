@@ -916,11 +916,13 @@ end
 -- ---------------------------------------------------------------- selections by other plugins
 -- The public API's select_sculpt / select_group_option: per character, the sculpt config and key
 -- group options another plugin picked. They act on the sculpt layer, not on external leases: the
--- values stay editable. The edited character takes a pick once (now, or after the scan that brings
--- its keys) like a config loaded by hand; other characters use it in place of their binding's
--- config (ActorInstances.selection). In memory only: a script reset forgets every pick.
--- selections[actor] = { actor, owner, sculpt, folder, groups = {[group] = option}, rev,
---                       sculpt_pending, groups_pending = {}, mark }
+-- values stay editable. The edited character takes a picked config once (now, or after the scan
+-- that brings its keys) like a config loaded by hand; option picks follow it by group name into
+-- whatever config is in effect. Other characters use the picks in place of their binding's
+-- (ActorInstances.selection). In memory only: a script reset forgets every pick.
+-- selections[actor] = { actor, owner, sculpt, folder, groups = {[group] = option},
+--   sculpt_pending, groups_dirty (an option pick not applied yet), groups_ref (the K.groups the
+--   options were last applied to), config, applied, skipped (what was last reported), mark }
 local selections = {}
 
 -- the character the sculpt layer edits ("" without characters)
@@ -958,20 +960,27 @@ end
 
 local link_base_keys   -- defined with the expression writer below
 
--- Applies what is still pending of the edited character's pick (sculpt first: it brings its own
--- key groups). The applied state counts as saved unless unsaved edits were there before a group
--- switch alone; those edits are replaced by a config switch, which one undo brings back.
--- parts_changed: a pick no one edited since stays saved when new parts bring keys.
+-- Applies the edited character's picks: a picked config once (sculpt first: it brings its own key
+-- groups), then every option pick by group name whenever the groups in effect are another table
+-- than at the last apply (a config loaded by hand, by a pick or by the binding; rebuilds of
+-- untouched groups). A group the config lacks is skipped and kept for a later config.
+-- on("selection") fires when a config was loaded, an option pick is new, or what is in effect
+-- (config, options, skipped groups) differs from the last report.
+-- The applied state counts as saved unless unsaved edits were there before; a config pick replaces
+-- those edits (one undo brings them back). parts_changed: a pick no one edited since stays saved
+-- when new parts bring keys.
 local function apply_selection(parts_changed)
     local s = selections[C.sel_actor or ""]
     if not s or #Sculpt.K.keys == 0 then return false end
-    if not s.sculpt_pending and next(s.groups_pending) == nil then
-        if parts_changed and s.mark == Sculpt.edit_mark() then Sculpt.mark_saved() end
+    local unedited = s.mark ~= nil and s.mark == Sculpt.edit_mark()
+    if not s.sculpt_pending and not s.groups_dirty and s.groups_ref == Sculpt.K.groups then
+        if parts_changed and unedited then Sculpt.mark_saved() end
         return false
     end
     local info = { actor = s.actor, owner = s.owner, groups = {}, errors = {} }
     local was_dirty = Sculpt.is_dirty()
     local loaded
+    local explicit = s.groups_dirty or s.sculpt_pending
     Sculpt.end_gesture()
     if s.sculpt_pending then
         s.sculpt_pending = false
@@ -984,45 +993,58 @@ local function apply_selection(parts_changed)
             info.errors[#info.errors + 1] = { code = "E_NOT_FOUND", msg = "sculpt preset not found: " .. tostring(s.sculpt) }
         end
     end
-    for ref, option in pairs(s.groups_pending) do
+    local skipped, applied = {}, {}
+    for ref, option in pairs(s.groups) do
         local g, i, msg = Sculpt.resolve_option(Sculpt.K.groups, ref, option)
         if g then
-            Sculpt.group_set(g.name, i)
-            Sculpt.end_gesture()
+            Sculpt.group_pick(g, i)
             info.groups[g.name] = i
+            applied[#applied + 1] = g.name .. "=" .. i
         else
-            info.errors[#info.errors + 1] = { code = i, msg = msg }
+            info.errors[#info.errors + 1] = { code = i, msg = msg, group = ref }
+            skipped[#skipped + 1] = tostring(ref)
         end
     end
-    s.groups_pending = {}
-    if loaded or not was_dirty then Sculpt.mark_saved() end
+    table.sort(skipped); table.sort(applied)
+    skipped, applied = table.concat(skipped, "\n"), table.concat(applied, "\n")
+    local cp = C.sculpt_preset
+    info.config = cp and cp.name or nil
+    local config = cp and ((cp.folder or "") .. "/" .. cp.id) or ""
+    local report = explicit or loaded ~= nil or config ~= s.config or applied ~= s.applied or skipped ~= s.skipped
+    s.groups_dirty, s.groups_ref = false, Sculpt.K.groups
+    s.config, s.applied, s.skipped = config, applied, skipped
+    if loaded or not was_dirty or (parts_changed and unedited) then Sculpt.mark_saved() end
     if loaded and was_dirty then
         notice("info", I18n.f("%s 切换了捏脸配置：%s，之前未保存的修改可以撤销找回", s.owner, loaded.name))
     end
-    s.mark = Sculpt.edit_mark()
+    if loaded or s.mark == nil or unedited then s.mark = Sculpt.edit_mark() end
     build_sculpt_state()
-    Trail.event("selection by %s for %s: sculpt %s, %d error(s)", s.owner, s.actor == "" and "-" or s.actor,
-        tostring(info.sculpt), #info.errors)
+    if not report then return false end
+    Trail.event("selection by %s for %s: config %s, %d error(s)", s.owner, s.actor == "" and "-" or s.actor,
+        tostring(info.config), #info.errors)
     C.fire("selection", info)
     return true
 end
 C.apply_selection = apply_selection
 
--- The user's own choice on the edited character ends another plugin's pick: another config loaded
--- or saved under another name drops all of it, a key group switched, renamed or deleted by hand drops
--- that group (group = its name or index; true = every group). The next pick applies again.
-local function drop_selection(group)
+-- The user's own choice on the edited character ends another plugin's pick, until the next pick:
+-- a key group switched, renamed or deleted by hand drops that group's option pick (group = its
+-- name or index; true = every group: 重置全部 / 全部归零); group nil = another config loaded or saved
+-- by hand, which drops only the config pick (option picks follow into the new config).
+local function drop_selection(group, keep_config)
     local s = selections[C.sel_actor or ""]
     if not s then return end
-    if group == nil then selections[s.actor] = nil
+    if group == nil then
+        if not keep_config then s.sculpt, s.folder, s.sculpt_pending = nil, nil, false end
     else
         local target = group ~= true and Sculpt.resolve_option(Sculpt.K.groups, group, 0) or nil
         for ref in pairs(s.groups) do
             if group == true or ref == group or (target and Sculpt.resolve_option(Sculpt.K.groups, ref, 0) == target) then
-                s.groups[ref], s.groups_pending[ref] = nil, nil
+                s.groups[ref] = nil
             end
         end
     end
+    if not s.sculpt and next(s.groups) == nil then selections[s.actor] = nil end
     ActorInstances.refresh_soon()
 end
 
@@ -1040,10 +1062,7 @@ local function rebuild_sculpt()
     if actor ~= C.sel_actor then
         C.sel_actor = actor
         local s = selections[actor]
-        if s then
-            s.sculpt_pending = s.sculpt ~= nil
-            for ref, option in pairs(s.groups) do s.groups_pending[ref] = option end
-        end
+        if s then s.sculpt_pending, s.groups_dirty, s.groups_ref = s.sculpt ~= nil, true, nil end
     end
     Sculpt.rebuild(C.instances or C.parts, owned, sculpt_presets_of)
     link_base_keys()
@@ -2560,13 +2579,10 @@ function cmds.load_sculpt(a)
     if not e then return false, "E_NOT_FOUND", "sculpt preset not found: " .. tostring(a.name) end
     Sculpt.apply_preset(e)
     C.sculpt_preset, C.sculpt_preset_manual = e, true
-    -- the picked config loaded again by hand: its saved key groups are back, the pick stays
+    -- another config ends a config pick; option picks are applied to this config's groups by name
     local s = selections[C.sel_actor or ""]
-    if s and (s.sculpt == e.name or s.sculpt == e.id) then
-        drop_selection(true); s.mark = Sculpt.edit_mark()
-    else
-        drop_selection()
-    end
+    drop_selection(nil, s and (s.sculpt == e.name or s.sculpt == e.id))
+    apply_selection(false)
     build_sculpt_state()
     notice("info", I18n.f("已加载捏脸配置：%s", e.name))
     return true
@@ -2587,7 +2603,8 @@ function cmds.save_sculpt(a)
     Sculpt.mark_saved()
     C.sculpt_preset = Presets.find_sculpt(a.name, folder, "user")
     C.sculpt_preset_manual = true
-    -- saved over the picked config: the pick stays and counts as unedited again
+    -- saved over the picked config: the pick stays and counts as unedited again; saved under
+    -- another name: the config pick ends, option picks stay
     local s = selections[C.sel_actor or ""]
     if s and s.sculpt == a.name then s.mark = Sculpt.edit_mark() else drop_selection() end
     build_presets_state(); build_sculpt_state()
@@ -3450,8 +3467,7 @@ function PUB.select_sculpt(owner, name, opts)
         s.owner = owner
         return true, nil, nil, { applied = false, unchanged = true }
     end
-    s = { actor = actor, owner = owner, sculpt = name, folder = folder, groups = {}, groups_pending = {},
-          sculpt_pending = true, rev = (s and s.rev or 0) + 1 }
+    s = { actor = actor, owner = owner, sculpt = name, folder = folder, groups = {}, sculpt_pending = true }
     selections[actor] = s
     return true, nil, nil, { applied = settle(actor) }
 end
@@ -3469,21 +3485,25 @@ function PUB.select_group_option(owner, group, option, opts)
     end
     local actor, code, msg = actor_arg(opts)
     if not actor then return false, code, msg end
+    local s = selections[actor]
     if live_actor(actor) then
         local g, c2, m2 = Sculpt.resolve_option(Sculpt.K.groups, group, option)
         if not g then return false, c2, m2 end
+        -- kept by name, so it follows into other configs; other spellings of the group go
+        for ref in pairs(s and s.groups or {}) do
+            if ref ~= g.name and Sculpt.resolve_option(Sculpt.K.groups, ref, 0) == g then s.groups[ref] = nil end
+        end
+        group = g.name
     end
-    local s = selections[actor]
     if s and s.groups[group] == option and not forced(opts) then
         s.owner = owner
         return true, nil, nil, { applied = false, unchanged = true }
     end
     if not s then
-        s = { actor = actor, groups = {}, groups_pending = {}, rev = 0 }
+        s = { actor = actor, groups = {} }
         selections[actor] = s
     end
-    s.owner, s.rev = owner, s.rev + 1
-    s.groups[group], s.groups_pending[group] = option, option
+    s.owner, s.groups[group], s.groups_dirty = owner, option, true
     return true, nil, nil, { applied = settle(actor) }
 end
 
@@ -3501,7 +3521,18 @@ function PUB.clear_selection(owner, opts)
     for actor, s in pairs(selections) do
         if s.owner == owner and (only == nil or only == actor) then
             selections[actor] = nil
-            if live_actor(actor) and s.mark == Sculpt.edit_mark() then
+            -- option picks alone: those groups go back to the option the config saved
+            if live_actor(actor) and not s.sculpt then
+                local was_dirty = Sculpt.is_dirty()
+                local saved = C.sculpt_preset and C.sculpt_preset.key_groups or {}
+                for ref in pairs(s.groups) do
+                    local g = Sculpt.resolve_option(Sculpt.K.groups, ref, 0)
+                    local kept = g and Sculpt.resolve_option(saved, g.name, 0)
+                    if g then Sculpt.group_pick(g, kept and kept.value or 0) end
+                end
+                if not was_dirty then Sculpt.mark_saved() end
+                build_sculpt_state()
+            elseif live_actor(actor) and s.mark == Sculpt.edit_mark() then
                 local b = C.binding
                 local e = b and b.data and b.data.sculpt and Presets.find_sculpt(b.data.sculpt, b.folder) or nil
                 if e then Sculpt.apply_preset(e) else Sculpt.reset_all() end
@@ -3516,17 +3547,21 @@ function PUB.clear_selection(owner, opts)
 end
 
 -- selection(opts?) -> the pick for a character, or nil:
--- { owner, sculpt, folder, groups = {[group] = option}, pending = bool }
+-- { owner, sculpt, folder, groups = {[group] = option}, pending = bool,
+--   skipped = {groups the edited character's config lacks} }
 function PUB.selection(opts)
     local actor = actor_arg(opts)
     local s = actor and selections[actor]
     if not s then return nil end
+    local skipped = {}
+    for g in (s.skipped or ""):gmatch("[^\n]+") do skipped[#skipped + 1] = g end
     return { owner = s.owner, sculpt = s.sculpt, folder = s.folder, groups = U.copy(s.groups),
-             pending = s.sculpt_pending == true or next(s.groups_pending) ~= nil }
+             pending = s.sculpt_pending == true or s.groups_dirty == true, skipped = skipped }
 end
 
 -- the characters SKS can drive: { {id, name, player, edited, present, folder} }; one entry with
--- id "" for games with one character. folder: the model folder of its configs, while present.
+-- id "" for games with one character. folder: the model folder of its configs (while absent: the
+-- adapter's model for the id, if it names one).
 function PUB.actors()
     if not Actors.enabled() then
         return { { id = "", name = "", player = true, edited = true, present = #C.parts > 0, folder = primary_folder() } }
@@ -3541,7 +3576,9 @@ function PUB.actors()
     end
     for _, id in ipairs(SKS.adapter and SKS.adapter.actor_ids or {}) do
         if not seen[id] then
-            out[#out + 1] = { id = id, name = armor_name(id) or id, player = false, edited = false, present = false }
+            local ok, folder = pcall(Presets.model_of, id)
+            out[#out + 1] = { id = id, name = armor_name(id) or id, player = false, edited = false, present = false,
+                              folder = ok and folder or nil }
         end
     end
     return out
