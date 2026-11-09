@@ -1242,7 +1242,6 @@
   "键组 %d": "Key group %d",
   "没有可收入的已修改形态键": "No modified shape keys to take",
   "   %s  %.2f（由键组控制）": "   %s  %.2f (set by a key group)",
-  "形态键 %s 已在键组「%s」里，不同键组不能共用形态键": "Shape key %s is already in key group “%s”; different key groups cannot share a shape key",
   "还没有形态键：先在下面调好，再点「收入已修改的键」，或用下面的搜索框添加": "No shape keys yet: set them in the list below and click “Take modified keys”, or add them with the search box below",
   "添加形态键…": "Add shape key…",
   "没有可添加的形态键": "No shape keys to add",

@@ -2414,13 +2414,8 @@ end
 -- runs a Sculpt key group edit for the commands below
 local function group_cmd(fn, ...)
     local ok, code, msg = scanned(); if not ok then return false, code, msg end
-    local r1, r2, r3, r4 = fn(...)
-    if not r1 then
-        if r2 == "E_CONFLICT" then
-            return false, r2, I18n.f("形态键 %s 已在键组「%s」里，不同键组不能共用形态键", tostring(r3), tostring(r4))
-        end
-        return false, r2, r3
-    end
+    local r1, r2, r3 = fn(...)
+    if not r1 then return false, r2, r3 end
     build_sculpt_state()
     return true, nil, nil, r2 ~= nil and { option = r2 } or nil
 end
