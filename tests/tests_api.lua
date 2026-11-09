@@ -16,7 +16,7 @@ end
 local function wait(sec) local t = os.clock() + sec; while os.clock() < t do end end
 
 local api = ShapeKeySystemAPI
-check(type(api) == "table" and api.version == "1.0" and api == SKS.public, "global ShapeKeySystemAPI published")
+check(type(api) == "table" and api.version == "1.1" and api == SKS.public, "global ShapeKeySystemAPI published")
 SKS.call("rescan"); ticks(80)
 local list = api.channels()
 check(#list > 0 and api.is_ready(), "channels() lists the worn keys")
@@ -134,4 +134,111 @@ if b then MOUSE.x, MOUSE.y = b.x + 4, b.y + 6; MOUSE.down = true; frame(); MOUSE
 check(api.get(self_key) == 0.2 and #st.external.held == 0, "全部收回 takes the key back")
 Panel.ui.win.h = win_h
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
+-- v1.1: another plugin picks sculpt configs and key group options (sculpt layer, not leases)
+do
+    local Presets = require("ShapeKeySystem_Core.Presets")
+    local before_values, before_overrides = Sculpt.export_values()
+    local before_groups = Sculpt.export_groups()
+    -- a second sculpt-only key for the group
+    CHANNELS[#CHANNELS + 1] = "blendShape1.api_extra"
+    SKS.call("rescan"); ticks(80)
+    local key2 = "api_extra"
+    local k2 = mesh_idx(key2)
+    json.dump_file("ShapeKeySystem/user/sculpt/api_a.json", { schema = "sks.sculpt/1", name = "API_A",
+        values = { [self_key] = 0.3, [key2] = 0 },
+        key_groups = { { name = "G", value = 0, options = {
+            { name = "on", values = { [key2] = 0.8 } }, { name = "half", values = { [key2] = 0.4 } } } } } })
+    json.dump_file("ShapeKeySystem/user/sculpt/api_b.json", { schema = "sks.sculpt/1", name = "API_B",
+        values = { [self_key] = 0.6 } })
+    Presets.load_sculpt()
+    local listed
+    for _, e in ipairs(api.sculpt_presets()) do if e.name == "API_A" then listed = e end end
+    check(listed and listed.folder == nil and listed.key_groups[1].name == "G" and listed.key_groups[1].options[2] == "half",
+        "sculpt_presets() lists configs with their key groups and options")
+    local gl = api.key_groups({ sculpt = "API_A" })
+    check(gl and #gl == 1 and #gl[1].options == 2, "key_groups({sculpt}) lists a config's groups")
+    local acts = api.actors()
+    check(#acts == 1 and acts[1].id == "" and acts[1].edited and api.actor_of({}) == "",
+        "one character: actors() has one entry with id \"\", actor_of() gives \"\"")
+    local r0, c0 = api.select_sculpt("AVM", "API_A", { actor = "leon" })
+    check(not r0 and c0 == "E_NOT_FOUND", "one character: opts.actor other than \"\" is refused")
+    local r1, c1 = api.select_sculpt("AVM", "nope")
+    local r2, c2 = api.select_sculpt("", "API_A")
+    local r3, c3 = api.select_group_option("AVM", "G", -1)
+    check(not r1 and c1 == "E_NOT_FOUND" and not r2 and c2 == "E_BAD_ARGS" and not r3 and c3 == "E_BAD_ARGS",
+        "select_*: unknown config and bad arguments are refused")
+
+    local events = {}
+    local ev = api.on("selection", function(info) events[#events + 1] = info end)
+    local ok1, _, _, res = api.select_sculpt("AVM", "API_A")
+    ticks(3)
+    check(ok1 and res.applied and math.abs(WEIGHTS[si] - 0.3) < 1e-6, "select_sculpt loads the config onto the mesh now")
+    check(st.sculpt.preset and st.sculpt.preset.name == "API_A" and not st.sculpt.dirty,
+        "the picked config shows as current and counts as saved")
+    check(#events == 1 and events[1].sculpt == "API_A" and events[1].owner == "AVM" and #events[1].errors == 0,
+        "on('selection') reports the applied pick")
+    check(api.get(self_key) == 0.3 and select(2, api.get(self_key)) == "sculpt", "the value stays a sculpt value")
+    check(SKS.call("set_sculpt_key", { name = self_key, value = 0.35 }), "the user can still edit a picked config's keys")
+
+    local og, cg = api.select_group_option("AVM", "G", "nope")
+    local og2, cg2 = api.select_group_option("AVM", "X", 1)
+    check(not og and cg == "E_NOT_FOUND" and not og2 and cg2 == "E_NOT_FOUND", "unknown option / group of the edited character refused")
+    check(api.select_group_option("AVM", "G", "half"), "select_group_option by option name"); ticks(3)
+    check(math.abs(WEIGHTS[k2] - 0.4) < 1e-6 and api.key_groups()[1].value == 2, "the option's fixed value is written")
+    api.select_group_option("AVM", 1, 1); ticks(3)
+    check(math.abs(WEIGHTS[k2] - 0.8) < 1e-6, "group and option by index")
+    local sel = api.selection()
+    check(sel and sel.sculpt == "API_A" and sel.groups[1] == 1 and not sel.pending, "selection() reports the pick")
+
+    -- the same pick again keeps the user's edits; force loads it again
+    local okc, _, _, rc = api.select_sculpt("AVM", "API_A")
+    check(okc and rc.unchanged and api.get(self_key) == 0.35, "picking the config already picked keeps the user's edit")
+    api.select_sculpt("AVM", "API_A", { force = true }); ticks(3)
+    local last = st.runtime.notices[#st.runtime.notices]
+    check(api.get(self_key) == 0.3 and last and last.text:find("AVM", 1, true) and last.text:find("API_A", 1, true),
+        "force reloads it; replaced edits get a notice")
+    check(SKS.call("sculpt_undo") and api.get(self_key) == 0.35, "one undo brings the replaced edit back")
+
+    -- the user's own choice ends the pick
+    api.select_sculpt("AVM", "API_A", { force = true }); api.select_group_option("AVM", "G", "on")
+    SKS.call("key_group_set", { group = "G", value = 0 })
+    sel = api.selection()
+    check(sel and sel.sculpt == "API_A" and sel.groups.G == nil, "switching a key group by hand drops that group's pick")
+    api.select_group_option("AVM", "G", "on")
+    SKS.call("load_sculpt", { name = "API_A" })
+    sel = api.selection()
+    check(sel and sel.sculpt == "API_A" and next(sel.groups) == nil, "loading the picked config by hand keeps it, drops the option picks")
+    SKS.call("load_sculpt", { name = "API_B" })
+    check(api.selection() == nil, "loading another config by hand drops the pick")
+
+    -- before the scan: queued, applied once the keys are there
+    local keys = Sculpt.K.keys
+    Sculpt.K.keys = {}
+    local okq, _, _, rq = api.select_sculpt("AVM", "API_A")
+    local okg = api.select_group_option("AVM", "G", "half")
+    Sculpt.K.keys = keys
+    check(okq and not rq.applied and okg and api.selection().pending, "called before the scan: queued")
+    events = {}
+    SKS.call("rescan"); ticks(4)
+    check(math.abs(WEIGHTS[si] - 0.3) < 1e-6 and math.abs(WEIGHTS[k2] - 0.4) < 1e-6 and not api.selection().pending,
+        "the scan that brings the keys applies the queued config, then the option")
+    check(#events == 1 and events[1].groups.G == 2, "on('selection') after the queued pick")
+    SKS.call("rescan"); ticks(4)
+    check(#events == 1 and not st.sculpt.dirty, "later scans do not apply it again")
+
+    -- a pick no one edited goes back to the binding's config (none here: mod defaults) on clear
+    api.clear_selection("Other")
+    check(api.selection() ~= nil, "clear_selection leaves other owners' picks")
+    api.clear_selection("AVM"); ticks(3)
+    check(api.selection() == nil and api.get(self_key) == Sculpt.K.by_name[self_key].default,
+        "clear_selection: an unedited pick returns to the defaults")
+    api.select_sculpt("AVM", "API_A"); SKS.call("set_sculpt_key", { name = self_key, value = 0.45 })
+    api.clear_selection("AVM")
+    check(api.get(self_key) == 0.45, "clear_selection: an edited pick keeps the values on screen")
+    api.off(ev)
+    Sculpt.apply_preset({ values = before_values, overrides = before_overrides, key_groups = before_groups or {} })
+    Sculpt.mark_saved()
+    CHANNELS[#CHANNELS] = nil
+    SKS.call("rescan"); ticks(80)
+end
 print("API FAILS:", afails)

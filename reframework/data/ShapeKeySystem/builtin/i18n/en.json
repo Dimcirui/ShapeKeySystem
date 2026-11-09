@@ -339,6 +339,7 @@
   "已切换到匹配度最高的表情配置：%s": "Switched to the best-matching profile: %s",
   "已删除：%s": "Deleted: %s",
   "已加载捏脸配置：%s": "Sculpt config loaded: %s",
+  "%s 切换了捏脸配置：%s，之前未保存的修改可以撤销找回": "%s switched the sculpt config to %s; undo brings back the unsaved edits",
   "已开启": "on",
   "已新建表情配置：%s": "Expression profile created: %s",
   "已禁用 %d 根表情骨骼": "%d expression bones disabled",

@@ -187,6 +187,29 @@ check(Scene.primary_root()==ROOT and al.selected=="leon" and require("ShapeKeySy
     "back to Leon: the player's root again, his drivers take leases")
 Dr.load({})
 tick_n(1)
+-- public API v1.1: characters by id, by part ID or by scene object; picks for a character not being edited
+local api=ShapeKeySystemAPI
+local Presets=require("ShapeKeySystem_Core.Presets")
+local AI=require("ShapeKeySystem_Core.ActorInstances")
+local acts=api.actors()
+check(#acts==2 and acts[1].id=="leon" and acts[1].edited and acts[1].present and acts[2].id=="ada" and not acts[2].edited,
+    "actors(): Leon (edited) and Ada, both present")
+check(api.actor_of("ada")=="ada" and api.actor_of("cha800_10")=="ada" and api.actor_of("/Character/cha000/10/cha000_10.mesh")=="leon"
+    and api.actor_of("cha100_10")==nil, "actor_of: character ids, part IDs and mesh paths")
+check(api.actor_of(ada_root:get_GameObject())=="ada" and api.actor_of(ada_body)=="ada" and api.actor_of(ada_face)=="ada",
+    "actor_of: the character's root GameObject, a part under it, its head")
+json.dump_file("ShapeKeySystem/user/ada/sculpt/ada_pick.json",{schema="sks.sculpt/1",name="ada_pick",values={Size=.4},
+    key_groups={{name="G",value=0,options={{name="on",values={Size=.9}}}}}})
+Presets.load_sculpt()
+local okp,_,_,rp=api.select_sculpt("AVM","ada_pick",{actor="ada"})
+local okg=api.select_group_option("AVM","G","on",{actor="ada"})
+check(okp and not rp.applied and okg and AI.selection("ada").sculpt=="ada_pick" and AI.selection("ada").groups.G=="on"
+    and AI.selection("leon")==nil, "a pick for Ada while Leon is edited goes to her own rigs, not the sculpt layer")
+local _,ce=api.select_sculpt("AVM","ada_pick",{actor="ashley"})
+check(ce=="E_NOT_FOUND", "a character SKS does not drive is refused")
+check(api.selection({actor="ada"}).sculpt=="ada_pick" and api.selection()==nil, "selection() per character")
+api.clear_selection("AVM",{actor="ada"})
+check(AI.selection("ada")==nil, "clear_selection ends the pick for that character")
 local ah=A.bind(ada_face,{A.raw.parse("jawOpen")})
 check(ah.calibration.joints.L_U_Eyelid03~=nil, "secondary Ada handle selects Ada calibration rather than player's Leon calibration")
 check(type(HOOKS.changeEventPhase)=="function" and type(HOOKS.unload)=="function", "RE4R phase and unload hooks register reference release")

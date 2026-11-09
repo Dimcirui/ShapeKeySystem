@@ -302,10 +302,27 @@ function S.group_of(name)
     return m[1].group
 end
 
-local function find_group(ref)
-    if math.type(ref) == "integer" then return K.groups[ref], ref end
-    for i, g in ipairs(K.groups) do if g.name == ref then return g, i end end
+local function find_group(ref, groups)
+    groups = groups or K.groups
+    if math.type(ref) == "integer" then return groups[ref], ref end
+    for i, g in ipairs(groups) do if g.name == ref then return g, i end end
 end
+
+-- Group and option of a list of groups (K.groups, or a preset's key_groups) by name or 1-based
+-- index; option 0 = off. Returns group, option index, or nil, error code, message.
+function S.resolve_option(groups, ref, option)
+    local g = find_group(ref, groups)
+    if not g then return nil, "E_NOT_FOUND", "unknown key group: " .. tostring(ref) end
+    if math.type(option) == "integer" then
+        if option >= 0 and option <= #g.options then return g, option end
+    elseif type(option) == "string" then
+        for i, o in ipairs(g.options) do if o.name == option then return g, i end end
+    end
+    return nil, "E_NOT_FOUND", "unknown option of key group " .. tostring(g.name) .. ": " .. tostring(option)
+end
+
+-- Changes when the user edits or undoes anything; compared by identity.
+function S.edit_mark() return K.undo[#K.undo] or K end
 
 local function group_edit(tag)
     S.push_undo(tag)

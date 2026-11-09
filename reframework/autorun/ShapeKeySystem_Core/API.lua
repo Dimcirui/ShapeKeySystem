@@ -913,13 +913,42 @@ local function mods_sculpt_of(part_id)
     return m.data and m.data.sculpt and Presets.find_sculpt(m.data.sculpt, m.folder, "mods") or nil
 end
 
--- active: the preset the character's binding names; mod: the one the primary model's mods-only
+-- ---------------------------------------------------------------- selections by other plugins
+-- The public API's select_sculpt / select_group_option: per character, the sculpt config and key
+-- group options another plugin picked. They act on the sculpt layer, not on external leases: the
+-- values stay editable. The edited character takes a pick once (now, or after the scan that brings
+-- its keys) like a config loaded by hand; other characters use it in place of their binding's
+-- config (ActorInstances.selection). In memory only: a script reset forgets every pick.
+-- selections[actor] = { actor, owner, sculpt, folder, groups = {[group] = option}, rev,
+--                       sculpt_pending, groups_pending = {}, mark }
+local selections = {}
+
+-- the character the sculpt layer edits ("" without characters)
+local function edited_actor()
+    return Actors.enabled() and Actors.selected or ""
+end
+
+local function primary_folder()
+    local b = C.binding
+    if b and b.folder then return b.folder end
+    local p = Presets.primary_part(C.parts)
+    return p and Presets.folder_of(p.id) or nil
+end
+
+-- the picked config entry; an explicit folder is not left for another one
+local function selected_preset(s)
+    if not s or not s.sculpt then return nil end
+    return Presets.find_sculpt(s.sculpt, s.folder or primary_folder(), nil, s.folder == nil)
+end
+
+-- active: the preset another plugin picked, else the one the character's binding names; mod: the one the primary model's mods-only
 -- chain names (defaults); fill: for a part of another model, the preset its own mod names, which
 -- supplies defaults only for keys neither of the others names.
 -- Names are looked up in the binding's model folder first, then among the general presets.
 local function sculpt_presets_of(part_id)
     local r = C.binding
-    local active = r and r.data and r.data.sculpt and Presets.find_sculpt(r.data.sculpt, r.folder) or nil
+    local active = selected_preset(selections[C.sel_actor or ""])
+        or r and r.data and r.data.sculpt and Presets.find_sculpt(r.data.sculpt, r.folder) or nil
     local primary = r and r.part or part_id
     local mod = mods_sculpt_of(primary)
     local fill
@@ -928,6 +957,74 @@ local function sculpt_presets_of(part_id)
 end
 
 local link_base_keys   -- defined with the expression writer below
+
+-- Applies what is still pending of the edited character's pick (sculpt first: it brings its own
+-- key groups). The applied state counts as saved unless unsaved edits were there before a group
+-- switch alone; those edits are replaced by a config switch, which one undo brings back.
+-- parts_changed: a pick no one edited since stays saved when new parts bring keys.
+local function apply_selection(parts_changed)
+    local s = selections[C.sel_actor or ""]
+    if not s or #Sculpt.K.keys == 0 then return false end
+    if not s.sculpt_pending and next(s.groups_pending) == nil then
+        if parts_changed and s.mark == Sculpt.edit_mark() then Sculpt.mark_saved() end
+        return false
+    end
+    local info = { actor = s.actor, owner = s.owner, groups = {}, errors = {} }
+    local was_dirty = Sculpt.is_dirty()
+    local loaded
+    Sculpt.end_gesture()
+    if s.sculpt_pending then
+        s.sculpt_pending = false
+        loaded = selected_preset(s)
+        if loaded then
+            Sculpt.apply_preset(loaded)
+            C.sculpt_preset, C.sculpt_preset_manual = loaded, true
+            info.sculpt = loaded.name
+        else
+            info.errors[#info.errors + 1] = { code = "E_NOT_FOUND", msg = "sculpt preset not found: " .. tostring(s.sculpt) }
+        end
+    end
+    for ref, option in pairs(s.groups_pending) do
+        local g, i, msg = Sculpt.resolve_option(Sculpt.K.groups, ref, option)
+        if g then
+            Sculpt.group_set(g.name, i)
+            Sculpt.end_gesture()
+            info.groups[g.name] = i
+        else
+            info.errors[#info.errors + 1] = { code = i, msg = msg }
+        end
+    end
+    s.groups_pending = {}
+    if loaded or not was_dirty then Sculpt.mark_saved() end
+    if loaded and was_dirty then
+        notice("info", I18n.f("%s 切换了捏脸配置：%s，之前未保存的修改可以撤销找回", s.owner, loaded.name))
+    end
+    s.mark = Sculpt.edit_mark()
+    build_sculpt_state()
+    Trail.event("selection by %s for %s: sculpt %s, %d error(s)", s.owner, s.actor == "" and "-" or s.actor,
+        tostring(info.sculpt), #info.errors)
+    C.fire("selection", info)
+    return true
+end
+C.apply_selection = apply_selection
+
+-- The user's own choice on the edited character ends another plugin's pick: another config loaded
+-- or saved under another name drops all of it, a key group switched, renamed or deleted by hand drops
+-- that group (group = its name or index; true = every group). The next pick applies again.
+local function drop_selection(group)
+    local s = selections[C.sel_actor or ""]
+    if not s then return end
+    if group == nil then selections[s.actor] = nil
+    else
+        local target = group ~= true and Sculpt.resolve_option(Sculpt.K.groups, group, 0) or nil
+        for ref in pairs(s.groups) do
+            if group == true or ref == group or (target and Sculpt.resolve_option(Sculpt.K.groups, ref, 0) == target) then
+                s.groups[ref], s.groups_pending[ref] = nil, nil
+            end
+        end
+    end
+    ActorInstances.refresh_soon()
+end
 
 local function rebuild_sculpt()
     local owned = {}
@@ -938,19 +1035,32 @@ local function rebuild_sculpt()
             owned[t.mesh] = o
         end
     end
+    -- another character became the edited one: its pick is applied again
+    local actor = edited_actor()
+    if actor ~= C.sel_actor then
+        C.sel_actor = actor
+        local s = selections[actor]
+        if s then
+            s.sculpt_pending = s.sculpt ~= nil
+            for ref, option in pairs(s.groups) do s.groups_pending[ref] = option end
+        end
+    end
     Sculpt.rebuild(C.instances or C.parts, owned, sculpt_presets_of)
     link_base_keys()
     C.update_touch_map()
     -- the preset shown as "current": the one loaded by hand (until the worn parts change), else
-    -- the binding's
+    -- the one another plugin picked, else the binding's
     local b = C.binding
     local ids_sig = {}
     for _, p in ipairs(C.parts) do ids_sig[#ids_sig + 1] = p.id .. ":" .. tostring(p.fingerprint) end
     ids_sig = table.concat(ids_sig, "|")
-    if ids_sig ~= C.sculpt_parts_sig then C.sculpt_parts_sig, C.sculpt_preset_manual = ids_sig, false end
+    local parts_changed = ids_sig ~= C.sculpt_parts_sig
+    if parts_changed then C.sculpt_parts_sig, C.sculpt_preset_manual = ids_sig, false end
     if not C.sculpt_preset_manual then
-        C.sculpt_preset = b and b.data and b.data.sculpt and Presets.find_sculpt(b.data.sculpt, b.folder) or nil
+        C.sculpt_preset = selected_preset(selections[actor])
+            or b and b.data and b.data.sculpt and Presets.find_sculpt(b.data.sculpt, b.folder) or nil
     end
+    apply_selection(parts_changed)
     local sc = state.sculpt
     local ids = {}
     for _, p in ipairs(C.parts) do ids[#ids + 1] = p.id end
@@ -2264,6 +2374,7 @@ end
 -- every sculpt key back to its mod default; one undo step (sculpt_undo brings the values back)
 function cmds.reset_sculpt_all()
     local ok, code, msg = scanned(); if not ok then return false, code, msg end
+    drop_selection(true)
     local done = Sculpt.reset_all()
     build_sculpt_state()
     return true, nil, nil, { done = done }
@@ -2272,6 +2383,7 @@ end
 -- every sculpt key to 0; one undo step
 function cmds.zero_sculpt_all()
     local ok, code, msg = scanned(); if not ok then return false, code, msg end
+    drop_selection(true)
     local done = Sculpt.clear_all()
     build_sculpt_state()
     return true, nil, nil, { done = done }
@@ -2322,12 +2434,14 @@ end
 function cmds.key_group_rename(a)
     local g, name = group_ref(a.group), name_arg(a.name)
     if not g or not name then return false, "E_BAD_ARGS", "group and name required" end
+    drop_selection(g)
     return group_cmd(Sculpt.group_rename, g, name)
 end
 
 function cmds.key_group_delete(a)
     local g = group_ref(a.group)
     if not g then return false, "E_BAD_ARGS", "group required" end
+    drop_selection(g)
     return group_cmd(Sculpt.group_delete, g)
 end
 
@@ -2336,6 +2450,7 @@ function cmds.key_group_set(a)
     local g = group_ref(a.group)
     local v = type(a.value) == "number" and math.tointeger(a.value) or nil
     if not g or not v then return false, "E_BAD_ARGS", "group and an integer value required" end
+    drop_selection(g)
     return group_cmd(Sculpt.group_set, g, v)
 end
 
@@ -2450,6 +2565,13 @@ function cmds.load_sculpt(a)
     if not e then return false, "E_NOT_FOUND", "sculpt preset not found: " .. tostring(a.name) end
     Sculpt.apply_preset(e)
     C.sculpt_preset, C.sculpt_preset_manual = e, true
+    -- the picked config loaded again by hand: its saved key groups are back, the pick stays
+    local s = selections[C.sel_actor or ""]
+    if s and (s.sculpt == e.name or s.sculpt == e.id) then
+        drop_selection(true); s.mark = Sculpt.edit_mark()
+    else
+        drop_selection()
+    end
     build_sculpt_state()
     notice("info", I18n.f("已加载捏脸配置：%s", e.name))
     return true
@@ -2470,6 +2592,9 @@ function cmds.save_sculpt(a)
     Sculpt.mark_saved()
     C.sculpt_preset = Presets.find_sculpt(a.name, folder, "user")
     C.sculpt_preset_manual = true
+    -- saved over the picked config: the pick stays and counts as unedited again
+    local s = selections[C.sel_actor or ""]
+    if s and s.sculpt == a.name then s.mark = Sculpt.edit_mark() else drop_selection() end
     build_presets_state(); build_sculpt_state()
     notice("info", I18n.f("已保存捏脸配置：%s", a.name))
     return true, nil, nil, r4
@@ -2760,6 +2885,13 @@ function SKS.init(adapter)
     ActorInstances.init(adapter)
     Actors.init(adapter)
     if Actors.enabled() then ActorInstances.faces = Actors.instance_faces end
+    for k in pairs(selections) do selections[k] = nil end
+    C.sel_actor = nil
+    -- only what picks the config: bookkeeping fields would rebuild the rigs for nothing
+    ActorInstances.selection = function(actor)
+        local s = selections[actor]
+        return s and { sculpt = s.sculpt, folder = s.folder, groups = s.groups } or nil
+    end
     if adapter.init then
         local ok, why = adapter.init({ release = SKS.on_release, segment = SKS.on_segment, rebuilt = SKS.on_rebuilt,
                                        menu = SKS.on_menu, preview = SKS.on_preview })
@@ -3164,7 +3296,7 @@ function C.build_external_state()
     bump("external")
 end
 
-local listeners = { scan = {} }
+local listeners = { scan = {}, selection = {} }
 local listener_seq = 0
 function C.fire(event, ...)
     local l = listeners[event]
@@ -3175,7 +3307,7 @@ function C.fire(event, ...)
     end
 end
 
-local PUB = { version = "1.0", plugin_version = Version.number }   -- version = this API
+local PUB = { version = "1.1", plugin_version = Version.number }   -- version = this API
 
 local function bad(msg) return false, "E_BAD_ARGS", msg end
 local function check_owner(owner)
@@ -3250,7 +3382,8 @@ function PUB.channels()
     return out
 end
 
--- on("scan", fn) -> id: fn() after every scan (equipment change, rescan). off(id) removes it.
+-- on("scan", fn) -> id: fn() after every scan (equipment change, rescan); on("selection", fn):
+-- fn(info) when a pick takes effect on the edited character (select_sculpt). off(id) removes it.
 function PUB.on(event, fn)
     if not listeners[event] or type(fn) ~= "function" then return nil end
     listener_seq = listener_seq + 1
@@ -3263,6 +3396,221 @@ function PUB.off(id)
 end
 
 function PUB.is_ready() return #Sculpt.K.keys > 0 end
+
+-- ---- sculpt configs and key groups per character (v1.1)
+local function known_actor(id)
+    if Actors.has(id) then return true end
+    for _, k in ipairs(SKS.adapter and SKS.adapter.actor_ids or {}) do if k == id then return true end end
+    return false
+end
+
+-- opts.actor: a character id from actors() / actor_of(); nil = the character being edited.
+-- Returns the id ("" for games with one character), or nil, error code, message.
+local function actor_arg(opts)
+    local a = type(opts) == "table" and opts.actor or nil
+    if not Actors.enabled() then
+        if a == nil or a == "" then return "" end
+        return nil, "E_NOT_FOUND", "this game has one character: leave opts.actor out"
+    end
+    if a == nil then return Actors.selected end
+    if type(a) ~= "string" or a == "" then return nil, "E_BAD_ARGS", "opts.actor: character id string" end
+    if not known_actor(a) then return nil, "E_NOT_FOUND", "unknown character: " .. a end
+    return a
+end
+
+local function folder_arg(opts)
+    local f = type(opts) == "table" and opts.folder or nil
+    if f ~= nil and (type(f) ~= "string" or f == "") then return false end
+    return true, f
+end
+
+local function live_actor(actor)
+    return actor == C.sel_actor and actor == edited_actor() and #Sculpt.K.keys > 0
+end
+
+-- the edited character takes a pick now when its keys are there, others at their next scan
+local function settle(actor)
+    ActorInstances.refresh_soon()
+    return live_actor(actor) and apply_selection(false) or false
+end
+
+local function forced(opts) return type(opts) == "table" and opts.force == true end
+
+-- select_sculpt(owner, name, opts?) -> ok, err, msg, {applied}. Loads a sculpt config for a
+-- character (opts.actor) like 加载 in the panel; opts.folder: a model folder, else the character's
+-- own folder, then the general configs, then any folder. Picking the config already picked keeps
+-- the user's edits unless opts.force. Earlier key group picks for that character are dropped.
+function PUB.select_sculpt(owner, name, opts)
+    if not check_owner(owner) then return bad("owner: non-empty string up to 64 chars") end
+    if type(name) ~= "string" or name == "" then return bad("name: sculpt config name") end
+    local fok, folder = folder_arg(opts)
+    if not fok then return bad("opts.folder: string") end
+    local actor, code, msg = actor_arg(opts)
+    if not actor then return false, code, msg end
+    if not Presets.find_sculpt(name, folder, nil, folder == nil) then
+        return false, "E_NOT_FOUND", "sculpt preset not found: " .. name
+    end
+    local s = selections[actor]
+    if s and s.sculpt == name and s.folder == folder and not forced(opts) then
+        s.owner = owner
+        return true, nil, nil, { applied = false, unchanged = true }
+    end
+    s = { actor = actor, owner = owner, sculpt = name, folder = folder, groups = {}, groups_pending = {},
+          sculpt_pending = true, rev = (s and s.rev or 0) + 1 }
+    selections[actor] = s
+    return true, nil, nil, { applied = settle(actor) }
+end
+
+-- select_group_option(owner, group, option, opts?) -> ok, err, msg, {applied}. group: key group
+-- name or 1-based index; option: option name, 1-based index, or 0 = none. Checked against the
+-- edited character's groups when its keys are there; otherwise when it is applied.
+function PUB.select_group_option(owner, group, option, opts)
+    if not check_owner(owner) then return bad("owner: non-empty string up to 64 chars") end
+    if not (type(group) == "string" and group ~= "") and not (math.type(group) == "integer" and group >= 1) then
+        return bad("group: key group name or 1-based index")
+    end
+    if not (type(option) == "string" and option ~= "") and not (math.type(option) == "integer" and option >= 0) then
+        return bad("option: option name, 1-based index or 0")
+    end
+    local actor, code, msg = actor_arg(opts)
+    if not actor then return false, code, msg end
+    if live_actor(actor) then
+        local g, c2, m2 = Sculpt.resolve_option(Sculpt.K.groups, group, option)
+        if not g then return false, c2, m2 end
+    end
+    local s = selections[actor]
+    if s and s.groups[group] == option and not forced(opts) then
+        s.owner = owner
+        return true, nil, nil, { applied = false, unchanged = true }
+    end
+    if not s then
+        s = { actor = actor, groups = {}, groups_pending = {}, rev = 0 }
+        selections[actor] = s
+    end
+    s.owner, s.rev = owner, s.rev + 1
+    s.groups[group], s.groups_pending[group] = option, option
+    return true, nil, nil, { applied = settle(actor) }
+end
+
+-- clear_selection(owner, opts?) -> ok. Ends this owner's picks for opts.actor (nil = every
+-- character). Other characters go back to their binding's config at once; the edited one goes back
+-- to it only when no one edited it since the pick, else it keeps the values on screen.
+function PUB.clear_selection(owner, opts)
+    if not check_owner(owner) then return bad("owner") end
+    local only
+    if type(opts) == "table" and opts.actor ~= nil then
+        local code, msg
+        only, code, msg = actor_arg(opts)
+        if not only then return false, code, msg end
+    end
+    for actor, s in pairs(selections) do
+        if s.owner == owner and (only == nil or only == actor) then
+            selections[actor] = nil
+            if live_actor(actor) and s.mark == Sculpt.edit_mark() then
+                local b = C.binding
+                local e = b and b.data and b.data.sculpt and Presets.find_sculpt(b.data.sculpt, b.folder) or nil
+                if e then Sculpt.apply_preset(e) else Sculpt.reset_all() end
+                Sculpt.mark_saved()
+                C.sculpt_preset, C.sculpt_preset_manual = e, false
+                build_sculpt_state()
+            end
+        end
+    end
+    ActorInstances.refresh_soon()
+    return true
+end
+
+-- selection(opts?) -> the pick for a character, or nil:
+-- { owner, sculpt, folder, groups = {[group] = option}, pending = bool }
+function PUB.selection(opts)
+    local actor = actor_arg(opts)
+    local s = actor and selections[actor]
+    if not s then return nil end
+    return { owner = s.owner, sculpt = s.sculpt, folder = s.folder, groups = U.copy(s.groups),
+             pending = s.sculpt_pending == true or next(s.groups_pending) ~= nil }
+end
+
+-- the characters SKS can drive: { {id, name, player, edited, present, folder} }; one entry with
+-- id "" for games with one character. folder: the model folder of its configs, while present.
+function PUB.actors()
+    if not Actors.enabled() then
+        return { { id = "", name = "", player = true, edited = true, present = #C.parts > 0, folder = primary_folder() } }
+    end
+    local out, seen = {}, {}
+    for _, e in ipairs(Actors.list) do
+        local edited = e.id == Actors.selected
+        local info = not edited and ActorInstances.actor_info(e.id) or nil
+        out[#out + 1] = { id = e.id, name = e.name, player = e.player, edited = edited, present = true,
+                          folder = edited and primary_folder() or (info and info.folder) or nil }
+        seen[e.id] = true
+    end
+    for _, id in ipairs(SKS.adapter and SKS.adapter.actor_ids or {}) do
+        if not seen[id] then
+            out[#out + 1] = { id = id, name = armor_name(id) or id, player = false, edited = false, present = false }
+        end
+    end
+    return out
+end
+
+-- actor_of(x) -> character id or nil. x: a character id, a part ID or mesh path (games whose
+-- adapter names the person from it), or a GameObject / Transform of the character (its root, head
+-- or a part under the root; the character must be in the scene).
+function PUB.actor_of(x)
+    if not Actors.enabled() then return "" end
+    if type(x) == "string" then
+        if known_actor(x) then return x end
+        local f = SKS.adapter.actor_of_part
+        local ok, id = pcall(f or function() end, x)
+        return ok and id or nil
+    end
+    if x == nil then return nil end
+    return Actors.object_actor(x)
+end
+
+local function groups_out(groups)
+    local out = {}
+    for i, g in ipairs(groups or {}) do
+        local options = {}
+        for j, o in ipairs(g.options) do options[j] = o.name end
+        out[i] = { name = g.name, value = g.value, options = options }
+    end
+    return out
+end
+
+-- sculpt_presets(folder?) -> { {name, folder, source, key_groups} }. folder given: that model's
+-- configs and the general ones (folder nil); else every config. A user config hides a mod's of the
+-- same name and folder.
+function PUB.sculpt_presets(folder)
+    if folder ~= nil and type(folder) ~= "string" then return nil, "E_BAD_ARGS", "folder: string" end
+    local out, taken = {}, {}
+    for _, e in ipairs(Presets.sculpt_list) do
+        local k = (e.folder or "") .. "\0" .. e.name
+        if not taken[k] and (folder == nil or e.folder == nil or e.folder == folder) then
+            taken[k] = true
+            out[#out + 1] = { name = e.name, folder = e.folder, source = e.source, key_groups = groups_out(e.key_groups) }
+        end
+    end
+    return out
+end
+
+-- key_groups(opts?) -> { {name, value, options = {names}} }: a character's key groups (opts.actor)
+-- with the option in effect (value, 0 = none). opts.sculpt (+ opts.folder): that config's groups
+-- as saved instead.
+function PUB.key_groups(opts)
+    if type(opts) == "table" and opts.sculpt ~= nil then
+        local fok, folder = folder_arg(opts)
+        if type(opts.sculpt) ~= "string" or not fok then return nil, "E_BAD_ARGS", "opts.sculpt / opts.folder: string" end
+        local e = Presets.find_sculpt(opts.sculpt, folder, nil, folder == nil)
+        if not e then return nil, "E_NOT_FOUND", "sculpt preset not found: " .. opts.sculpt end
+        return groups_out(e.key_groups)
+    end
+    local actor, code, msg = actor_arg(opts)
+    if not actor then return nil, code, msg end
+    if live_actor(actor) then return groups_out(Sculpt.K.groups) end
+    local info = ActorInstances.actor_info(actor)
+    if info then return groups_out(info.key_groups) end
+    return nil, "E_NOT_SCANNED", "character not scanned yet"
+end
 
 -- publish: _G.ShapeKeySystemAPI, and run callbacks other plugins queued before SKS loaded
 -- (_G.ShapeKeySystemAPI_pending = { fn, ... }, each called with the API table)
