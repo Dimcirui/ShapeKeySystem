@@ -1204,6 +1204,7 @@
   "提醒更新过旧的 REFramework": "Warns about an outdated REFramework",
   "REFramework 菜单里可以弹出可视化界面": "The panel can be opened from the REFramework menu",
   "RE4R 新增持械、武器类型和合成条件，每帧开销大幅降低": "RE4R: weapon-raised, held-weapon and merged conditions; much lower per-frame cost",
+  "插件选的键组选项换捏脸配置后继续生效": "Key group options picked by plugins stay in effect after a sculpt preset change",
   "表情可按帧间隔更新，关闭表情更省性能；插件可按角色切换捏脸配置": "Expressions can update every few frames and cost far less when off; plugins can switch sculpt presets per character",
   "捏脸列表按网格顺序分段，形态键可进多个键组；RE4R 新增一批条件并分类": "Sculpt list follows the mesh order with sections, keys may sit in several key groups; new RE4R conditions, grouped by category",
   "合成条件新增任一阶段选项；荒野与 RE4R 每帧开销进一步降低": "Merged conditions get an any-stage option; lower per-frame cost in Wilds and RE4R",
