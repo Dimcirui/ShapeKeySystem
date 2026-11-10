@@ -1057,9 +1057,15 @@ local function rebuild_sculpt()
             owned[t.mesh] = o
         end
     end
-    -- another character became the edited one: its pick is applied again
+    -- another character became the edited one: the sculpt edits start over from its own presets,
+    -- and its pick is applied again
     local actor = edited_actor()
     if actor ~= C.sel_actor then
+        if C.sel_actor ~= nil then
+            if Sculpt.is_dirty() then notice("warn", "编辑的角色已切换，之前未保存的捏脸修改已丢弃") end
+            Sculpt.forget_edits()
+            C.sculpt_preset_manual = false
+        end
         C.sel_actor = actor
         local s = selections[actor]
         if s then s.sculpt_pending, s.groups_dirty, s.groups_ref = s.sculpt ~= nil, true, nil end

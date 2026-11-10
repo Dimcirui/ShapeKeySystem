@@ -32,4 +32,19 @@ for _, item in ipairs(t1.items) do written[#written + 1] = item.key.name end
 check(#written == 4, "no write item for a separator channel (" .. #written .. ")")
 Labels.sections = {}
 
+-- another character: nothing of the previous one's edits or saved state carries over
+S.apply_preset({ values = { alpha = .5 }, overrides = {}, key_groups = { { name = "G", value = 0, options = {} } } })
+S.mark_saved()
+local other = { { id = "q1", mesh = mesh(0x300), names = { "bs.alpha", "bs.only_here" } } }
+S.forget_edits()
+S.rebuild(other, {}, function() return nil end)
+check(not S.is_dirty() and S.K.by_name.alpha.value == 0 and #S.K.groups == 0 and not S.can_undo(),
+    "forget_edits: the next character starts clean from its own presets")
+S.forget_edits()
+S.rebuild(parts, {}, function() return nil end)
+S.apply_preset({ values = { alpha = .5 }, overrides = {}, key_groups = {} })
+S.mark_saved()
+S.rebuild(other, {}, function() return nil end)
+check(S.is_dirty(), "without forget_edits the saved state of other keys makes the new keys unsaved (the bug)")
+
 print("SCULPT ORDER " .. asserts .. " assertions; FAILS: " .. fails)
