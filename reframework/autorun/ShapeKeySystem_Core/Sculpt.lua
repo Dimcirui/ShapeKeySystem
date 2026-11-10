@@ -374,6 +374,16 @@ function S.group_set(ref, value)
     return true
 end
 
+-- Another plugin's option pick (API selections): no undo step, and the groups are not marked as
+-- edited, so a config the binding brings later still replaces them and the pick is applied again
+-- by name. Returns true when the value changed.
+function S.group_pick(g, value)
+    if g.value == value then return false end
+    g.value = value
+    S.apply_groups()
+    return true
+end
+
 function S.option_add(ref, name)
     local g = find_group(ref)
     if not g then return bad_group(ref) end
