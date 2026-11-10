@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.19.0"
+V.number = "1.19.1"
 V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka, Moon"
 
 V.history = {
+    { version = "1.19.1", notes = "插件选的键组选项换捏脸配置后继续生效" },
     { version = "1.19.0", notes = "表情可按帧间隔更新，关闭表情更省性能；插件可按角色切换捏脸配置" },
     { version = "1.18.0", notes = "捏脸列表按网格顺序分段，形态键可进多个键组；RE4R 新增一批条件并分类" },
     { version = "1.17.0", notes = "合成条件新增任一阶段选项；荒野与 RE4R 每帧开销进一步降低" },
