@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.19.1"
+V.number = "1.20.0"
 V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka, Moon"
 
 V.history = {
+    { version = "1.20.0", notes = "RE4R 新增阿什莉、路易斯、克劳萨、威斯克、汉克的捏脸与驱动；修复切换角色后无法切回" },
     { version = "1.19.1", notes = "插件选的键组选项换捏脸配置后继续生效" },
     { version = "1.19.0", notes = "表情可按帧间隔更新，关闭表情更省性能；插件可按角色切换捏脸配置" },
     { version = "1.18.0", notes = "捏脸列表按网格顺序分段，形态键可进多个键组；RE4R 新增一批条件并分类" },
