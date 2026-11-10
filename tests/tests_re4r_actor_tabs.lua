@@ -40,4 +40,6 @@ assert(SKS.call("select_actor",{id="ada"}));tick_n(100)
 assert(math.abs((ada_weights[4] or 0)-.3)<1e-9,"the pick was not applied when Ada became the edited character")
 assert(not SKS.state.sculpt.dirty and SKS.state.sculpt.preset.name=="ada_switch","an applied pick counts as saved")
 assert(SKS.call("select_actor",{id="leon"}),"switching away after a pick is not blocked")
+ShapeKeySystemAPI.clear_selection("AVM")
+assert(SKS.call("select_actor",{id="ada"}));tick_n(100)   -- the next file starts with Ada edited
 print("ACTOR_TAB_API_PICK_PASS")
