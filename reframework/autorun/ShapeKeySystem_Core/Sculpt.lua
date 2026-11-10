@@ -742,6 +742,16 @@ end
 
 function S.mark_saved() K.saved = snapshot() end
 
+-- Another character is edited: values, key groups, undo history and the saved state belonged to
+-- the previous one (kept by key name, they would carry over to keys of the same name and make the
+-- new character's other keys "unsaved"). The next rebuild starts from the new character's presets;
+-- mesh warm-up is kept.
+function S.forget_edits()
+    K.keys, K.by_name, K.member = {}, {}, {}
+    K.groups, K.groups_touched = {}, false
+    K.saved, K.undo, K.redo, K.last_push = nil, {}, {}, nil
+end
+
 -- ---------------------------------------------------------------- writing
 -- preview: true = show the mod defaults instead of the current values (A/B)
 -- the sculpt value of a key on a part, ignoring other plugins (rest position for expression keys)

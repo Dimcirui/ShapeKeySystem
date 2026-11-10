@@ -192,10 +192,14 @@ local api=ShapeKeySystemAPI
 local Presets=require("ShapeKeySystem_Core.Presets")
 local AI=require("ShapeKeySystem_Core.ActorInstances")
 local acts=api.actors()
-check(#acts==2 and acts[1].id=="leon" and acts[1].edited and acts[1].present and acts[2].id=="ada" and not acts[2].edited,
-    "actors(): Leon (edited) and Ada, both present")
+local absent_ashley
+for _,e in ipairs(acts) do if e.id=="ashley" then absent_ashley=e end end
+check(#acts==7 and acts[1].id=="leon" and acts[1].edited and acts[1].present and acts[2].id=="ada" and not acts[2].edited
+    and absent_ashley and not absent_ashley.present and absent_ashley.name=="阿什莉" and absent_ashley.folder=="ashley",
+    "actors(): Leon (edited) and Ada present, the other people listed as absent with their folder")
 check(api.actor_of("ada")=="ada" and api.actor_of("cha800_10")=="ada" and api.actor_of("/Character/cha000/10/cha000_10.mesh")=="leon"
-    and api.actor_of("cha100_10")==nil, "actor_of: character ids, part IDs and mesh paths")
+    and api.actor_of("cha100_10")=="ashley" and api.actor_of("chi300_10")=="hunk" and api.actor_of("cha999_10")==nil,
+    "actor_of: character ids, part IDs and mesh paths")
 check(api.actor_of(ada_root:get_GameObject())=="ada" and api.actor_of(ada_body)=="ada" and api.actor_of(ada_face)=="ada",
     "actor_of: the character's root GameObject, a part under it, its head")
 json.dump_file("ShapeKeySystem/user/ada/sculpt/ada_pick.json",{schema="sks.sculpt/1",name="ada_pick",values={Size=.4},
@@ -205,18 +209,47 @@ local okp,_,_,rp=api.select_sculpt("AVM","ada_pick",{actor="ada"})
 local okg=api.select_group_option("AVM","G","on",{actor="ada"})
 check(okp and not rp.applied and okg and AI.selection("ada").sculpt=="ada_pick" and AI.selection("ada").groups.G=="on"
     and AI.selection("leon")==nil, "a pick for Ada while Leon is edited goes to her own rigs, not the sculpt layer")
-local _,ce=api.select_sculpt("AVM","ada_pick",{actor="ashley"})
-check(ce=="E_NOT_FOUND", "a character SKS does not drive is refused")
+local _,ce=api.select_sculpt("AVM","ada_pick",{actor="ramon"})
+check(ce=="E_NOT_FOUND" and api.select_group_option("AVM","G","on",{actor="ashley"}), "an unknown character is refused; an absent known one is queued")
+api.clear_selection("AVM",{actor="ashley"})
 check(api.selection({actor="ada"}).sculpt=="ada_pick" and api.selection()==nil, "selection() per character")
 api.clear_selection("AVM",{actor="ada"})
 check(AI.selection("ada")==nil, "clear_selection ends the pick for that character")
 local ah=A.bind(ada_face,{A.raw.parse("jawOpen")})
 check(ah.calibration.joints.L_U_Eyelid03~=nil, "secondary Ada handle selects Ada calibration rather than player's Leon calibration")
 check(type(HOOKS.changeEventPhase)=="function" and type(HOOKS.unload)=="function", "RE4R phase and unload hooks register reference release")
+local ashley_head=node("Ashley head","/Character/cha100/10/cha100_10.mesh.221108797")
 check(A.is_face(node("Leon costume","/Character/cha005/10/cha005_10.mesh.221108797"))
     and A.is_face(node("Leon variant","/Character/cha006/10/cha006_10_TU1.mesh.221108797"))
-    and not A.is_face(node("Ashley head","/Character/cha100/10/cha100_10.mesh.221108797")),
-    "Leon costume head groups are faces; characters without a calibration are not")
+    and A.is_face(ashley_head) and A.is_face(node("Hunk head","/Character/chi300/10/chi300_10.mesh.221108797"))
+    and A.is_face(node("Krauser head","/Character/chb700/10/chb700_10.mesh.221108797"))
+    and not A.is_face(node("Ashley body","/Character/cha100/00/cha100_00.mesh.221108797")),
+    "head groups of every person are faces, including chi/chb/chj groups; bodies are not")
+check(A.actor_of(ashley_head)=="ashley" and A.model_of("cha100_10")=="ashley" and A.model_of("chi300_10")=="hunk"
+    and A.model_of("ashley")=="ashley", "people without a calibration have their own id and model folder")
+local ah2=A.bind(ashley_head,{A.raw.parse("jawOpen")})
+local P2={}
+A.read(ah2,P2,1)
+check(ah2.uncalibrated and next(P2)==nil and next(A.eye_joints(ashley_head))==nil,
+    "a person without a calibration reads no expression and no gaze, never with Leon's calibration")
+-- the player is a person without a calibration (Ashley's chapters, Mercenaries): she is the primary character
+local leon_resource=m.getMesh
+m.getMesh=function() return {call=call,get_ResourcePath=function() return "/Character/cha100/10/cha100_10.mesh.221108797" end} end
+A.cache_end(); SKS.call("rescan"); tick_n(120)
+local SculptA=require("ShapeKeySystem_Core.Sculpt")
+check(A.primary_ready() and al.selected=="ashley" and al.list[1].id=="ashley" and al.list[1].player and #SculptA.K.keys>0,
+    "an uncalibrated player becomes the edited character with her shape keys")
+local sk
+for _,k in ipairs(SculptA.K.keys) do if k.owner=="self" and not sk then sk=k.name end end
+local before_w={}
+for i,v in pairs(WEIGHTS) do before_w[i]=v end
+assert(SKS.call("set_sculpt_key",{name=sk,value=.42})); tick_n(40)
+local hit=false
+for _,v in pairs(WEIGHTS) do if math.abs(v-.42)<1e-6 then hit=true end end
+check(hit, "her sculpt values reach the mesh")
+assert(SKS.call("sculpt_undo",{}))
+m.getMesh=leon_resource; A.cache_end(); SKS.call("rescan"); tick_n(120)
+check(al.selected=="leon" and al.list[1].id=="leon", "back to the Leon player")
 -- model viewer figure: controller -> mesh-less ..._Body (Motion) -> Body / Head / Hair / prop
 local fig_root=node("FigureModel_Figure00_010")
 local fig_body=node("Figure00_010_Body")

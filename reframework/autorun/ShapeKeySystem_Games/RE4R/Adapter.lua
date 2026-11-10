@@ -49,7 +49,7 @@ local A = { id = "re4", name = "Resident Evil 4", strict_bounds = true, hash_nam
     }),
     input = require("ShapeKeySystem_Games.RE4R.Input"),
     terms = { primary = "主角色", part = "部件" }, raw = Signals.raw,
-    read = Signals.read, channel_writable = Signals.writable, write_context = Signals.write_context }
+    channel_writable = Signals.writable, write_context = Signals.write_context }
 local T_MESH
 local calibrations = {}
 local function call(obj, method, ...)
@@ -93,27 +93,34 @@ local function head()
         or call(ctx, "get_HeadGameObject")
     return transform(go)
 end
--- head groups of the actors with a calibration
+-- the person of each head group; only people with a calibration (builtin/re4/<id>.json) have their
+-- face read, the others get sculpt, bindings and drivers without expressions
 local ACTORS = { cha000 = "leon", cha005 = "leon", cha006 = "leon", cha500 = "leon",
-    cha200 = "ada", cha800 = "ada", cha801 = "ada", cha803 = "ada" }
--- head groups of other characters: their meshes mark another actor in `A.instance_root`
-local OTHERS = { cha100 = "ashley", cha102 = "ashley", cha300 = "luis", chi100 = "luis",
+    cha200 = "ada", cha800 = "ada", cha801 = "ada", cha803 = "ada",
+    cha100 = "ashley", cha102 = "ashley", cha300 = "luis", chi100 = "luis",
     chb700 = "krauser", chi200 = "krauser", cha600 = "wesker", chj000 = "wesker", chi300 = "hunk" }
+local PEOPLE = { "leon", "ada", "ashley", "luis", "krauser", "wesker", "hunk" }
+local CALIBRATED = { "leon", "ada" }
 local function group_of(p)
     local base = p:match("([^/]+)$")
     return base and base:match("^(ch%a%d%d%d)_") or nil
-end
-local function character_of_path(p)
-    local g = group_of(p)
-    return g and (ACTORS[g] or OTHERS[g]) or nil
 end
 local function actor_of_path(p)
     local g = group_of(p)
     return g and ACTORS[g] or nil
 end
+local character_of_path = actor_of_path
 
+-- Another person's calibration reads wrong expressions from this face, so a person without one
+-- gets a handle that reads nothing (and no eye joints: no gaze either).
 function A.bind(face, keys)
-    return Signals.bind(face, keys, calibrations[actor_of_path(path(face))])
+    local calibration = calibrations[actor_of_path(path(face))]
+    if not calibration then return { uncalibrated = true, keys = keys, status = {} } end
+    return Signals.bind(face, keys, calibration)
+end
+function A.read(h, P, inv_full)
+    if h and h.uncalibrated then return end
+    return Signals.read(h, P, inv_full)
 end
 
 function A.primary_root()
@@ -126,7 +133,7 @@ function A.primary_root()
 end
 -- Head identity follows its actor and mesh slot; replacement rigs may omit individual face joints.
 local function face_path(p)
-    return actor_of_path(p) ~= nil and p:match("/cha%d%d%d_1[01][_%w]*%.mesh") ~= nil
+    return actor_of_path(p) ~= nil and p:match("/ch%a%d%d%d_1[01][_%w]*%.mesh") ~= nil
 end
 function A.is_face(tr) return face_path(path(tr)) end
 function A.primary_ready()
@@ -147,7 +154,7 @@ function A.instance_root(face)
             local who = character_of_path(p)
             if who and who ~= actor then foreign = true end
             -- a skin's body has a group of its own (a figure's cha002_00 under a cha000 head)
-            if (who == actor or who == nil) and p:match("/cha%d%d%d_00[_%w]*%.mesh") then body = true end
+            if (who == actor or who == nil) and p:match("/ch%a%d%d%d_00[_%w]*%.mesh") then body = true end
             child = call(child, "get_Next")
         end
         if foreign then break end
@@ -166,7 +173,7 @@ end
 -- the person a head belongs to (Core/Actors.lua): "leon" / "ada"
 function A.actor_of(face) return actor_of_path(path(face)) end
 -- every person `actor_of` can return, and the person of a part ID or mesh path (public API)
-A.actor_ids = { "leon", "ada" }
+A.actor_ids = PEOPLE
 function A.actor_of_part(p)
     return type(p) == "string" and actor_of_path((p:lower():gsub("\\", "/"))) or nil
 end
@@ -249,14 +256,15 @@ A.model_names = "character_names.json"
 A.slot_names = { ["00"] = "身体", ["10"] = "头部", ["20"] = "头发" }
 
 function A.model_of(part)
-    if part == "leon" or part == "ada" then return part end
-    local id = part:match("^(cha%d%d%d)_")
+    for _, who in ipairs(PEOPLE) do if part == who then return part end end
+    local id = part:match("^(ch%a%d%d%d)_")
     local actor = id and ACTORS[id] or actor_of_path(path(head()))
-    local slot = part:match("^cha%d%d%d_(%d%d)$")
+    local slot = part:match("^ch%a%d%d%d_(%d%d)$")
     return actor or "leon", A.slot_names[slot] and slot or part
 end
 function A.representative_of(part) return (A.model_of(part)) end
 function A.eye_joints(face)
+    if not calibrations[actor_of_path(path(face))] then return {} end
     return {L = call(face, "getJointByName(System.String)", "L_Eye") or NativeFace.eye(face, "L_Eye"),
             R = call(face, "getJointByName(System.String)", "R_Eye") or NativeFace.eye(face, "R_Eye")}
 end
@@ -427,6 +435,7 @@ function A.native_snapshot()
     local h = head()
     local sig = A.signature(A.primary_root())
     local calibration = calibrations[actor_of_path(path(h))]
+    if not calibration then snapshot_cache = nil; return nil, "这个角色没有表情标定" end
     local c = snapshot_cache
     if not (c and c.sig == sig and c.face == h:get_address() and c.calibration == calibration) then
         c = {sig = sig, face = h:get_address(), calibration = calibration}
@@ -446,7 +455,7 @@ function A.probe(output)
     lines[#lines + 1] = "cutscene playing: " .. tostring(Cutscene.playing())
     if not A.primary_ready() then return { "Player or supported head unavailable" } end
     local h = A.bind(head(), { Signals.raw.parse("jawOpen") })
-    Signals.read(h, {}, 1)
+    A.read(h, {}, 1)
     for name, state in pairs(h.status) do lines[#lines + 1] = name .. ": " .. state end
     table.sort(lines)
     local f = io.open(output, "w")
@@ -482,7 +491,7 @@ function A.init(events)
         local root = A.primary_root()
         return root:get_address(), A.signature(root)
     end)
-    for _, actor in ipairs({"leon", "ada"}) do
+    for _, actor in ipairs(CALIBRATED) do
         local ok, d = pcall(json.load_file, "ShapeKeySystem/builtin/re4/" .. actor .. ".json")
         if not ok then return false, L.f("%s 标定文件无法读取", actor) end
         local configured, valid, why = pcall(Signals.validate, d)

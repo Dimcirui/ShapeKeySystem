@@ -339,6 +339,8 @@
   "已切换到匹配度最高的表情配置：%s": "Switched to the best-matching profile: %s",
   "已删除：%s": "Deleted: %s",
   "已加载捏脸配置：%s": "Sculpt config loaded: %s",
+  "编辑的角色已切换，之前未保存的捏脸修改已丢弃": "The edited character changed; unsaved sculpt edits were discarded",
+  "这个角色没有表情标定": "This character has no expression calibration",
   "%s 切换了捏脸配置：%s，之前未保存的修改可以撤销找回": "%s switched the sculpt config to %s; undo brings back the unsaved edits",
   "已开启": "on",
   "已新建表情配置：%s": "Expression profile created: %s",

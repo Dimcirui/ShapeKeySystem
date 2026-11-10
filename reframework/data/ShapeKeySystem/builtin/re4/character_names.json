@@ -8,6 +8,26 @@
     "ada": {
       "zh": "艾达",
       "en": "Ada"
+    },
+    "ashley": {
+      "zh": "阿什莉",
+      "en": "Ashley"
+    },
+    "luis": {
+      "zh": "路易斯",
+      "en": "Luis"
+    },
+    "krauser": {
+      "zh": "克劳萨",
+      "en": "Krauser"
+    },
+    "wesker": {
+      "zh": "威斯克",
+      "en": "Wesker"
+    },
+    "hunk": {
+      "zh": "汉克",
+      "en": "Hunk"
     }
   }
 }
