@@ -2492,16 +2492,21 @@ function cmds.key_group_option_delete(a)
     return group_cmd(Sculpt.option_delete, g, a.option)
 end
 
--- {group, option, names, values?}: names given = those keys; "modified" = every key outside the
--- groups whose value differs from its default (the panel's 收入已修改的键)
+-- {group, option, names, values?}: names given = those keys; "modified" = every key whose own value
+-- differs from its default, left out: keys a group holds now and keys already in this group (the
+-- panel's 收入已修改的键)
 function cmds.key_group_assign(a)
     local g = group_ref(a.group)
     if not g then return false, "E_BAD_ARGS", "group and option required" end
     local names = a.names
     if names == "modified" then
         names = {}
+        local target = math.type(g) == "integer" and Sculpt.K.groups[g] or nil
+        for _, kg in ipairs(Sculpt.K.groups) do if kg.name == g then target = kg end end
         for _, k in ipairs(Sculpt.K.keys) do
-            if not Sculpt.group_of(k.name) and math.abs(k.value - k.default) > 1e-6 then names[#names + 1] = k.name end
+            local here = false
+            for _, m in ipairs(Sculpt.K.member[k.name] or {}) do if m.group == target then here = true end end
+            if k.held == nil and not here and math.abs(k.value - k.default) > 1e-6 then names[#names + 1] = k.name end
         end
         if #names == 0 then return false, "E_EMPTY", "没有可收入的已修改形态键" end
     elseif type(names) ~= "table" or #names == 0 then

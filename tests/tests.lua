@@ -312,6 +312,18 @@ do
     check(math.abs(WEIGHTS[i_other] - 0.3) < 1e-6 and key("Other").held_by.group == "体型",
         "both groups select it: the higher group wins")
     SKS.call("key_group_set", { group = "体型", value = 0 })
+    -- 收入已修改的键 takes a modified key of other groups while no group holds it
+    SKS.call("key_group_set", { group = "眼", value = 0 }); ticks(1)
+    SKS.call("set_sculpt_key", { name = "Other", value = 0.6 })
+    SKS.call("key_group_new", { name = "手" }); SKS.call("key_group_option_add", { group = "手", name = "y" })
+    local ok4 = SKS.call("key_group_assign", { group = "手", option = 1, names = "modified" }); ticks(1)
+    local in_hand = false
+    for _, o in ipairs(SKS.state.sculpt.key_groups[3].options) do
+        for _, k in ipairs(o.keys) do if k.name == "Other" then in_hand = math.abs(k.value - 0.6) < 1e-6 end end
+    end
+    check(ok4 and in_hand, "modified: a free key of other groups goes into this group too")
+    SKS.call("key_group_delete", { group = "手" })
+    SKS.call("reset_sculpt_key", { name = "Other" })
     SKS.call("key_group_delete", { group = "眼" }); ticks(1)
     SKS.call("key_group_set", { group = "体型", value = 1 }); ticks(1)
     check(math.abs(WEIGHTS[i_waist] - 0.9) < 1e-6 and math.abs(WEIGHTS[i_other] - 1.5) < 1e-6, "value 1: option 1 on, the other option's keys at their default")
