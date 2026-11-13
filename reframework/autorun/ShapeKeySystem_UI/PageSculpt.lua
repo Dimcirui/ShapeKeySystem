@@ -268,11 +268,6 @@ local function key_groups(ctx, x, y, w)
     if not open then return cy - y end
     s.kg_edit = s.kg_edit or {}
     s.kg_search, s.kg_items = s.kg_search or {}, s.kg_items or {}
-    -- key name -> the group holding it
-    local group_of_key = {}
-    for _, g in ipairs(list) do
-        for _, o in ipairs(g.options) do for _, k in ipairs(o.keys) do group_of_key[k.name] = g.name end end
-    end
     local f = W.small()
     local function ask_name(title, text, submit)
         W.start_text(s, "kg_form", { title = title, text = text or "", on_submit = submit })
@@ -365,13 +360,12 @@ local function key_groups(ctx, x, y, w)
                     cy = cy + 26
                 end
                 for _, k in ipairs(o.keys) do cy = cy + group_key_row(ctx, g, oi, k, x + 10, cy, w - 10) end
-                -- any key outside the other groups, including ones another option of this group uses
+                -- any key not in this option yet, including ones other options and groups use
                 local items = {}
                 local here = {}
                 for _, k in ipairs(o.keys) do here[k.name] = true end
                 for _, item in ipairs(W.shape_key_items(sc, s.kg_items)) do
-                    local owner = group_of_key[item.value]
-                    if not here[item.value] and (owner == nil or owner == g.name) then items[#items + 1] = item end
+                    if not here[item.value] then items[#items + 1] = item end
                 end
                 local add, name, ah = W.search_select(s.kg_search, "kg_add:" .. g.name .. ":" .. oi, x + 36, cy + 2,
                     min(320, w * 0.5), items, nil, { placeholder = "添加形态键…", empty = "没有可添加的形态键" })
