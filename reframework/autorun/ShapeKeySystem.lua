@@ -56,7 +56,13 @@ if Game.prepare_mesh and re.on_pre_application_entry then
     end
 end
 
--- after the animation has posed the joints (same slot as Lua Bone System): mocap head turn
+-- 动画前恢复固定通道并静音采集层；仅动画后写回不足以覆盖 Behaviour 对混合率的更新。
+re.on_pre_application_entry("UpdateMotion", function()
+    local ok, err = cached(SKS.prepare_motion)
+    if not ok then SKS.state.debug.status = "prepare motion error: " .. tostring(err) end
+end)
+
+-- 动画求值后推进面部固定及动捕头部姿势；BoneSystem 的原生实例钩子独立执行。
 re.on_application_entry("UpdateMotion", function()
     local ok, err = cached(SKS.update_motion)
     if not ok then SKS.state.mocap.head_status = L.f("头部错误：%s", tostring(err)) end
@@ -66,6 +72,15 @@ re.on_application_entry("LateUpdateBehavior", function()
     local ok, err = cached(SKS.tick)
     if not ok then SKS.state.debug.status = "tick error: " .. tostring(err) end
 end)
+
+-- 渲染前后只读抽样，用于区分源骨架覆盖与部件骨架同步问题。
+for _, before in ipairs({ true, false }) do
+    local stage = before and "pre-render" or "post-render"
+    local register = before and re.on_pre_application_entry or re.on_application_entry
+    register("PrepareRendering", function()
+        cached(function() SKS.audit_face_hold(stage) end)
+    end)
+end
 
 -- standalone panel (M3), drawn with reframework-d2d when it is installed, else with REFramework's
 -- own ImGui draw list (settings.ui_backend: auto / d2d / imgui, see ShapeKeySystem_UI/Draw.lua).

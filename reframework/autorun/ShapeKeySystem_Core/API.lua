@@ -306,7 +306,7 @@ local function drop_rigs(reason, rescan_after)
     Scene.no_targets = {}
     Mocap.drop_refs()
     if SKS.adapter and SKS.adapter.face_mirror then SKS.adapter.face_mirror.drop_refs() end
-    FaceHold.release()
+    FaceHold.release(true)
     C.driven_frame, C.held_frame = nil, nil
     Guard.release_refs()
     if rescan_after then
@@ -1793,6 +1793,15 @@ local function tick()
         local r1 = C.rigs[1]
         C.driven_frame = (r1 and r1.primary) and f or nil
         C.held_frame = f
+        -- 最终写回兜住 Motion 之后的骨骼更新；不重采样，信号仍使用固定前的动画姿势。
+        if cfg.hold_face_bones then
+            local ok, err = pcall(FaceHold.reapply)
+            if not ok then
+                FaceHold.release()
+                FaceHold.status = I18n.f("禁用骨骼表情出错：%s", tostring(err))
+                build_settings_state()
+            end
+        end
         -- while the face bones' neutral pose is captured fcParam reads 0: the meshes keep last
         -- frame's weights instead
         if not FaceHold.capturing() then
@@ -1823,15 +1832,36 @@ end
 local function update_hold()
     local want = cfg.enabled and cfg.hold_face_bones and C.held_frame and C.held_frame == C.frame
     if want then
-        local faces = {}
-        for _, rig in ipairs(C.rigs) do faces[#faces + 1] = rig.face end
+        local faces, targets = {}, {}
+        for _, rig in ipairs(C.rigs) do
+            faces[#faces + 1] = rig.face
+            -- 只有主角的穿戴部件会被其它插件逐帧复制源骨骼；其余角色保持只固定源。
+            if rig.primary and rig.targets and #rig.targets > 0 then targets[rig.face:get_address()] = rig.targets end
+        end
         local hold_start = clock()
-        FaceHold.update(SKS.adapter, faces)
+        FaceHold.update(SKS.adapter, faces, targets)
         Perf.record("face_hold", clock() - hold_start)
     elseif FaceHold.active() then
         FaceHold.release()
     end
     if state.settings.hold_status ~= FaceHold.status then build_settings_state() end
+end
+
+-- 只读诊断固定姿势与最终渲染骨架，采样数由 FaceHold 限制。
+function SKS.audit_face_hold(stage)
+    if cfg.enabled and cfg.hold_face_bones then FaceHold.audit(C.rigs, stage) end
+end
+
+-- 在动画求值前撤销上次骨骼固定，并重新应用采集静音；不在这里写形态键。
+function SKS.prepare_motion()
+    if not FaceHold.active() then return end
+    local ok, err = pcall(function()
+        if cfg.enabled and cfg.hold_face_bones then FaceHold.prepare() else FaceHold.release() end
+    end)
+    if not ok then
+        FaceHold.release()
+        FaceHold.status = I18n.f("禁用骨骼表情出错：%s", tostring(err))
+    end
 end
 
 -- re.on_application_entry("UpdateMotion"): face bone hold on every driven rig, mocap head turn on
@@ -1851,6 +1881,7 @@ function SKS.tick()
     local started = clock()
     Scene.sig_time = 0
     tick()
+    SKS.audit_face_hold("late")
     Perf.record("tick", clock() - started)
     Perf.record("sig_check", Scene.sig_time)
     prof.frames = prof.frames + 1
@@ -1929,6 +1960,8 @@ function cmds.set_setting(a)
 end
 
 function cmds.rescan()
+    -- 显式重扫同时丢掉骨骼引用，同地址重建的模型也须重新采集中性姿势。
+    FaceHold.release(true)
     Scene.clear_channel_cache()
     request_rescan(1)
     return true
@@ -3055,11 +3088,12 @@ function SKS.on_preview(open)
 end
 
 function SKS.shutdown()
+    -- 优先恢复骨骼与混合率，其他模块清理异常不能遗留游戏动画状态。
+    FaceHold.release(true)
     ActorInstances.release("脚本重置")
     NativeSignals.finish("脚本重置")
     Playback.stop(true, "脚本重置，录制播放已停止")
     Trail.event("script reset")
-    FaceHold.release()
     C.unpublish_api()
     if SKS.adapter.strict_bounds and Scene.runtime_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("shutdown after rebuild", nil)
