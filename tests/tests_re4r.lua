@@ -54,8 +54,16 @@ sdk.get_managed_singleton = function(name)
     end
     return original_singleton(name)
 end
-local pres = {}
-re.on_pre_application_entry = function(stage, fn) pres[stage] = fn end
+local pres, pre_counts = {}, {}
+-- REFramework 同一阶段允许多个回调，不能让后注册的通用准备覆盖适配器的 LOD 准备。
+re.on_pre_application_entry = function(stage, fn)
+    pre_counts[stage] = (pre_counts[stage] or 0) + 1
+    local previous = pres[stage]
+    pres[stage] = function(...)
+        if previous then previous(...) end
+        fn(...)
+    end
+end
 GAME_NAME = "re4"
 json.dump_file("ShapeKeySystem/mods/names/synthetic.json", {schema="sks.names/1",names=CHANNELS})
 json.dump_file("ShapeKeySystem/mods/profiles/synthetic.json", {schema="sks.profile/1",name="Synthetic",channels={
@@ -375,7 +383,16 @@ m.get_BlendShapeChannelWeightCount=old_count
 local before=#writes
 count=0; ticks(2); check(#writes==before,"allocated buffer shrinking blocks expression and sculpt writes")
 count=#CHANNELS; ticks(50)
-pres.UpdateMotion(); check(lod==0,"LOD0 applied to valid current target")
+local original_prepare_motion, motion_prepared = SKS.prepare_motion, false
+SKS.prepare_motion = function(...)
+    motion_prepared = true
+    return original_prepare_motion(...)
+end
+pres.UpdateMotion()
+SKS.prepare_motion = original_prepare_motion
+check(lod==0,"LOD0 applied to valid current target")
+check(pre_counts.UpdateMotion >= 2 and motion_prepared,
+    "shared pre-Motion callbacks preserve both LOD and FaceHold preparation")
 local old=lod; lod=2; current=false; pres.PrepareRendering()
 check(lod==2,"lost player releases targets without dereferencing cached meshes")
 ticks(2); check(not A.primary_ready(),"absent player does not become a preview actor")

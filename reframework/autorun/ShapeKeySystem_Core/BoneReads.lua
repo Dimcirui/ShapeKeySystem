@@ -175,9 +175,10 @@ function R.read(h, P)
     local hp, hq
     if not held then hp, hq = m.pos:call(h.head), m.rot:call(h.head) end
     local function local_pose(n)
-        local p, q = FaceHold.pose(h.addr, n.name)
+        -- 缩放也会被固定，沿骨链合成信号时须使用同一时刻的动画姿势。
+        local p, q, s = FaceHold.pose(h.addr, n.name)
         if not p then p, q = m.lpos:call(n.joint), m.lrot:call(n.joint) end
-        return p, q, m.lscl and m.lscl:call(n.joint)
+        return p, q, s or (m.lscl and m.lscl:call(n.joint))
     end
     for _, b in ipairs(h.list) do
         local s, v = b.sig, nil

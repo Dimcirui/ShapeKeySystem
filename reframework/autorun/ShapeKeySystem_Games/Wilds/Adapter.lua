@@ -152,14 +152,17 @@ function A.expression_joints(face)
     return out
 end
 
--- every motion layer of the face: muting them all leaves the character-creation pose
+-- 必须取到全部面部动画层；初始化中的空层或缺层不能作为可采集中性脸的依据。
 function A.face_layers(face)
     local motion = face:call("get_GameObject"):call("getComponent(System.Type)", sdk.typeof("via.motion.Motion"))
     if not motion then return nil end
+    local count = motion:call("getLayerCount")
+    if not count or count <= 0 then return nil end
     local out = {}
-    for i = 0, (motion:call("getLayerCount") or 0) - 1 do
+    for i = 0, count - 1 do
         local layer = motion:call("getLayer(System.UInt32)", i)
-        if layer then out[#out + 1] = layer end
+        if not layer then return nil end
+        out[#out + 1] = layer
     end
     return out
 end
