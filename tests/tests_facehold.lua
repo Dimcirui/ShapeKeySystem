@@ -589,6 +589,64 @@ for addr, model in pairs(models) do
 end
 check(count > 0 and repaired, "API LateUpdateBehavior reapplies captured position rotation and scale after a later overwrite")
 check(count > 0 and preserved, "API final reapply does not replace pre-hold animation snapshots")
+
+-- 跨地图时玩家已装配、装备和 mesh 地址均可保持不变，部件上的同名下颌骨却来自新骨架。
+do
+    local get_singleton, stage = sdk.get_managed_singleton, 1
+    local field_manager = { get_CurrentStage = function()
+        if stage ~= 2 then return stage end
+        return { get_field = function(_, key)
+            assert(key == "value__")
+            return stage
+        end }
+    end }
+    sdk.get_managed_singleton = function(name)
+        if name == "app.MasterFieldManager" then return field_manager end
+        return get_singleton(name)
+    end
+    local model = model_of(mock_face)
+    local mesh = ARMOR._mesh
+    local original_go = mesh.get_GameObject
+    local function new_part()
+        local part = fake_part(mesh:get_address(), { C_Jaw_LOD02 = fake_bone("C_Jaw_LOD02", TARGET_BASE) })
+        mesh.get_GameObject = function() return part.mesh:call("get_GameObject") end
+        return part
+    end
+    local part = new_part()
+    local function map_frames(n)
+        for _ = 1, n do
+            model.behave(); SKS.prepare_motion(); model.animate()
+            target_copy(model, { part })
+            CB.motion(); CB.tick(); CB.frame()
+        end
+    end
+    SKS.call("rescan")
+    map_frames(60)
+    check(near(part.joints.C_Jaw_LOD02.pos.y, 3.015), "first map holds the equipped mesh jaw")
+    for _, next_stage in ipairs({ 2, 1 }) do
+        local previous = part.joints.C_Jaw_LOD02
+        stage, part = next_stage, new_part()
+        if next_stage == 1 then
+            -- 返程时 mesh 已可读取，部件骨骼晚于玩家源骨架装配。
+            local jaw = part.joints.C_Jaw_LOD02
+            part.joints.C_Jaw_LOD02 = nil
+            map_frames(30)
+            part.joints.C_Jaw_LOD02 = jaw
+        end
+        map_frames(60)
+        check(near(part.joints.C_Jaw_LOD02.pos.y, 3.015) and part.joints.C_Jaw_LOD02.writes > 0,
+            "map " .. stage .. " holds the replacement jaw without toggling FaceHold")
+        local old_writes, layer_sets = previous.writes, model.layers[1].sets
+        stage = nil
+        map_frames(10)
+        stage = next_stage
+        map_frames(10)
+        check(previous.writes == old_writes and model.layers[1].sets == layer_sets,
+            "stable map leaves the old jaw alone and does not mute the face again")
+    end
+    mesh.get_GameObject, sdk.get_managed_singleton = original_go, get_singleton
+end
+
 SKS.call("set_setting", { key = "hold_face_bones", value = false })
 X.read = real_read
 SKS.adapter.expression_joints, SKS.adapter.face_layers = original_joints, original_layers
@@ -652,6 +710,40 @@ check(ap and near(ap.y, 0.22) and ar and near(ar.x, 0.1),
 H.release()
 check(near(tjaw.pos.y, 3.215), "release restores the last copied target animation pose")
 check(not H.active(), "target hold drops every reference on release")
+
+-- 首次读档时层混合率可写，但动画尚未求值。姿势不动期间只同步下颌，动画开始后两个部件骨骼才都同步。
+do
+    local f = fake_face(0x207, { 0.75 })
+    local jaw = fake_bone("C_Jaw_LOD02", TARGET_BASE)
+    local nose = fake_bone("C_Nose_LOD01", TARGET_BASE)
+    local part = fake_part(0x7501, { C_Jaw_LOD02 = jaw, C_Nose_LOD01 = nose })
+    f.anim = 0.08
+    f.animate()
+    local function loading_frame()
+        H.prepare()
+        target_copy(f, { { joints = { C_Jaw_LOD02 = jaw } } })
+        H.update(adapter, { f }, { [f.addr] = { part } })
+    end
+    for _ = 1, 8 do loading_frame() end
+    local sets = f.layers[1].sets
+    for _ = 1, 60 do loading_frame() end
+    check(not H.capturing() and f.layers[1].sets == sets and near(f.layers[1].rate, 0.75),
+        "a stationary loading face leaves animation and expression driving available without repeated mutes")
+
+    f.anim = 0.2
+    for _ = 1, 12 do copied_frame(f, { part }) end
+    local p = H.pose(f.addr, "C_Jaw_LOD02")
+    check(near(f.joints[1].joint.pos.y, 0.02) and p and near(p.y, 0.22),
+        "first native movement replaces the frozen loading pose with the character neutral and preserves the signal")
+    check(near(jaw.pos.y, 3.015) and near(nose.pos.y, 3.015) and nose.writes > 0,
+        "first-load recapture includes a copied part joint that missed the loading sample")
+    sets = f.layers[1].sets
+    f.anim = 0.12
+    copied_frame(f, { part })
+    H.release()
+    check(f.layers[1].sets == sets and near(f.layers[1].rate, 0.75) and near(nose.pos.y, 3.135),
+        "confirmed neutral survives subsequent motion and release restores the current copied expression")
+end
 
 -- 未被逐帧复制的部件骨骼不能按公式写死：目标姿势不等于复制结果时不接管。
 local plain = fake_face(0x202, { 1.0 })

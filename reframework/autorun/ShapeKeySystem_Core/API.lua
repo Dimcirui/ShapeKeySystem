@@ -1680,7 +1680,15 @@ local function tick()
     -- The gate pauses nothing: loading, rebuilds and cutscenes keep driving whatever rigs exist.
     -- Its kind only picks who is driven: "playing" searches the scene for the cutscene copy,
     -- "setup" (title / save select) drives the preview hunters.
-    local stable, why, kind = Guard.game_stable(f, cfg.cutscene_drive)
+    local stable, why, kind, stage = Guard.game_stable(f, cfg.cutscene_drive)
+    if stage ~= nil then
+        if C.stage ~= nil and C.stage ~= stage then
+            drop_rigs(string.format("map changed (%d -> %d)", C.stage, stage), Guard.SETTLE_FRAMES)
+            -- 同地址的表情目标也须在新地图重新预热，然后才能绑定部件骨骼。
+            C.warm = nil
+        end
+        C.stage = stage
+    end
     if SKS.adapter.strict_bounds and #(C.instances or {}) > 0
         and Scene.runtime_signature(Scene.primary_root()) ~= C.sig then
         drop_rigs("part signature changed", QUICK_RESCAN)
@@ -1835,8 +1843,14 @@ local function update_hold()
         local faces, targets = {}, {}
         for _, rig in ipairs(C.rigs) do
             faces[#faces + 1] = rig.face
-            -- 只有主角的穿戴部件会被其它插件逐帧复制源骨骼；其余角色保持只固定源。
-            if rig.primary and rig.targets and #rig.targets > 0 then targets[rig.face:get_address()] = rig.targets end
+            if rig.primary then
+                -- 切图后 mesh 可能先于部件骨架出现。预热完成的部件加入时，FaceHold 会重新采集中性姿势。
+                local ready = {}
+                for _, target in ipairs(rig.targets) do
+                    if target.stable >= Guard.STABLE_FRAMES then ready[#ready + 1] = target end
+                end
+                if #ready > 0 then targets[rig.face:get_address()] = ready end
+            end
         end
         local hold_start = clock()
         FaceHold.update(SKS.adapter, faces, targets)

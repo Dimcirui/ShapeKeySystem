@@ -65,7 +65,7 @@ local A = {
     native_export = Recorder.export,
 }
 
-local M_JBN, M_DEMO_BUSY, M_DEMO_LOAD
+local M_JBN, M_DEMO_BUSY, M_DEMO_LOAD, M_CURRENT_STAGE
 
 -- looked up on first use, so Scene lookups also work without A.init (toys/SKS_Mocap)
 local function jbn(tr, name)
@@ -321,8 +321,18 @@ end
 A.probe = Probe.run
 
 -- ---------------------------------------------------------------- lifecycle
--- Returns ok, reason, kind; kind is "load", "playing" or "setup" when not ok. The player is only
--- looked at every 10 frames while it is not set up (it may be mid-rebuild).
+-- 跨地图传送可以沿用玩家和装备实例。读取不到有效地图编号时返回 nil。
+local function current_stage()
+    local manager = sdk.get_managed_singleton("app.MasterFieldManager")
+    local stage = manager and call(M_CURRENT_STAGE, manager)
+    if stage and type(stage) ~= "number" then
+        local ok, value = pcall(stage.get_field, stage, "value__")
+        stage = ok and value
+    end
+    return type(stage) == "number" and stage >= 0 and stage or nil
+end
+
+-- 玩家未装配时每十帧检查一次；游戏稳定时每五帧返回一次地图编号供 Core 识别跨图。
 local setup = false
 function A.gate(frame)
     local dm = sdk.get_managed_singleton("app.DemoMediator")   -- persistent manager, safe to poll
@@ -336,7 +346,7 @@ function A.gate(frame)
     end
     if setup or frame % 10 == 0 then setup = A.primary_ready() end
     if not setup then return false, "player not set up", "setup" end
-    return true
+    return true, nil, nil, frame % 5 == 0 and current_stage() or nil
 end
 
 local function hook_post(type_name, method, fn)
@@ -378,6 +388,8 @@ function A.init(events)
     local T_DEMO = sdk.find_type_definition("app.DemoMediator")
     M_DEMO_BUSY = T_DEMO and T_DEMO:get_method("get_IsBusy")
     M_DEMO_LOAD = T_DEMO and T_DEMO:get_method("get_IsBusyLoad")
+    local field_manager = sdk.find_type_definition("app.MasterFieldManager")
+    M_CURRENT_STAGE = field_manager and field_manager:get_method("get_CurrentStage")
 
     -- a missing or invalid calibration only disables the bone fallback
     bones, A.bones_error = load_bones()
