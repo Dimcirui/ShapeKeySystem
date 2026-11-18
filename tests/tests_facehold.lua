@@ -711,6 +711,40 @@ H.release()
 check(near(tjaw.pos.y, 3.215), "release restores the last copied target animation pose")
 check(not H.active(), "target hold drops every reference on release")
 
+-- 首次读档时层混合率可写，但动画尚未求值。姿势不动期间只同步下颌，动画开始后两个部件骨骼才都同步。
+do
+    local f = fake_face(0x207, { 0.75 })
+    local jaw = fake_bone("C_Jaw_LOD02", TARGET_BASE)
+    local nose = fake_bone("C_Nose_LOD01", TARGET_BASE)
+    local part = fake_part(0x7501, { C_Jaw_LOD02 = jaw, C_Nose_LOD01 = nose })
+    f.anim = 0.08
+    f.animate()
+    local function loading_frame()
+        H.prepare()
+        target_copy(f, { { joints = { C_Jaw_LOD02 = jaw } } })
+        H.update(adapter, { f }, { [f.addr] = { part } })
+    end
+    for _ = 1, 8 do loading_frame() end
+    local sets = f.layers[1].sets
+    for _ = 1, 60 do loading_frame() end
+    check(not H.capturing() and f.layers[1].sets == sets and near(f.layers[1].rate, 0.75),
+        "a stationary loading face leaves animation and expression driving available without repeated mutes")
+
+    f.anim = 0.2
+    for _ = 1, 12 do copied_frame(f, { part }) end
+    local p = H.pose(f.addr, "C_Jaw_LOD02")
+    check(near(f.joints[1].joint.pos.y, 0.02) and p and near(p.y, 0.22),
+        "first native movement replaces the frozen loading pose with the character neutral and preserves the signal")
+    check(near(jaw.pos.y, 3.015) and near(nose.pos.y, 3.015) and nose.writes > 0,
+        "first-load recapture includes a copied part joint that missed the loading sample")
+    sets = f.layers[1].sets
+    f.anim = 0.12
+    copied_frame(f, { part })
+    H.release()
+    check(f.layers[1].sets == sets and near(f.layers[1].rate, 0.75) and near(nose.pos.y, 3.135),
+        "confirmed neutral survives subsequent motion and release restores the current copied expression")
+end
+
 -- 未被逐帧复制的部件骨骼不能按公式写死：目标姿势不等于复制结果时不接管。
 local plain = fake_face(0x202, { 1.0 })
 local plain_joint = fake_bone("C_Jaw_LOD02", TARGET_BASE)

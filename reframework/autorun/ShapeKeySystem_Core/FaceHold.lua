@@ -162,6 +162,10 @@ local function same(a, b, rotation)
     return true
 end
 
+local function matches_neutral(e, pose)
+    return same(e.pos, pose[1]) and same(e.rot, pose[2], true) and same(e.scale, pose[3])
+end
+
 -- 目标部件骨骼：与源骨骼同名、地址不同且地址去重；原生复制用名字在目标 Transform 上查找。
 local function resolve_targets(targets, joints)
     if not targets or #targets == 0 or not (M_GBP and M_GBR and M_GBS) then return nil end
@@ -302,9 +306,11 @@ local function capture(e)
         end
         e.layers, e.rates = nil, nil
         e.phase = "await"
+        -- 首次读档时动画层可静音，骨架却可能尚未求值。静音前后相同的姿势在首次运动时重新采集。
+        e.verify_on_motion = matches_neutral(e, e.resume)
         if log and log.info then
             log.info(string.format("[SKS FaceHold] captured face=%s joints=%d wait=%d pose_changed=%s targets=%d/%d", tostring(e.addr), #e.joints, e.wait,
-                tostring(not (same(e.resume[1], e.pos) and same(e.resume[2], e.rot, true) and same(e.resume[3], e.scale))),
+                tostring(not e.verify_on_motion),
                 e.tpose and e.tpose.matches or 0, e.tpose and e.tpose.total or #(e.targets or {})))
         end
     elseif e.wait >= MAX_WAIT then
@@ -320,13 +326,15 @@ local function write_pose(e)
     end
 end
 
+-- 返回 false 时，源和部件仍处于本帧的动画姿势，可直接开始新一轮静音。
 local function hold(e, addr)
-    local p = pre[addr]
-    if not p then p = {}; pre[addr] = p end
     -- 先读源与目标部件的动画姿势，再一起写回中性；两者必须来自同一帧，否则恢复会互相覆盖。
     e.animated = { snapshot(e) }
+    if e.verify_on_motion and not matches_neutral(e, e.animated) then return false end
     if e.tpose then e.tanimated = { snapshot_targets(e.tpose) } end
     e.resume = nil
+    local p = pre[addr]
+    if not p then p = {}; pre[addr] = p end
     for i, j in ipairs(e.joints) do
         if watched[j.name] then
             p[j.name] = { e.animated[1][i], e.animated[2][i], e.animated[3][i] }
@@ -336,6 +344,7 @@ local function hold(e, addr)
     if e.tpose then write_targets(e.tpose) end
     e.phase = "hold"
     H.status = L.f("已禁用 %d 根表情骨骼", #e.joints)
+    return true
 end
 
 -- Behaviour 可重设层混合率，故静音须在 Motion 求值前重新应用。
@@ -347,7 +356,10 @@ function H.prepare()
         elseif e.phase == "capture" then
             if not set_rates(e, true) then fail(e, "无法静音面部动画层，稍后重试") end
         elseif e.phase == "await" or e.phase == "hold" then
-            if not restore_pose(e) then fail(e, "无法恢复面部骨骼，稍后重试") end
+            -- 待确认期间也在求值前撤销部件写入，重新采集时不能把旧的固定值留在部件上。
+            if not restore_pose(e) or (e.verify_on_motion and not restore_targets(e)) then
+                fail(e, "无法恢复面部骨骼，稍后重试")
+            end
         end
     end
 end
@@ -409,9 +421,13 @@ function H.update(adapter, list, targets)
                 if restored then e = nil else e.retry = RETRY end
             end
         end
-        if not e then e = start(adapter, face, passed); faces[addr] = e end
-        if e.phase == "capture" then capture(e)
-        elseif e.phase == "await" or e.phase == "hold" then hold(e, addr) end
+        if e and (e.phase == "await" or e.phase == "hold") and not hold(e, addr) then e = nil end
+        if not e then
+            pre[addr] = nil
+            e = start(adapter, face, passed)
+            faces[addr] = e
+        end
+        if e.phase == "capture" then capture(e) end
     end
     for addr, e in pairs(faces) do
         if not seen[addr] then
