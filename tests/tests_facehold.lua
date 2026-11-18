@@ -589,6 +589,64 @@ for addr, model in pairs(models) do
 end
 check(count > 0 and repaired, "API LateUpdateBehavior reapplies captured position rotation and scale after a later overwrite")
 check(count > 0 and preserved, "API final reapply does not replace pre-hold animation snapshots")
+
+-- 跨地图时玩家已装配、装备和 mesh 地址均可保持不变，部件上的同名下颌骨却来自新骨架。
+do
+    local get_singleton, stage = sdk.get_managed_singleton, 1
+    local field_manager = { get_CurrentStage = function()
+        if stage ~= 2 then return stage end
+        return { get_field = function(_, key)
+            assert(key == "value__")
+            return stage
+        end }
+    end }
+    sdk.get_managed_singleton = function(name)
+        if name == "app.MasterFieldManager" then return field_manager end
+        return get_singleton(name)
+    end
+    local model = model_of(mock_face)
+    local mesh = ARMOR._mesh
+    local original_go = mesh.get_GameObject
+    local function new_part()
+        local part = fake_part(mesh:get_address(), { C_Jaw_LOD02 = fake_bone("C_Jaw_LOD02", TARGET_BASE) })
+        mesh.get_GameObject = function() return part.mesh:call("get_GameObject") end
+        return part
+    end
+    local part = new_part()
+    local function map_frames(n)
+        for _ = 1, n do
+            model.behave(); SKS.prepare_motion(); model.animate()
+            target_copy(model, { part })
+            CB.motion(); CB.tick(); CB.frame()
+        end
+    end
+    SKS.call("rescan")
+    map_frames(60)
+    check(near(part.joints.C_Jaw_LOD02.pos.y, 3.015), "first map holds the equipped mesh jaw")
+    for _, next_stage in ipairs({ 2, 1 }) do
+        local previous = part.joints.C_Jaw_LOD02
+        stage, part = next_stage, new_part()
+        if next_stage == 1 then
+            -- 返程时 mesh 已可读取，部件骨骼晚于玩家源骨架装配。
+            local jaw = part.joints.C_Jaw_LOD02
+            part.joints.C_Jaw_LOD02 = nil
+            map_frames(30)
+            part.joints.C_Jaw_LOD02 = jaw
+        end
+        map_frames(60)
+        check(near(part.joints.C_Jaw_LOD02.pos.y, 3.015) and part.joints.C_Jaw_LOD02.writes > 0,
+            "map " .. stage .. " holds the replacement jaw without toggling FaceHold")
+        local old_writes, layer_sets = previous.writes, model.layers[1].sets
+        stage = nil
+        map_frames(10)
+        stage = next_stage
+        map_frames(10)
+        check(previous.writes == old_writes and model.layers[1].sets == layer_sets,
+            "stable map leaves the old jaw alone and does not mute the face again")
+    end
+    mesh.get_GameObject, sdk.get_managed_singleton = original_go, get_singleton
+end
+
 SKS.call("set_setting", { key = "hold_face_bones", value = false })
 X.read = real_read
 SKS.adapter.expression_joints, SKS.adapter.face_layers = original_joints, original_layers

@@ -164,8 +164,9 @@ A.face_layers(face)       -> { via.motion.TreeLayer, ... }                  -- �
 ### 2.5 生命周期事件
 
 ```lua
-A.gate(frame) -> ok, reason, kind
+A.gate(frame) -> ok, reason, kind, stage_id
     -- kind: "load" 过场读取中 | "playing" 过场播放中 | "setup" 主角色没装配好（标题、存档选择、读盘）
+    -- stage_id 可省略。两次有效编号不同时，Core 释放旧 rig 并在新地图重新扫描。
 A.init(events)
     -- events 由 Core 提供，适配器在自己的 sdk.hook 里调用；每一项都是可选的（D9）：
     events.release(reason)   -- 过场跳过 / 停止 / 卸载：马上放掉所有引用（必须是前置钩子）
