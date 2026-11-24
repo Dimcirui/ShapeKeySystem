@@ -7,10 +7,11 @@
 local V = {}
 
 V.name = "ShapeKeySystem"
-V.number = "1.20.1"
+V.number = "1.21.0"
 V.author = "Dimcirui, MK, funnyguyz, Kevin, Motoka, Moon"
 
 V.history = {
+    { version = "1.21.0", notes = "RE9 能驱动不带原生形态键的头部 mod，形态键可放在任意部件；荒野读档后自动固定表情骨骼" },
     { version = "1.20.1", notes = "已在一个键组里的形态键可以加入其他键组" },
     { version = "1.20.0", notes = "RE4R 新增阿什莉、路易斯、克劳萨、威斯克、汉克的捏脸与驱动；修复切换角色后无法切回" },
     { version = "1.19.1", notes = "插件选的键组选项换捏脸配置后继续生效" },
