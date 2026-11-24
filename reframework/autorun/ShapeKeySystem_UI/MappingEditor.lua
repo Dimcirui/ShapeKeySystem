@@ -5,6 +5,7 @@ local D = require("ShapeKeySystem_UI.Draw")
 local T = require("ShapeKeySystem_UI.Theme")
 local W = require("ShapeKeySystem_UI.Widgets")
 local I = require("ShapeKeySystem_UI.Input")
+local TextInput = require("ShapeKeySystem_UI.TextInput")
 local U = require("ShapeKeySystem_Core.Util")
 local Profile = require("ShapeKeySystem_Core.Profile")
 local Expression = require("ShapeKeySystem_Core.Expression")
@@ -184,12 +185,69 @@ local function line(text, x, y, w, color)
     W.tooltip(text, x, y, w, 24)
     return y + 26
 end
-local function slider(draft, id, label, x, y, w, value, lo, hi, step, fmt)
-    D.text_mid(label, x, y, 28, C.muted, W.small(), 90)
-    local changed, v = W.slider(id, x + 96, y, max(100, w - 96), 28, value, lo, hi,
-        { step = step, fmt = fmt or "%.2f", value_w = 58 })
-    if changed then mark(draft) end
-    return v, y + 34
+local function slider(draft, id, label, x, y, w, value, lo, hi, step, fmt, on_set)
+    D.text_mid(label, x, y, 28, C.muted, W.small(), 84)
+    W.tooltip(label, x, y, 84, 28)
+
+    draft.inputs = draft.inputs or {}
+    local input_id = id .. ":num"
+
+    local box_w = 60
+    local prefix = ""
+    local suffix = ""
+    local disp_fmt = "%.2f"
+    if fmt then
+        if fmt:find("×") or fmt:find("x") then prefix = "×" end
+        if fmt:find("°") then suffix = "°" end
+        if fmt:find("%%d") or (step and step >= 1) then disp_fmt = "%d"
+        elseif fmt:find("%%.4f") or (step and step < 0.01) then disp_fmt = "%.4f" end
+    end
+
+    local prefix_w = prefix ~= "" and 12 or 0
+    local suffix_w = suffix ~= "" and 12 or 0
+    local right_w = prefix_w + box_w + suffix_w
+    local track_x = x + 88
+    local track_w = max(50, w - 88 - right_w - 8)
+    local cur_x = track_x + track_w + 8
+
+    if prefix ~= "" then
+        D.text_mid(prefix, cur_x, y, 28, C.brass, W.mono(), prefix_w)
+        cur_x = cur_x + prefix_w
+    end
+
+    local input_x = cur_x
+    cur_x = cur_x + box_w
+
+    if suffix ~= "" then
+        D.text_mid(suffix, cur_x, y, 28, C.muted, W.mono(), suffix_w)
+    end
+
+    local changed, new_v = W.slider(id, track_x, y, track_w, 28, value, lo, hi, { step = step })
+    if changed then
+        value = new_v
+        draft.inputs[input_id] = string.format(disp_fmt, value)
+        if on_set then on_set(value) end
+        mark(draft)
+    end
+
+    if TextInput.active ~= input_id then
+        draft.inputs[input_id] = string.format(disp_fmt, value)
+    end
+
+    W.text_box(input_id, input_x, y + 1, box_w, 26, draft.inputs[input_id], "0", function(text)
+        draft.inputs[input_id] = text
+        local clean = text:gsub("[^%d%.%-+]", "")
+        local num = tonumber(clean)
+        if num ~= nil then
+            if step and step >= 1 then num = math.floor(num + 0.5) end
+            num = max(lo, min(hi, num))
+            value = num
+            if on_set then on_set(num) end
+            mark(draft)
+        end
+    end, nil, 32)
+
+    return value, y + 34
 end
 
 local function signal_picker(ctx, draft, node, id, x, y, w)
@@ -246,12 +304,12 @@ local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
         local raw = ctx.st.mapping.raw
         local sl = raw and raw.slider
         if sl then
-            node.p, cy = slider(draft, "map_param:" .. id, L.f("%s 编号", L.tr(raw.term)), x, cy, w, tonumber(node.p) or sl.min, sl.min, sl.max, 1, sl.fmt)
+            node.p, cy = slider(draft, "map_param:" .. id, L.f("%s 编号", L.tr(raw.term)), x, cy, w, tonumber(node.p) or sl.min, sl.min, sl.max, 1, sl.fmt, function(v) node.p = v end)
         else
             cy = line(raw and L.f("原始通道：%s", tostring(node.p)) or "本游戏没有原始通道", x, cy, w, raw and C.muted or C.warn)
         end
     elseif kind == "const" then
-        node.const, cy = slider(draft, "map_const:" .. id, "固定数值", x, cy, w, node.const or 0, -5, 5, 0.01)
+        node.const, cy = slider(draft, "map_const:" .. id, "固定数值", x, cy, w, node.const or 0, -5, 5, 0.01, nil, function(v) node.const = v end)
     elseif kind == "ref" then
         local names = {}
         for _, c in ipairs(ctx.st.expression.channels or {}) do if c.canonical ~= draft.entry.name then names[#names + 1] = c.canonical end end
@@ -274,7 +332,7 @@ local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
         ch, override = W.toggle("单独设置满权重角度", x, cy, node.full_deg ~= nil)
         if ch then node.full_deg = override and 25 or nil; mark(draft) end
         cy = cy + 32
-        if node.full_deg then node.full_deg, cy = slider(draft, "map_full:" .. id, "满权重角度", x, cy, w, node.full_deg, 1, 90, 1, "%d°") end
+        if node.full_deg then node.full_deg, cy = slider(draft, "map_full:" .. id, "满权重角度", x, cy, w, node.full_deg, 1, 90, 1, "%d°", function(v) node.full_deg = v end) end
     elseif OPS[kind] then
         local list = node[kind]
         cy = line(L.f("包含 %d 个输入，点击映射树中的输入节点分别编辑。", #list), x, cy, w)
@@ -289,16 +347,16 @@ local function draw_node(ctx, draft, node, id, x, y, w, depth, root)
     end
     if kind ~= "none" then
         local coefficient
-        coefficient, cy = slider(draft, "map_k:" .. id, root and "输出系数" or "输入系数", x, cy, w, node.k or 1, -5, 5, 0.01, "×%.2f")
+        coefficient, cy = slider(draft, "map_k:" .. id, root and "输出系数" or "输入系数", x, cy, w, node.k or 1, -5, 5, 0.01, "×%.2f", function(v) if node.k ~= nil or v ~= 1 then node.k = v end end)
         if node.k ~= nil or coefficient ~= 1 then node.k = coefficient end
         local ch, on = W.toggle("响应曲线", x, cy, node.curve ~= nil)
         if ch then node.curve = on and { deadzone = 0, gamma = 1, gain = 1 } or nil; mark(draft) end
         cy = cy + 32
         if node.curve then
             cy = line("处理顺序：输入 × 系数 → 死区 → 幂指数 → 曲线增益", x, cy, w)
-            node.curve.deadzone, cy = slider(draft, "map_dz:" .. id, "死区", x, cy, w, node.curve.deadzone or 0, 0, 0.95, 0.01)
-            node.curve.gamma, cy = slider(draft, "map_gamma:" .. id, "幂指数", x, cy, w, node.curve.gamma or 1, 0.05, 5, 0.05)
-            node.curve.gain, cy = slider(draft, "map_curve_gain:" .. id, "曲线增益", x, cy, w, node.curve.gain or 1, 0, 5, 0.01)
+            node.curve.deadzone, cy = slider(draft, "map_dz:" .. id, "死区", x, cy, w, node.curve.deadzone or 0, 0, 0.95, 0.01, nil, function(v) node.curve.deadzone = v end)
+            node.curve.gamma, cy = slider(draft, "map_gamma:" .. id, "幂指数", x, cy, w, node.curve.gamma or 1, 0.05, 5, 0.05, nil, function(v) node.curve.gamma = v end)
+            node.curve.gain, cy = slider(draft, "map_curve_gain:" .. id, "曲线增益", x, cy, w, node.curve.gain or 1, 0, 5, 0.01, nil, function(v) node.curve.gain = v end)
         end
     end
     return cy - y

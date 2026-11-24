@@ -28,7 +28,7 @@ function X.remove(id)
     for i = #X.fields, 1, -1 do if X.fields[i].id == id then table.remove(X.fields, i) end end
     if X.active == id then X.active = nil end
 end
-function X.register(id, x, y, w, h, value, on_change)
+function X.register(id, x, y, w, h, value, on_change, flags)
     local c = D.get_clip()
     -- 与自绘文字一致：被滚动区部分裁剪的输入框不创建可点击的 ImGui 窗口。
     if c and (x < c[1] or y < c[2] or x + w > c[3] or y + h > c[4]) then return false end
@@ -36,7 +36,7 @@ function X.register(id, x, y, w, h, value, on_change)
     local s = D.S
     X.fields[#X.fields + 1] = { id = id, lx = x, ly = y, lw = w, lh = h, x = (x + 8) * s, y = y * s,
         w = (w - 16) * s, h = h * s, px = max(6, floor(T.font.body * s + 0.5)),
-        text = value or "", on_change = on_change }
+        text = value or "", on_change = on_change, flags = flags or 0 }
     return true
 end
 
@@ -45,7 +45,7 @@ local function draw_field(f)
     local focus = focus_id == f.id
     if focus then focus_id = nil end
     local nv, nc, window, width, font = 0, 0, false, false, false
-    local text, active
+    local text, active, ret
     local ok, err = pcall(function()
         local function var(i, v) imgui.push_style_var(i, v); nv = nv + 1 end
         local function col(i, v) imgui.push_style_color(i, color(v)); nc = nc + 1 end
@@ -62,7 +62,7 @@ local function draw_field(f)
         imgui.push_item_width(f.w + 0.0); width = true
         if focus and imgui.set_keyboard_focus_here then imgui.set_keyboard_focus_here(0) end
         local _
-        _, text = imgui.input_text("##sks_text_" .. f.id, f.text)
+        ret, text = imgui.input_text("##sks_text_" .. f.id, f.text, f.flags or 0)
         active = imgui.is_item_active()
     end)
     if width then imgui.pop_item_width() end
@@ -75,6 +75,15 @@ local function draw_field(f)
     if type(text) == "string" and text ~= f.text then
         f.text = text
         if f.on_change then f.on_change(text) end
+    end
+    local is_enter = (ret == true and ((f.flags or 0) & 32) ~= 0)
+    if not is_enter and active then
+        local ok_k, k_down = pcall(function() return reframework:is_key_down(0x0D) end)
+        if ok_k and k_down then is_enter = true end
+    end
+    if is_enter then
+        if f.on_change and type(text) == "string" then f.on_change(text) end
+        X.active = nil
     end
 end
 
