@@ -1,16 +1,21 @@
--- ShapeKeySystem: native RE9 correction inputs, with base-relative bones for unavailable inputs.
+-- ShapeKeySystem: RE9 expression inputs from the engine's own native face values.
 --
--- Handles contain numbers and names only. Each sample resolves the current head and verifies
--- its identity and tap hashes before reading; missing inputs contribute zero independently.
-local Hash = require("ShapeKeySystem_Core.NameHash")
+-- The facial clips animate 96 native values (HeadSkinned_blendShape.*). The face Motion keeps them
+-- as parameter joints (value in local X) on vanilla and mod heads alike; names a head lacks are
+-- sampled from the playing clips instead. Labels with taps take the largest of their native
+-- values; re9.native.* labels expose one value; vowels and labels without taps keep the face-bone
+-- measurements. Handles contain numbers and names only; every read resolves the current face.
 local R = require("ShapeKeySystem_Games.RE9.Runtime")
 local Bones = require("ShapeKeySystem_Games.RE9.Bones")
 local Motion = require("ShapeKeySystem_Games.RE9.Motion")
+local Clips = require("ShapeKeySystem_Games.RE9.Clips")
+local Hash = require("ShapeKeySystem_Core.NameHash")
 local Names = require("ShapeKeySystem_Core.Names")
 local Vowels = require('ShapeKeySystem_Games.RE9.Vowels')
 local Eyes = require('ShapeKeySystem_Games.RE9.Eyes')
 local L = require("ShapeKeySystem_Core.I18n")
 local S = {}
+local PREFIX = "HeadSkinned_blendShape."
 local labels = {"eyeBlinkLeft", "eyeBlinkRight", "jawOpen"}
 local keys = {eyeBlinkLeft = 1, eyeBlinkRight = 2, jawOpen = 3}
 for _,name in ipairs(Names.ARKIT52)do
@@ -21,46 +26,33 @@ for _,name in ipairs({'re9BrowInLeft','re9BrowInRight','re9VowelA','re9VowelI','
     labels[#labels+1]=name;keys[name]=#labels
 end
 local fixed_key_count=#labels
-local protected, taps, calibration = {}, {}, {}
-local input_mode='legacy'
-local extension_enabled=false
-local modes={legacy=true,bones_first=true}
+local protected, taps, natives, bone_rules = {}, {}, {}, {}
 local function finite(value) return type(value) == "number" and value == value and math.abs(value) < math.huge end
+local function clamp(v) return math.max(0, math.min(1, v)) end
 S.raw = {term = "原生表情", parse = function(value)
-    if keys[value]and(taps[value]and #taps[value]>0 or(calibration.bone_fallbacks or{})[value]
-        or(calibration.expression_fallbacks or{})[value]or(calibration.native_output_rules or{})[value]
+    if keys[value]and(taps[value]and #taps[value]>0 or natives[value]or bone_rules[value]
         or vowel_keys[value]and Vowels.configured())then return keys[value] end
     return nil, "RE9 未配置该表情输入"
 end, label = function(key) return labels[key] end}
-function S.mode()return input_mode end
-function S.expanded()return extension_enabled end
 
-function S.configure(data,mode,expanded)
+function S.configure(data)
     if type(data) ~= "table" or data.schema ~= "sks.re9-native/1" or type(data.native_names) ~= "table"
         or type(data.taps) ~= "table" then return false, "RE9 原生通道表无效" end
-    mode=mode or data.input_mode or'legacy'
-    if not modes[mode]then return false,'RE9 输入模式无效'end
-    for _,name in ipairs({'bone_fallbacks','expression_fallbacks','native_output_rules'})do
+    for _,name in ipairs({'bone_fallbacks','expression_fallbacks'})do
         if data[name]~=nil and type(data[name])~='table'then return false,'RE9 面部来源表无效'end
     end
-    if expanded then
-        if type(data.expression_fallbacks)~='table'then return false,'RE9 扩展表情标定缺失'end
-        local copy,combined={},{}
-        for name,value in pairs(data)do copy[name]=value end
-        for label,rule in pairs(data.bone_fallbacks or{})do combined[label]=rule end
-        for _,set in ipairs({data.expression_fallbacks,data.native_output_rules or{}})do
-            for label,rule in pairs(set)do
-                if combined[label]then return false,'RE9 扩展表情不能覆盖基础输入'end
-                combined[label]=rule
-            end
-        end
-        copy.bone_fallbacks=combined;data=copy
-    end
-    local names, configured = {}, {}
+    local names, native_labels, label_native = {}, {}, {}
     for _, name in ipairs(data.native_names) do
         if type(name) ~= "string" or name == "" then return false, "RE9 原生通道名称无效" end
         names[Hash.hash(name)] = true
+        local suffix = name:sub(1, #PREFIX) == PREFIX and name:sub(#PREFIX + 1)
+        if suffix and suffix:match("^[%w_]+$") and not suffix:find("_LOD%d+$") then
+            local label = "re9.native." .. suffix
+            if not label_native[label] then native_labels[#native_labels + 1] = label end
+            label_native[label] = name
+        end
     end
+    local configured = {}
     for _, label in ipairs(labels) do
         local list = data.taps[label]
         if list==nil then list={}end
@@ -68,31 +60,19 @@ function S.configure(data,mode,expanded)
         configured[label] = {}
         for _, name in ipairs(list) do
             if type(name) ~= "string" or not names[Hash.hash(name)] then return false, "RE9 来源不属于原生通道" end
-            configured[label][#configured[label] + 1] = {name = name, hash = Hash.hash(name)}
+            configured[label][#configured[label] + 1] = name
+        end
+    end
+    -- face-bone rules: every label the data measures from bones (taps win where both exist)
+    local combined = {}
+    for _, set in ipairs({data.bone_fallbacks or {}, data.expression_fallbacks or {}}) do
+        for label, rule in pairs(set) do
+            if combined[label] then return false, 'RE9 扩展表情不能覆盖基础输入' end
+            combined[label] = rule
         end
     end
     local extra={re9BrowInLeft=true,re9BrowInRight=true}
-    local native_labels={}
-    for label,rule in pairs(data.native_output_rules or{})do
-        local suffix=type(label)=='string'and label:match('^re9%.native%.([%w_]+)$')
-        local expected=suffix and('HeadSkinned_blendShape.'..suffix)
-        if not expected or not names[Hash.hash(expected)]or type(rule)~='table'
-            or type(rule.native_parameters)~='table'or #rule.native_parameters~=1
-            or rule.native_parameters[1]~=expected then return false,'RE9 原生输出来源无效'end
-        extra[label]=true;native_labels[#native_labels+1]=label
-    end
-    for _,rule in pairs(data.bone_fallbacks or{})do
-        if type(rule)~='table'then return false,'RE9 面部来源无效'end
-        if rule.native_parameters~=nil then
-            if type(rule.native_parameters)~='table'or #rule.native_parameters<1 or #rule.native_parameters>4 then
-                return false,'RE9 原生输出回退无效'
-            end
-            for _,name in ipairs(rule.native_parameters)do
-                if type(name)~='string'or not names[Hash.hash(name)]then return false,'RE9 原生输出回退不在名称表中'end
-            end
-        end
-    end
-    local ok, why = Bones.validate(data.bone_fallbacks,extra)
+    local ok, why = Bones.validate(combined,extra)
     if not ok then return false, why end
     ok,why=Vowels.validate(data.vowels)
     if not ok then return false,why end
@@ -106,14 +86,14 @@ function S.configure(data,mode,expanded)
             end
         end
     end
-    Bones.configure(data.bone_fallbacks,extra);Vowels.configure(data.vowels)
+    Bones.configure(combined,extra);Vowels.configure(data.vowels)
     while #labels>fixed_key_count do keys[labels[#labels]]=nil;table.remove(labels)end
     table.sort(native_labels)
     for _,label in ipairs(native_labels)do labels[#labels+1]=label;keys[label]=#labels;configured[label]={}end
-    protected, taps, calibration = names, configured, data
-    input_mode=mode
-    extension_enabled=expanded==true
-    Eyes.configure(data.eye_neutrals,extension_enabled)
+    protected, taps, natives = names, configured, label_native
+    bone_rules = {}
+    for label in pairs(combined) do bone_rules[label] = true end
+    Eyes.configure(data.eye_neutrals, true)
     return true
 end
 
@@ -140,39 +120,56 @@ function S.writable(name, mesh, index, context)
     return true
 end
 
-function S.bind(face, requested, mode)
+function S.bind(face, requested)
     local head = R.find()
-    local h = {keys = requested, identity = head and head.identity, indices = {}, status = {},
-        mode=mode or input_mode,motion_cache={}}
+    local h = {keys = requested, identity = head and head.identity, status = {}, motion_cache = {}}
     if not head or R.address(face) ~= R.address(head.face) then h.identity = nil; return h, 0 end
-    local hashes = Hash.hashes(head.mesh, head.count, true) or {}
-    local positions = {}
-    for i = 1, head.count do
-        local hash = hashes[i]
-        if hash ~= nil then
-            if positions[hash] ~= nil then positions[hash] = false else positions[hash] = i - 1 end
+    return h, #requested
+end
+
+-- Native values for one read: parameter joints first, one clip pass for the names they miss.
+local function native_reader(h, open_motion)
+    local values, sources, missing = {}, {}, nil
+    local function sample_missing()
+        local context = open_motion()
+        local list = {}
+        for name in pairs(missing) do list[#list + 1] = name end
+        missing = false
+        if not context or #list == 0 then return end
+        h.clip_requests = (h.clip_requests or 0) + 1
+        for name, v in pairs(Clips.sample(context.motion, list)) do
+            if finite(v) then values[name], sources[name] = v, 'clip' end
         end
     end
-    for _, list in pairs(taps) do
-        for _, tap in ipairs(list) do h.indices[tap.name] = positions[tap.hash] end
+    local function get(name)
+        if sources[name] == nil then
+            local context = open_motion()
+            local v = context and Motion.scalar(context, name)
+            if finite(v) then values[name], sources[name] = v, 'parameter'
+            else sources[name] = false end
+        end
+        if sources[name] == false and missing ~= false then
+            missing = missing or {}
+            missing[name] = true
+            return nil, 'pending'
+        end
+        return values[name], sources[name]
     end
-    return h, #requested
+    return get, sample_missing, values, sources, function() return missing end
 end
 
 function S.read(h, P, inv_full, diagnostic)
     local head = R.find()
     local valid = head and h.identity ~= nil and head.identity == h.identity
-    local hashes = valid and R.call(head.mesh, "get_ChannelNameHash")
     local values, observed, frame = {}, {}, {}
     local motion_context,motion_error
-    local scalars={}
-    h.motion_requests=0
+    h.motion_requests, h.clip_requests = 0, 0
     local function open_motion()
         if motion_context==nil then
             motion_context,motion_error=Motion.open(head,h.motion_cache)
             motion_context=motion_context or false
         end
-        return motion_context
+        return motion_context or nil
     end
     local function fallback(term,detail)
         if not open_motion()then return nil,motion_error end
@@ -181,69 +178,48 @@ function S.read(h, P, inv_full, diagnostic)
         return Motion.read(motion_context,term.bone,term.motion_neutral,detail,
             term.kind=='pos'and term.motion_neutral_position or nil)
     end
+    local get, sample_missing, native_values, native_sources, pending = native_reader(h, open_motion)
     h.sources, h.measurements, h.bone_status, h.bone_joints = {}, {}, {}, {}
-    for _, key in ipairs(h.keys) do
-        local label, value, available = labels[key], 0, false
-        for _, tap in ipairs((h.mode=='legacy'or diagnostic)and taps[label]or{}) do
-            local index = h.indices[tap.name]
-            local state, v = "head_unavailable"
-            if valid then
-                if type(index) ~= "number" then state = "unbound"
-                elseif index >= head.count then state = "out_of_bounds"
-                elseif Hash.hash_at(hashes, index, true) ~= tap.hash then state = "hash_changed"
-                else
-                    v = R.call(head.mesh, "getBlendShapeChannelWeightParam(System.UInt64)", index)
-                    state = finite(v) and "ok" or "read_failed"
-                end
-            end
-            h.status[tap.name] = state
-            if finite(v) then
-                available = true
-                observed[tap.name] = v; value = math.max(value, math.max(0, math.min(1, v)))
-            end
+    -- first pass registers every native name the requested labels need, so one clip pass covers them
+    if valid then
+        for _, key in ipairs(h.keys) do
+            local label = labels[key]
+            for _, name in ipairs(taps[label] or {}) do get(name) end
+            if natives[label] then get(natives[label]) end
         end
-        h.sources[label] = available and "native" or "unavailable"
-        if valid and (h.mode=='bones_first'or not available) then
-            local bone, measured, state, joints,source
-            local extension_rule=(calibration.expression_fallbacks or{})[label]or(calibration.native_output_rules or{})[label]
-            if vowel_keys[label]then
-                if extension_enabled then
-                    local values
-                    values,state,joints,source=Vowels.read(head,diagnostic,h.mode=='bones_first'and fallback or nil,h.omitted,frame)
-                    bone=values and values[vowel_keys[label]]
-                else state='extension_disabled'end
-            else
-                bone,measured,state,joints,source=Bones.read(head,label,diagnostic,
-                    h.mode=='bones_first'and fallback or nil,h.omitted,frame)
+        if pending() then sample_missing() end
+    end
+    for _, key in ipairs(h.keys) do
+        local label, value = labels[key], 0
+        local list = taps[label] or {}
+        if valid and (#list > 0 or natives[label]) then
+            local any = false
+            if #list == 0 then list = {natives[label]} end
+            for _, name in ipairs(list) do
+                local v, source = get(name)
+                if finite(v) then
+                    any = true
+                    observed[name] = v
+                    value = math.max(value, clamp(v))
+                    h.status[name] = source
+                else h.status[name] = 'unavailable' end
             end
-            if not extension_enabled and extension_rule
-                and not(calibration.bone_fallbacks or{})[label]then state='extension_disabled'end
-            local rule=(calibration.bone_fallbacks or{})[label]
-            if not finite(bone)and h.mode=='bones_first'and rule and rule.native_parameters and open_motion()then
-                local total,complete=0,true
-                for _,name in ipairs(rule.native_parameters)do
-                    local entry=scalars[name]
-                    if entry==nil then
-                        h.motion_requests=h.motion_requests+1
-                        local v,why=Motion.scalar(motion_context,name)
-                        entry={value=v,state=why};scalars[name]=entry
-                    end
-                    if not finite(entry.value)then complete=false;state=entry.state;break end
-                    total=total+entry.value
-                end
-                if complete then
-                    bone=math.max(0,math.min(1,total/#rule.native_parameters))
-                    state,source='native_parameter_fallback','motion_native'
-                end
+            h.sources[label] = any and 'native' or 'unavailable'
+        elseif valid then
+            local bone, measured, state, joints, source
+            if vowel_keys[label] then
+                local weights
+                weights,state,joints,source=Vowels.read(head,diagnostic,fallback,h.omitted,frame)
+                bone=weights and weights[vowel_keys[label]]
+            else
+                bone,measured,state,joints,source=Bones.read(head,label,diagnostic,fallback,h.omitted,frame)
             end
             h.bone_status[label], h.measurements[label] = state, measured
             if finite(bone) then
                 value, h.sources[label] = bone, source
                 for name, pose in pairs(joints or {}) do h.bone_joints[name] = pose end
-            elseif h.mode=='bones_first'then
-                value,h.sources[label]=0,'unavailable'
-            end
-        end
+            else h.sources[label] = 'unavailable' end
+        else h.sources[label] = 'head_unavailable' end
         values[label] = value
         P[key] = value * inv_full
     end
@@ -254,21 +230,20 @@ function S.read(h, P, inv_full, diagnostic)
             h.sources[labels[key]],h.bone_status[labels[key]]='unavailable','motion_changed_during_read'
         end
     end
+    h.native_sources = native_sources
     return values, observed
 end
 
 function S.snapshot(context)
     local head = R.find()
-    if not head then return nil, "里昂主头部尚未就绪" end
-    local mode=type(context)=='table'and context.input_mode or input_mode
-    if not modes[mode]then return nil,'RE9 输入模式无效'end
+    if not head then return nil, "里昂面部尚未就绪" end
     local requested={}
     for key,label in ipairs(labels)do
         if S.raw.parse(label)and(not label:match('^re9%.native%.')or type(context)=='table'and context.include_native_outputs)then
             requested[#requested+1]=key
         end
     end
-    local h = S.bind(head.face, requested,mode)
+    local h = S.bind(head.face, requested)
     -- Omissions are confined to read-only diagnostics; normal adapter bindings never set them.
     h.omitted=type(context)=='table'and context.omit_bones or nil
     local values, observed = S.read(h, {}, 1, true)
@@ -279,11 +254,17 @@ function S.snapshot(context)
             for _,v in ipairs(pose.rotation)do joints[name][#joints[name]+1]=v end
         else joint_status[name]='local_position_unavailable'end
     end
-    return {source = head.identity..':'..mode..':'..tostring(h.motion_cache.identity),
-        input_mode=mode,extended_expressions=extension_enabled,simulated_missing_bones=h.omitted~=nil,
-        motion_requests=h.motion_requests,
+    -- status lists only the natives that could not be read; the diagnostics page counts it as missing
+    local native_sources, missing = {}, {}
+    for name, source in pairs(h.native_sources or {}) do
+        native_sources[name] = source or 'unavailable'
+        if not source then missing[name] = 'unavailable' end
+    end
+    return {source = head.identity..':'..tostring(h.motion_cache.identity),
+        simulated_missing_bones=h.omitted~=nil,
+        motion_requests=h.motion_requests, clip_requests=h.clip_requests,
         joints = joints, bone_poses=h.bone_joints, joint_status=joint_status,
-        calibration={input_mode=mode,data=calibration}, measurements = h.measurements, outputs = values, taps = observed,
-        sources = h.sources, bone_status = h.bone_status, status = h.status, eyes=Eyes.diagnostics(), buffers = {channels = head.count}}
+        measurements = h.measurements, outputs = values, taps = observed, native_sources = native_sources,
+        sources = h.sources, bone_status = h.bone_status, status = missing, eyes=Eyes.diagnostics()}
 end
 return S

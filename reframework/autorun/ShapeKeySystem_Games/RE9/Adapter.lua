@@ -1,7 +1,8 @@
--- ShapeKeySystem: Leon gameplay head targets and native expression inputs for RE9.
+-- ShapeKeySystem: RE9 Leon. Signals come from the facial Motion on part "10"; custom keys may sit
+-- on any part mesh (some mods build the head on part 20 or 40).
 --
--- Only named custom channels are writable. Readiness and buffer identity enter the signature
--- so Core releases cached targets before reading or writing a rebuilt or hidden head.
+-- Only named custom channels are writable. The face identity and the part list enter the
+-- signature so Core releases cached targets before reading or writing a rebuilt or swapped part.
 local R = require("ShapeKeySystem_Games.RE9.Runtime")
 local Signals = require("ShapeKeySystem_Games.RE9.Signals")
 local Input = require("ShapeKeySystem_Games.RE9.Input")
@@ -14,20 +15,21 @@ local A = {id = "re9", name = "Resident Evil Requiem", strict_bounds = true, has
     native_snapshot = Signals.snapshot, input = Input}
 function A.primary_root() return R.root() end
 function A.primary_ready() return R.find() ~= nil end
-function A.is_face(face) return R.is_head(face) end
+function A.is_face(face) return R.is_face(face) end
 function A.face_rank() return 1 end
 function A.faces(root) local h = R.find(root); return h and {h.face} or {} end
 function A.face_root(_, root) return root end
 function A.parts(root, face)
     local h = R.find(root)
     if not h or face and R.address(face) ~= R.address(h.face) then return {} end
-    return {h.face}
+    return R.parts(h.root)
 end
 function A.is_part() return false end
-function A.part_id() return "ch0100_10_00" end
+function A.part_id(part) return R.part_id(part) end
 function A.model_of(part)
     if part == "leon" then return "leon" end
-    if part == "ch0100_10_00" then return "leon", "10" end
+    local slot = type(part) == "string" and part:match("^ch0100_(%d%d)_%d%d$")
+    if slot then return "leon", slot end
 end
 function A.representative_of(part) return A.model_of(part) end
 A.model_names = "character_names.json"
@@ -47,25 +49,17 @@ end
 function A.bind(face, keys) return Signals.bind(face, keys) end
 function A.signature(root)
     local h = R.find(root)
-    return h and h.identity or "RE9 head unavailable"
+    return h and (h.identity .. "#" .. R.parts_signature(h.root)) or "RE9 face unavailable"
 end
 function A.gate()
     if R.find() then return true end
-    return false, "里昂主头部或权重缓冲尚未就绪", "setup"
+    return false, "里昂面部尚未就绪", "setup"
 end
 function A.init()
     local ok, why = R.init()
     if not ok then return false, why end
     local loaded, data = pcall(json.load_file, "ShapeKeySystem/builtin/re9/leon.json")
     if not loaded then return false, "RE9 原生通道表无法读取" end
-    local read,setting=pcall(json.load_file,'ShapeKeySystem/user/re9_input.json')
-    if not read or setting~=nil and(type(setting)~='table'or setting.schema~='sks.re9-input/1'
-        or setting.mode~='legacy'and setting.mode~='bones_first'
-        or setting.extended~=nil and type(setting.extended)~='boolean')then return false,'RE9 输入模式配置无效'end
-    -- An existing override retains its previous extension opt-in; only a fresh install
-    -- adopts the new head defaults. Shared profile and player settings stay untouched.
-    local mode=setting and setting.mode or'bones_first'
-    local extended=setting==nil or setting.extended==true
-    return Signals.configure(data,mode,extended)
+    return Signals.configure(data)
 end
 return A
