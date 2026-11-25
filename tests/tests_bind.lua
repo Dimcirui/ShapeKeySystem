@@ -120,4 +120,34 @@ check(not find("页面出错") and find("用它替换整套绑定") and find("ch
 st.presets.legacy = {}
 check(find("导出为 mod"), "the binding card offers 导出为 mod")
 KEYS[0x2E] = true; frame(); KEYS[0x2E] = false; frame()
+
+-- 大集会所的 NPC 躯干也有形态键，通道更多时仍使用玩家套装的绑定。
+local armor_name, armor_mesh = ARMOR._name, ARMOR._mesh
+local player_part, npc_part = "ch03_060_0002", "ch03_002_0002"
+ARMOR._name, HUB_NPC_ON = player_part, true
+Presets.write_binding(player_part, { profile = cur })
+Presets.write_binding(npc_part, { profile = other })
+SKS.call("rescan"); ticks(5)
+check(st.debug.status:find("NPC112_01_004", 1, true) ~= nil, "hub NPC found by the scene scan")
+check(st.presets.binding and st.presets.binding.hit == "user/ch03_060_000/ch03_060_0002.json"
+    and st.expression.profile.id == cur, "hub NPC cannot replace the player outfit's binding or profile")
+
+Presets.tombstone_binding(player_part)
+SKS.call("rescan"); ticks(5)
+check(st.presets.binding == nil and st.presets.bind and st.presets.bind.part == player_part,
+    "without a player binding the binding editor still targets the player's part")
+
+ARMOR._mesh = nil
+SKS.call("rescan"); ticks(5)
+check(st.presets.binding == nil and st.presets.bind == nil, "an unmodded player outfit does not inherit the NPC's binding")
+
+HUB_NPC_ON, COPY_ON = false, true
+SKS.on_preview(true)
+ticks(12)
+check(st.presets.bind and st.presets.bind.part == armor_name, "a guild card copy still supplies the outfit when the player has no parts")
+
+SKS.on_preview(false)
+ARMOR._name, ARMOR._mesh, COPY_ON = armor_name, armor_mesh, false
+Presets.tombstone_binding(npc_part)
+SKS.call("rescan"); ticks(5)
 print("BIND FAILS:", bf)

@@ -98,6 +98,23 @@ carmor.get_Next = function() return nil end
 croot.get_Child = function() return cface end
 COPY_ON = false
 local copy_comp = { call = function(_, m) if m == "get_GameObject" then return { call = function() return cface end } end end }
+
+local hub_mesh = setmetatable({
+    get_address = function() return 0x6000 end,
+    get_BlendShapeChannelNum = function() return #CHANNELS + 1 end,
+    get_BlendShapeChannelWeightCount = function() return #CHANNELS + 1 end,
+    getBlendShapeChannelName = function(_, i) return CHANNELS[i + 1] or "blendShape1.NpcOnly" end,
+    setBlendShapeChannelWeightParam = function() end,
+}, { __index = mesh })
+local hub_npc = mk_tr("NPC112_01_004")
+local hub_face = mk_tr("Player_Face", face_joints)
+local hub_armor = mk_tr("ch03_002_0002", nil, hub_mesh)
+hub_face.get_Parent = function() return hub_npc end
+hub_face.get_Next = function() return hub_armor end
+hub_armor.get_Next = function() return nil end
+hub_npc.get_Child = function() return hub_face end
+local hub_comp = { call = function() return { call = function() return hub_face end } end }
+HUB_NPC_ON = false
 HOOKS = {}
 
 local typedefs = setmetatable({}, { __index = function()
@@ -138,7 +155,12 @@ local function arr(list)
 end
 SCENE = { call = function(_, m, ty)
     if ty == "via.timeline.Timeline" and TL_ON then return arr({ CUR_TL }) end
-    if ty == "via.motion.Motion" and COPY_ON then return arr({ copy_comp }) end
+    if ty == "via.motion.Motion" then
+        local faces = {}
+        if COPY_ON then faces[#faces + 1] = copy_comp end
+        if HUB_NPC_ON then faces[#faces + 1] = hub_comp end
+        return arr(faces)
+    end
     return arr({})
 end }
 CB = {}

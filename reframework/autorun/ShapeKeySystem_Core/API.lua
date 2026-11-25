@@ -632,17 +632,17 @@ local function part_labels(parts)
 end
 
 -- where "绑定到" writes: the primary model's binding file. Returns base, model, display name, data
--- to start from (the binding in effect when it is that file)
+-- to start from (the binding in effect when it is that file), and the worn part ID
 local function bind_target()
     local b = C.binding
     if b and b.base and b.base ~= "default" and b.data then
         local model = Presets.model_of(b.base) or b.base
-        return b.base, model, b.data.name or armor_name(model) or model, U.copy(b.data)
+        return b.base, model, b.data.name or armor_name(model) or model, U.copy(b.data), b.part
     end
     local best = Presets.primary_part(C.parts)
     if not best then return nil end
     local model = Presets.model_of(best.id) or best.id
-    return Presets.binding_base(best.id), model, armor_name(model) or model, {}
+    return Presets.binding_base(best.id), model, armor_name(model) or model, {}, best.id
 end
 
 local function build_presets_state()
@@ -680,10 +680,10 @@ local function build_presets_state()
         state.presets.binding = nil
     end
     -- "当前绑定": the name shown in the panel and where 绑定到 writes
-    local base, model, display = bind_target()
+    local base, model, display, _, part = bind_target()
     -- active: this outfit has its own binding in effect; global_default: only default.json applies
     local gd = C.binding ~= nil and C.binding.base == "default"
-    state.presets.bind = base and { base = base, model = model, display = display,
+    state.presets.bind = base and { base = base, model = model, display = display, part = part,
                                     active = C.binding ~= nil and C.binding.base == base,
                                     global_default = gd } or nil
     state.presets.legacy = U.copy(C.legacy_bindings or {})
@@ -1232,7 +1232,8 @@ end
 local function scan_full()
     local scan_start = clock()
     if not C.prog then return end
-    local res = Scene.scan({ index = C.index, scene_search = C.preview_open or C.menu or cfg.scene_search_always or C.cs_scene_search, min_hits = 3,
+    local scan_copies = C.preview_open or C.menu or C.cs_scene_search
+    local res = Scene.scan({ index = C.index, scene_search = scan_copies or cfg.scene_search_always, min_hits = 3,
                              known = (not Writer.M_CNAME or SKS.adapter.hash_names) and known_names() or nil })
     if cfg.enabled and SKS.adapter.prepare_parts then SKS.adapter.prepare_parts(res.instances or res.parts) end
     -- 扫描分段：查找部件 / 记录部件路径 / 场景其余部分；状态重建在函数末尾记录
@@ -1257,7 +1258,10 @@ local function scan_full()
         end
     end
     old, C.warm = nil, nil
-    C.rigs, C.parts, C.sig, C.mesh_name_of = res.rigs, res.parts, res.sig, res.mesh_name_of
+    local worn = res.parts
+    -- 大集会所的 NPC 也可能穿带形态键的猎人装备。只有预览或过场缺少玩家部件时才从场景取套装。
+    if SKS.adapter.id == "mhwilds" and (#res.primary_parts > 0 or not scan_copies) then worn = res.primary_parts end
+    C.rigs, C.parts, C.sig, C.mesh_name_of = res.rigs, worn, res.sig, res.mesh_name_of
     C.instances = res.instances or res.parts
     refresh_rig_params()
     -- menus spawn their preview hunters late: look again every 3 s there
@@ -1275,15 +1279,15 @@ local function scan_full()
     end
     sc.rigs = rigs
     build_procedural_state()
-    resolve_bindings(res.parts)
+    resolve_bindings(worn)
     local parts = {}
-    for i, p in ipairs(res.parts) do
+    for i, p in ipairs(worn) do
         local r = C.part_bindings[p.id]
         parts[i] = { id = p.id, display = part_display(p.id), slot = nil, channels = p.n, fingerprint = p.fingerprint, binding = r and r.hit or nil,
                      weights = p.weights }
     end
     sc.parts = parts
-    update_coverage(res.parts)
+    update_coverage(worn)
     -- a parent preset picks the expression profile while its part is worn
     local b = C.binding
     local want = b and b.data and b.data.profile
