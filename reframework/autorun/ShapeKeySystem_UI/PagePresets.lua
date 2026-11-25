@@ -13,14 +13,6 @@ local max = math.max
 
 local SOURCE = { builtin = "内置", mod = "mod 自带", mods = "mod 自带", user = "用户" }
 
-local function primary_part(st)
-    local b = st.presets.binding
-    if b and b.part then return b.part end
-    local best
-    for _, p in ipairs(st.scene.parts or {}) do if not best or p.channels > best.channels then best = p end end
-    return best and best.id or nil
-end
-
 local function confirm_bar(ctx, x, y, w)
     local pd = ctx.st.presets.pending_delete
     if not pd then return 0 end
@@ -35,7 +27,7 @@ end
 local function binding_card(ctx, x, y, w)
     local st, call = ctx.st, ctx.call
     local b = st.presets.binding
-    local part = primary_part(st)
+    local part = b and b.part or st.presets.bind and st.presets.bind.part
     local display = part
     for _, p in ipairs(st.scene.parts or {}) do
         if p.id == part then display = p.display or part; break end

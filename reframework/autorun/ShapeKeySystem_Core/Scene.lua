@@ -223,7 +223,7 @@ function S.scan(opts)
             end
         end
     end
-    local rigs, parts_by_id, part_list, instances = {}, {}, {}, {}
+    local rigs, parts_by_id, part_list, instances, primary_parts = {}, {}, {}, {}, {}
     local mesh_name_of = {}
     local skipped = 0
     local seen_parents = {}
@@ -242,6 +242,7 @@ function S.scan(opts)
             parts_s = parts_s + clock() - tp
             if #parts == 0 and psig then S.no_targets[parent] = psig end
         end
+        if primary then primary_parts = parts end
         if S.adapter.capture_layout and #parts > 0 then
             local tl = clock()
             local layout = S.adapter.capture_layout(parent, face, parts)
@@ -275,7 +276,8 @@ function S.scan(opts)
     table.sort(rigs, function(a, b) return a.primary and not b.primary end)
     -- parts: one entry per part id (bindings, coverage); instances: every mesh found (the same
     -- part worn by the player, the guild card copy, a cutscene copy ...), for the sculpt layer
-    return { rigs = rigs, parts = part_list, instances = instances, parents = seen_parents, faces = #faces, skipped = skipped,
+    return { rigs = rigs, parts = part_list, primary_parts = primary_parts, instances = instances,
+             parents = seen_parents, faces = #faces, skipped = skipped,
              sig = sig, mesh_name_of = mesh_name_of, ms = (clock() - t0) * 1000,
              parts_s = parts_s, layout_s = layout_s }
 end
