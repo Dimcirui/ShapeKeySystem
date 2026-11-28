@@ -1213,6 +1213,7 @@
   "提醒更新过旧的 REFramework": "Warns about an outdated REFramework",
   "REFramework 菜单里可以弹出可视化界面": "The panel can be opened from the REFramework menu",
   "RE4R 新增持械、武器类型和合成条件，每帧开销大幅降低": "RE4R: weapon-raised, held-weapon and merged conditions; much lower per-frame cost",
+  "RE9 每帧开销大幅降低并识别格蕾丝；映射编辑器可直接输入数值": "RE9: much lower per-frame cost, and Grace is recognised; the mapping editor takes typed values",
   "RE9 能驱动不带原生形态键的头部 mod，形态键可放在任意部件；荒野读档后自动固定表情骨骼": "RE9: head mods without native shape keys are driven, and shape keys can sit on any part; Wilds re-holds face bones after loading",
   "已在一个键组里的形态键可以加入其他键组": "A shape key already in one key group can be added to other key groups",
   "RE4R 新增阿什莉、路易斯、克劳萨、威斯克、汉克的捏脸与驱动；修复切换角色后无法切回": "RE4R: sculpting and drivers for Ashley, Luis, Krauser, Wesker and Hunk; switching back after a character switch works again",
