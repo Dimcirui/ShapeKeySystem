@@ -1,6 +1,9 @@
 -- ShapeKeySystem: RE9 player parts. Facial animation plays on part "10" whatever mesh a mod puts
 -- there, so that part's Motion is the signal source; any part mesh may carry the custom keys.
 --
+-- In photo mode the parts come from the photo copy instead of the hidden player. The root address
+-- is part of the face identity, so entering or leaving photo mode rescans like a part rebuild.
+--
 -- Shadow copies, sticky props and weapon meshes are excluded. Engine objects are returned to the
 -- caller; the lookup cache keeps them only until the engine callback ends.
 local Perf = require("ShapeKeySystem_Core.Perf")
@@ -65,9 +68,23 @@ local function player_root()
     local go = ok and call(call(manager, "getPlayerContextRefFast"), "get_GameObject") or nil
     if go and ROOT_NAME[call(go, "get_Name")] and drawn(go) then return go end
 end
+-- 照相模式里原玩家被隐藏，屏幕上是 PlayerPhotoObject：按当前服装另建的一整套部件，直接挂在它下面。
+-- 第一个结果为 true 表示照相模式开着；副本还没建好时第二个结果为 nil，这时也不退回原玩家。
+local function photo_root()
+    local ok, manager = pcall(sdk.get_managed_singleton, "app.PhotoModeManager")
+    if not ok or call(manager, "get_IsBoot") ~= true then return false end
+    local go = call(manager, "getPlayerGameObjectPhotoMode")
+    return true, drawn(go) and go or nil
+end
 local function find_root(scene)
     local started = os.clock()
-    local go = not scene and player_root() or nil
+    local photo, go = false, nil
+    if not scene then photo, go = photo_root() end
+    if photo then
+        Perf.record("root_lookup", os.clock() - started)
+        return go and call(go, "get_Transform")
+    end
+    go = not scene and player_root() or nil
     if not go then
         scene = scene or R.scene()
         for _, name in ipairs(R.ROOT_NAMES) do

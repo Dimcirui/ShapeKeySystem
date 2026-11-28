@@ -261,6 +261,30 @@ do
     local found_grace = R.find(); local after_one = lookups
     check(found_grace and after_one == 2, "the scene search tries Leon, then Grace")
     SCENE.findGameObject = plain_scene_find
+    player_go = root_go
+    -- photo mode: the photo copy's parts sit directly under PlayerPhotoObject
+    local PHOTO, booted, photo_valid = {call = call, get_address = function() return 110 end,
+        get_Child = function() return FACE end}, true, false
+    local photo_go = {call = call, get_address = function() return 111 end, get_Name = function() return "PlayerPhotoObject" end,
+        get_Valid = function() return photo_valid end, get_DrawSelf = function() return true end,
+        get_Transform = function() return PHOTO end}
+    PHOTO.get_GameObject = function() return photo_go end
+    local player_sig, with_player = A.signature(ROOT), sdk.get_managed_singleton
+    sdk.get_managed_singleton = function(name)
+        if name ~= "app.PhotoModeManager" then return with_player(name) end
+        return {call = call, get_IsBoot = function() return booted end,
+            getPlayerGameObjectPhotoMode = function() return photo_go end}
+    end
+    check(R.find() == nil and A.primary_root() == nil and A.gate() == false,
+        "photo mode before the photo copy is built finds no character and does not fall back to the hidden player")
+    photo_valid = true
+    check(R.find() and R.find().root == PHOTO and A.primary_root() == PHOTO and A.gate() == true,
+        "photo mode drives the photo copy once it is built (a later lookup retries)")
+    check(A.signature(ROOT) == "RE9 face unavailable" and A.signature(PHOTO) ~= player_sig
+        and #A.parts(PHOTO, FACE) > 0, "entering photo mode changes the signature, so the photo copy is scanned")
+    booted = false
+    check(R.find() and R.find().root == ROOT and A.signature(ROOT) == player_sig,
+        "leaving photo mode goes back to the player and rescans")
     sdk.get_managed_singleton = plain_singleton
     SCENE.findGameObject = plain_find
     check(A.inspect_before_scan, "periodic scans only compare the signature")
