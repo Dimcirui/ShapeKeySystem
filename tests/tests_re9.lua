@@ -250,8 +250,17 @@ do
     end
     lookups = 0
     check(R.find() and R.find().root == ROOT and lookups == 0, "Leon as the player comes from the player context without a scene search")
+    local grace = make_go(ROOT, "cp_A100", nil, nil, 98)
+    player_go = grace
+    check(R.find() and R.find().root == ROOT and lookups == 0, "Grace as the player also comes from the player context")
     player_go = make_go({}, "cp_A200", nil, nil, 99)
     check(R.find() and R.find().root == ROOT and lookups == 2, "another player character falls back to the scene search")
+    local plain_scene_find = SCENE.findGameObject
+    SCENE.findGameObject = function(self, name) lookups = lookups + 1; return name == "cp_A100" and grace or nil end
+    lookups = 0
+    local found_grace = R.find(); local after_one = lookups
+    check(found_grace and after_one == 2, "the scene search tries Leon, then Grace")
+    SCENE.findGameObject = plain_scene_find
     sdk.get_managed_singleton = plain_singleton
     SCENE.findGameObject = plain_find
     check(A.inspect_before_scan, "periodic scans only compare the signature")

@@ -54,19 +54,26 @@ function R.scene()
     if memo.scene == nil then memo.scene = current_scene() or false end
     return memo.scene or nil
 end
--- 当前玩家是里昂时，CharacterManager 的玩家上下文直接给出 cp_A000，省去按名字搜索整个场景
+-- 可驱动的玩家角色：里昂 cp_A000、格蕾丝 cp_A100（场景搜索按此顺序）
+R.ROOT_NAMES = {"cp_A000", "cp_A100"}
+local ROOT_NAME = {}
+for _, name in ipairs(R.ROOT_NAMES) do ROOT_NAME[name] = true end
 local function drawn(go) return call(go, "get_Valid") == true and call(go, "get_DrawSelf") == true end
+-- 当前玩家是其中之一时，CharacterManager 的玩家上下文直接给出根对象，省去按名字搜索整个场景
 local function player_root()
     local ok, manager = pcall(sdk.get_managed_singleton, "app.CharacterManager")
     local go = ok and call(call(manager, "getPlayerContextRefFast"), "get_GameObject") or nil
-    if go and call(go, "get_Name") == "cp_A000" and drawn(go) then return go end
+    if go and ROOT_NAME[call(go, "get_Name")] and drawn(go) then return go end
 end
 local function find_root(scene)
     local started = os.clock()
     local go = not scene and player_root() or nil
     if not go then
-        local found = call(scene or R.scene(), "findGameObject(System.String)", "cp_A000")
-        if drawn(found) then go = found end
+        scene = scene or R.scene()
+        for _, name in ipairs(R.ROOT_NAMES) do
+            local found = call(scene, "findGameObject(System.String)", name)
+            if drawn(found) then go = found; break end
+        end
     end
     Perf.record("root_lookup", os.clock() - started)
     return go and call(go, "get_Transform")
