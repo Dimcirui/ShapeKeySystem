@@ -1663,6 +1663,13 @@ local function wanted_conditions()
 end
 
 local function tick()
+    local section = clock()
+    -- 分段计时：调试页的细分耗时，各段互不重叠
+    local function lap(name)
+        local t = clock()
+        Perf.record(name, t - section)
+        section = t
+    end
     Playback.tick(false)
     C.frame = C.frame + 1
     local f = C.frame
@@ -1681,6 +1688,7 @@ local function tick()
         if Ext.rev ~= ext_rev then C.build_external_state() end
     end
     Sculpt.frame = f
+    lap("tick_lead")
     -- The gate pauses nothing: loading, rebuilds and cutscenes keep driving whatever rigs exist.
     -- Its kind only picks who is driven: "playing" searches the scene for the cutscene copy,
     -- "setup" (title / save select) drives the preview hunters.
@@ -1723,8 +1731,10 @@ local function tick()
     end
     -- the recorder follows the driven face; in a cutscene between segments there is none yet
     -- (rigs are dropped at each segment start), so the take waits instead of ending
+    lap("gate")
     local face = C.rigs[1] and C.rigs[1].face
     NativeSignals.tick(SKS.adapter, (face or not cutscene) and true or "hold", { face = face })
+    lap("recorder")
     if Actors.enabled() and f >= (C.actors_at or 0) then
         C.actors_at = f + 60
         refresh_actors()
@@ -1734,6 +1744,7 @@ local function tick()
         profile = cfg.profile, expression = fallback_expression, eyes = fallback_eyes,
         expression_enabled = cfg.expression_enabled, expression_interval = cfg.actor_expression_interval,
         inv_full = C.inv_full, clamp = cfg.clamp, epsilon = cfg.write_epsilon, known = known_names() })
+    lap("actors")
     -- menu mode (player not set up: title screen, save select, loading) drives whatever hunters
     -- the scene holds; entering or leaving it lets go of everything (the player is being built)
     if menu ~= C.menu then
@@ -1787,6 +1798,7 @@ local function tick()
         bump("debug")
     end
 
+    lap("scan_check")
     -- conditional expressions: master hunter in gameplay only
     C.cond_live = not C.menu and (CondExpr.current ~= nil or state.runtime.ui_open or Drivers.wants_cond())
     local cond_start = clock()
@@ -1799,6 +1811,7 @@ local function tick()
     lp.blink = Proc.tick(clock(), f)
     lp.mouth = Proc.out.jawOpen or 0
     lp.gaze[1], lp.gaze[2] = Proc.gaze[1], Proc.gaze[2]
+    lap("conditions")
     if cfg.enabled and C.prog then
         -- the head turn after the next UpdateMotion may touch the master player only if this
         -- tick drove it (drop_rigs clears the mark)
@@ -1827,6 +1840,7 @@ local function tick()
         end
         update_live()
     end
+    lap("drive")
     -- sculpt layer: lazy static weights on the channels the profile does not drive
     if cfg.enabled and #Sculpt.K.targets > 0 then
         local t0 = clock()
@@ -1838,6 +1852,7 @@ local function tick()
         end
         prof.write = prof.write + (clock() - t0)
     end
+    lap("sculpt")
     if C.save_at and f >= C.save_at then save_now() end
 end
 

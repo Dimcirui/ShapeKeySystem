@@ -205,8 +205,99 @@ check(P[1] == 0 and P[3] == 0 and A.signature(ROOT) ~= original_signature,
     "a skeleton rebuild invalidates handles and the target signature")
 generation = 1
 local sig = A.signature(ROOT); CH40[5] = "Extra"
-check(A.signature(ROOT) ~= sig, "a key added to another part changes the signature")
+local changed_after
+for i = 1, A.FULL_SIGNATURE_CHECK do
+    if A.signature(ROOT) ~= sig then changed_after = i; break end
+end
+check(changed_after and changed_after > 1, "a key added to another part changes the signature at the next full check ("
+    .. tostring(changed_after) .. ")")
 CH40[5] = nil
+for _ = 1, A.FULL_SIGNATURE_CHECK do A.signature(ROOT) end
+do
+    local sig0 = A.signature(ROOT)
+    local plain = PART40.get_GameObject
+    local moved_go = {}
+    for k, v in pairs(part40_go) do moved_go[k] = v end
+    moved_go.getComponent = function(_, kind) if kind == "via.render.Mesh" then return m end end
+    PART40.get_GameObject = function() return moved_go end
+    check(A.signature(ROOT) ~= sig0, "a part whose mesh component changed fails the route check at once")
+    PART40.get_GameObject = plain
+    A.signature(ROOT)
+    local walked
+    sks_native = {layout_walk = function(root_address, head, flat)
+        walked = {root_address, head, #flat}
+        return true
+    end}
+    local before_native = A.signature(ROOT)
+    check(walked and walked[1] == 10 and walked[2] == 0 and walked[3] == 2 * 5 and before_native == A.signature(ROOT),
+        "with the native plugin one call checks every part route")
+    sks_native = nil
+    local lookups, plain_find = 0, SCENE.findGameObject
+    SCENE.findGameObject = function(...) lookups = lookups + 1; return plain_find(...) end
+    A.cache_begin()
+    local same = A.primary_root() == ROOT and A.primary_ready() and A.signature(ROOT) == A.signature(ROOT)
+        and R.find() == R.find()
+    A.cache_end()
+    local outside = lookups
+    R.find(); R.find()
+    check(same and outside == 1 and lookups == 3, "one callback resolves Leon once; outside a callback every call resolves ("
+        .. outside .. "," .. lookups .. ")")
+    local plain_singleton, player_go = sdk.get_managed_singleton, root_go
+    sdk.get_managed_singleton = function(name)
+        if name ~= "app.CharacterManager" then return plain_singleton(name) end
+        local context = {call = call, get_GameObject = function() return player_go end}
+        return {call = call, getPlayerContextRefFast = function() return context end}
+    end
+    lookups = 0
+    check(R.find() and R.find().root == ROOT and lookups == 0, "Leon as the player comes from the player context without a scene search")
+    local grace = make_go(ROOT, "cp_A100", nil, nil, 98)
+    player_go = grace
+    check(R.find() and R.find().root == ROOT and lookups == 0, "Grace as the player also comes from the player context")
+    player_go = make_go({}, "cp_A200", nil, nil, 99)
+    check(R.find() and R.find().root == ROOT and lookups == 2, "another player character falls back to the scene search")
+    local plain_scene_find = SCENE.findGameObject
+    SCENE.findGameObject = function(self, name) lookups = lookups + 1; return name == "cp_A100" and grace or nil end
+    lookups = 0
+    local found_grace = R.find(); local after_one = lookups
+    check(found_grace and after_one == 2, "the scene search tries Leon, then Grace")
+    SCENE.findGameObject = plain_scene_find
+    sdk.get_managed_singleton = plain_singleton
+    SCENE.findGameObject = plain_find
+    check(A.inspect_before_scan, "periodic scans only compare the signature")
+    local names, plain_name = 0, part40_go.get_Name
+    part40_go.get_Name = function(...) names = names + 1; return plain_name(...) end
+    R.find(); R.find()
+    check(names == 0 and R.find().face == FACE, "a later lookup goes straight to the face's position without reading other parts")
+    part40_go.get_Name = plain_name
+    local face_to_hint = FACE.get_Next
+    ROOT.get_Child = function() return PART40 end
+    PART40.get_Next = function() return FACE end
+    FACE.get_Next = function() return nil end
+    check(R.find() and R.find().face == FACE, "a face that moved in the sibling chain is found again")
+    ROOT.get_Child = function() return FACE end
+    PART40.get_Next = function() return FACE end
+    FACE.get_Next = face_to_hint
+    R.find()
+end
+do
+    local calls, seen = 0, nil
+    sks_native = {motion_curves = function(address, indices)
+        calls, seen = calls + 1, {address = address, n = #indices}
+        local out = {}
+        for i, index in ipairs(indices) do out[i] = NATIVE[params[index - 100]] or 0 end
+        return out
+    end}
+    local nh = A.bind(FACE, {1, 2, 3, native_key})
+    local before = param_reads
+    local NP = {}; A.read(nh, NP, 1)
+    check(calls == 1 and seen.address == 1900 and seen.n == 4 and param_reads == before
+        and near(NP[1], .8) and near(NP[3], .09) and nh.status[left] == "parameter",
+        "with the native plugin one call reads every parameter joint of a read")
+    sks_native.motion_curves = function() error("plugin failed") end
+    A.read(nh, NP, 1)
+    check(near(NP[1], .8) and param_reads > before, "a failing plugin call falls back to Lua reads")
+    sks_native = nil
+end
 face_name = "11"
 check(not A.primary_ready() and #A.faces(ROOT) == 0, "without part 10 there is no face")
 face_name = "10"; joint_count = 0

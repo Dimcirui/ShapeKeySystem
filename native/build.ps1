@@ -1,7 +1,7 @@
 <#
 Build the native REFramework plugins into reframework\plugins\, where deploy.ps1 and package.ps1
 pick them up: ShapeKeySystem_Mocap.dll (in-game UDP receiver for 面捕) and ShapeKeySystem_Native.dll
-(engine reads too call-heavy for Lua, RE4R only for now).
+(engine reads too call-heavy for Lua; RE4R, Wilds and RE9).
 
   build.ps1          build the DLL
   build.ps1 -Test    also build and run the offline test (parsers + Lua table over loopback UDP)

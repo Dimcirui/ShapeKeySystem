@@ -141,6 +141,20 @@ local function native_reader(h, open_motion)
             if finite(v) then values[name], sources[name] = v, 'clip' end
         end
     end
+    -- reads the parameter joints of every name not read yet in one batch
+    local function prefetch(names)
+        local list, seen = {}, {}
+        for _, name in ipairs(names) do
+            if sources[name] == nil and not seen[name] then seen[name] = true; list[#list + 1] = name end
+        end
+        if #list == 0 then return end
+        local context = open_motion()
+        local read = context and Motion.scalars(context, list) or {}
+        for _, name in ipairs(list) do
+            local v = read[name]
+            if finite(v) then values[name], sources[name] = v, 'parameter' else sources[name] = false end
+        end
+    end
     local function get(name)
         if sources[name] == nil then
             local context = open_motion()
@@ -155,7 +169,7 @@ local function native_reader(h, open_motion)
         end
         return values[name], sources[name]
     end
-    return get, sample_missing, values, sources, function() return missing end
+    return get, sample_missing, values, sources, function() return missing end, prefetch
 end
 
 function S.read(h, P, inv_full, diagnostic)
@@ -178,15 +192,18 @@ function S.read(h, P, inv_full, diagnostic)
         return Motion.read(motion_context,term.bone,term.motion_neutral,detail,
             term.kind=='pos'and term.motion_neutral_position or nil)
     end
-    local get, sample_missing, native_values, native_sources, pending = native_reader(h, open_motion)
+    local get, sample_missing, native_values, native_sources, pending, prefetch = native_reader(h, open_motion)
     h.sources, h.measurements, h.bone_status, h.bone_joints = {}, {}, {}, {}
     -- first pass registers every native name the requested labels need, so one clip pass covers them
     if valid then
+        local wanted = {}
         for _, key in ipairs(h.keys) do
             local label = labels[key]
-            for _, name in ipairs(taps[label] or {}) do get(name) end
-            if natives[label] then get(natives[label]) end
+            for _, name in ipairs(taps[label] or {}) do wanted[#wanted + 1] = name end
+            if natives[label] then wanted[#wanted + 1] = natives[label] end
         end
+        prefetch(wanted)
+        for _, name in ipairs(wanted) do get(name) end
         if pending() then sample_missing() end
     end
     for _, key in ipairs(h.keys) do
