@@ -345,12 +345,12 @@ end
 
 -- 原位置输入框：自绘边框与占位文字，标准 ImGui InputText 负责文字、选择、剪贴板和 IME。
 -- shown：输入框为空且未激活时代替占位符显示的正常文字（搜索框收起时显示已选值）。
-function W.text_box(id, x, y, w, h, value, placeholder, on_change, shown)
+function W.text_box(id, x, y, w, h, value, placeholder, on_change, shown, flags)
     h = h or T.m.row_h
     local hover = I.hit(x, y, w, h)
     D.rrect(x, y, w, h, 3, C.ink)
     D.outline(x, y, w, h, 3, 1, hover and C.muted or C.line)
-    local registered = TextInput.register(id, x, y, w, h, value, on_change)
+    local registered = TextInput.register(id, x, y, w, h, value, on_change, flags)
     if not registered and value and value ~= "" then D.text_mid(value, x + 8, y, h, C.text, body(), w - 16)
     elseif (not value or value == "") and TextInput.active ~= id then
         if shown and shown ~= "" then D.text_mid(shown, x + 8, y, h, C.text, body(), w - 16)
