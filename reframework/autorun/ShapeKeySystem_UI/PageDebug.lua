@@ -162,11 +162,21 @@ local function settings_card(ctx, x, y, w)
     return h1 + 12 + sks_settings_card(ctx, x, y + h1 + 12, w)
 end
 
+-- 耗时详情的行：Perf 指标名与显示名
+local PERF_ROWS = { { "tick", "完整更新" }, { "tick_lead", "播放与驱动器" }, { "gate", "门控" },
+    { "recorder", "原生录制" }, { "actors", "其他角色" }, { "scan_check", "扫描检查" },
+    { "conditions", "条件与程序化" }, { "drive", "表情驱动" }, { "sculpt", "捏脸写入" },
+    { "sig_check", "签名检查" }, { "face_lookup", "面部查找" }, { "root_lookup", "角色查找" },
+    { "cond_sample", "条件采样" }, { "face_hold", "骨骼冻结" },
+    { "scan", "完整扫描" }, { "scan_parts", "扫描·部件" }, { "scan_layout", "扫描·路径" },
+    { "scan_other", "扫描·其余" }, { "scan_rebuild", "扫描·重建" }, { "ui", "面板绘制" },
+    { "playback_load", "文件读取" }, { "playback_prepare", "准备分片" },
+    { "playback_tick", "播放更新" }, { "raw_inject", "原版注入" } }
 local function perf_card(ctx, x, y, w)
     local st = ctx.st
     local a = st.debug.perf or {}
     local details = ctx.state.perf_details == true
-    local h = details and 594 or 200
+    local h = details and 258 + #PERF_ROWS * 24 or 200
     W.panel_box(x, y, w, h, true)
     local rx, rw = x + 12, w - 24
     local cy = y + 10
@@ -189,11 +199,7 @@ local function perf_card(ctx, x, y, w)
         cy = cy + 32
         D.text_mid("最近 60 次：平均 / 最大 / P95（毫秒）", rx, cy, 22, C.muted, W.small(), rw)
         cy = cy + 24
-        for _, item in ipairs({ { "tick", "完整更新" }, { "sig_check", "签名检查" }, { "cond_sample", "条件采样" }, { "face_hold", "骨骼冻结" },
-            { "scan", "完整扫描" }, { "scan_parts", "扫描·部件" }, { "scan_layout", "扫描·路径" },
-            { "scan_other", "扫描·其余" }, { "scan_rebuild", "扫描·重建" }, { "ui", "面板绘制" },
-            { "playback_load", "文件读取" }, { "playback_prepare", "准备分片" },
-            { "playback_tick", "播放更新" }, { "raw_inject", "原版注入" } }) do
+        for _, item in ipairs(PERF_ROWS) do
             local metric = (a.timings or {})[item[1]] or {}
             D.text_mid(item[2], rx, cy, 22, C.text, W.small(), 82)
             local text = string.format("%.3f / %.3f / %.3f", metric.avg or 0, metric.max or 0, metric.p95 or 0)
