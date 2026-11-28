@@ -922,8 +922,8 @@ EXPORT bool reframework_plugin_initialize(const REFrameworkPluginInitializeParam
     ref_fn = param->functions;
     sdk = param->sdk;
     const char *game = param->version ? param->version->game_name : NULL;
-    if (!sdk || !game || (strcmp(game, "RE4") != 0 && strcmp(game, "MHWILDS") != 0))
-        return true;   /* RE4R and Wilds for now: elsewhere SKS keeps its Lua paths */
+    if (!sdk || !game || (strcmp(game, "RE4") != 0 && strcmp(game, "MHWILDS") != 0 && strcmp(game, "RE9") != 0))
+        return true;   /* RE4R, Wilds and RE9 for now: elsewhere SKS keeps its Lua paths */
     lua_ok = host_lua_matches(param->reframework_module);
     if (!lua_ok) {
         ref_fn->log_error("[ShapeKeySystem_Native] REFramework does not use Lua 5.4.3: not registering sks_native");

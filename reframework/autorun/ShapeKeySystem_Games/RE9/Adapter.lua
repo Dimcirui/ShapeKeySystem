@@ -47,10 +47,32 @@ function A.eye_angles(handle)
     return neutral and neutral.yaw or 0,neutral and neutral.pitch or 0
 end
 function A.bind(face, keys) return Signals.bind(face, keys) end
+-- Core checks the signature every frame (strict bounds). Between full reads, every
+-- FULL_SIGNATURE_CHECK-th check, only the recorded part routes are compared; a callback reuses its
+-- first answer. The cache holds strings and numbers only.
+A.FULL_SIGNATURE_CHECK = 30
+local signature_cache
 function A.signature(root)
     local h = R.find(root)
-    return h and (h.identity .. "#" .. R.parts_signature(h.root)) or "RE9 face unavailable"
+    if not h then signature_cache = nil; return "RE9 face unavailable" end
+    local c, token = signature_cache, R.cache_token()
+    if c and c.identity == h.identity then
+        if token and c.token == token then return c.signature end
+        c.checks = c.checks + 1
+        if c.layout and c.checks % A.FULL_SIGNATURE_CHECK ~= 0 and R.routes_valid(h.root, c.layout) then
+            c.token = token
+            return c.signature
+        end
+    end
+    local parts, layout = R.parts_signature(h.root)
+    signature_cache = {identity = h.identity, signature = h.identity .. "#" .. parts, layout = layout,
+        checks = 0, token = token}
+    return signature_cache.signature
 end
+-- 部件变化由每帧签名检查发现并触发重扫，定期扫描只比对签名
+A.inspect_before_scan = true
+function A.cache_begin() R.cache_begin() end
+function A.cache_end() R.cache_end() end
 function A.gate()
     if R.find() then return true end
     return false, "里昂面部尚未就绪", "setup"

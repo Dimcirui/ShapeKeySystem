@@ -25,15 +25,15 @@ local function resolve(head)
     local current=R.find()
     if not current or current.identity~=head.identity then return nil,'head_changed' end
     local go=R.call(current.face,'get_GameObject')
-    local motion=R.component(go,sdk.typeof('via.motion.Motion'))
+    local motion=current.motion
     if R.address(R.call(motion,'get_GameObject'))~=R.address(go)then return nil,'motion_owner_unverified'end
     local address=R.address(motion)
-    local generation=R.call(motion,'get_SkeletonConstructCount')
-    local count=R.call(motion,'get_JointCount')
+    local generation,count=current.generation,current.count
     if not address or not R.integer(generation,0xFFFFFFFF)or not R.integer(count,8192)or count==0 then
         return nil,'motion_unavailable'
     end
-    return {motion=motion,count=count,identity=head.identity..':'..address..':'..generation..':'..count}
+    return {motion=motion,count=count,generation=generation,
+        identity=head.identity..':'..address..':'..generation..':'..count}
 end
 function M.open(head,cache)
     local c,why=resolve(head)
@@ -57,6 +57,29 @@ function M.scalar(c,name)
     local p=vector(R.call(c.motion,'getCalculatedLocalPosition(System.Int32)',index),3)
     return p and p[1]or nil,p and'ok'or('motion_position_unavailable:'..name)
 end
+-- names -> {name = x}; one ShapeKeySystem_Native.dll call reads every joint when it is loaded
+function M.scalars(c,names)
+    local out,indices,wanted={},{},{}
+    for _,name in ipairs(names)do
+        local index=index_of(c,name)
+        if index then indices[#indices+1]=index;wanted[#wanted+1]=name end
+    end
+    local native=rawget(_G,'sks_native')
+    if #indices>0 and type(native)=='table'and type(native.motion_curves)=='function'then
+        local ok,motion_address=pcall(c.motion.get_address,c.motion)
+        local read,values
+        if ok then read,values=pcall(native.motion_curves,motion_address,indices)end
+        if read and type(values)=='table'then
+            for i,name in ipairs(wanted)do
+                local v=values[i]
+                if type(v)=='number'then out[name]=v end
+            end
+            return out
+        end
+    end
+    for _,name in ipairs(wanted)do out[name]=M.scalar(c,name)end
+    return out
+end
 function M.read(c,name,neutral,diagnostic,neutral_position)
     if type(neutral)~='table'or #neutral~=4 then return nil,'motion_neutral_unavailable'end
     local index=index_of(c,name)
@@ -73,8 +96,11 @@ function M.read(c,name,neutral,diagnostic,neutral_position)
     end
     return pose,'ok'
 end
+-- The head must still be the one opened and its skeleton must not have been rebuilt meanwhile.
 function M.finish(c)
-    local after=resolve(c.head)
-    return after~=nil and after.identity==c.identity
+    local current=R.find()
+    return current~=nil and current.identity==c.head.identity
+        and R.call(c.motion,'get_SkeletonConstructCount')==c.generation
+        and R.call(c.motion,'get_JointCount')==c.count
 end
 return M
